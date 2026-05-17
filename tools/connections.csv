@@ -1,0 +1,257 @@
+id,space1,space2,type,bridge
+1,Prussia North,Tilsit,road,1
+2,Tilsit,Kaltinenai,road,1
+3,Tilsit,Nemaksciai,track,1
+4,Prussia South,Tilsit,road,0
+5,Prussia South,Kalvarija,road,0
+6,Kalvarija,Suwalki,road,0
+7,Kalvarija,Unnamed A3,track,0
+8,Suwalki,Unnamed A3,track,0
+9,Suwalki,Szczuczy,road,0
+10,Suwalki,Grodno,road,1
+11,Grand Duchy of Warsaw North,Szczuczy,road,0
+12,Grand Duchy of Warsaw North,Bialystok,road,0
+13,Bialystok,Grodno,road,1
+14,Grand Duchy of Warsaw South,Biala,road,0
+15,Grand Duchy of Warsaw South,Drohiczyn,track,1
+16,Grand Duchy of Warsaw South,Austria,road,0
+17,Austria,Lublin,road,0
+18,Lublin,Zamosc,road,0
+19,Kaltinenai,Siauliai,road,0
+20,Nemaksciai,Siauliai,track,0
+21,Kalvarija,Kaunas,road,1
+22,Bialystok,Volkovysk,track,0
+23,Bialystok,Bielsk,road,0
+24,Drohiczyn,Bielsk,track,0
+25,Biala,Brest,road,1
+26,Zamosc,Vladimir (Galicia),road,1
+27,Riga,Venden,road,1
+28,Riga,Friedrichstadt,road,1
+29,Riga,Mitau,road,1
+30,Mitau,Eckau,track,0
+31,Siauliai,Mitau,road,0
+32,Siauliai,Panevezys,track,0
+33,Eckau,Panevezys,track,0
+34,Eckau,Unnamed B2,track,0
+35,Panevezys,Unnamed B2,track,0
+36,Siauliai,Kedainiai,road,0
+37,Kedainiai,Kaunas,road,0
+38,Kaunas,Vilkomir,track,0
+39,Panevezys,Vilkomir,track,0
+40,Kaunas,Vilnius,road,0
+41,Kaunas,Onuskis,track,0
+42,Onuskis,Vilnius,track,0
+43,Onuskis,Lida,track,1
+44,Vilnius,Lida,road,0
+45,Grodno,Mostyr,road,0
+46,Mostyr,Lida,road,0
+47,Mostyr,Volkovysk,track,1
+48,Volkovysk,Slonim,track,0
+49,Pruzhany,Slonim,road,0
+50,Bielsk,Brest,road,0
+51,Brest,Kobryn,road,0
+52,Pruzhany,Kobryn,road,0
+53,Brest,Ratno,road,0
+54,Ratno,Kobryn,track,0
+55,Ratno,Kovel,road,1
+56,Kobryn,Unnamed B5,track,1
+57,Kovel,Vladimir (Galicia),road,0
+58,Kovel,Lutsk,road,0
+59,Lutsk,Dubno,road,0
+60,Venden,Livonia,road,0
+61,Friedrichstadt,Jekabpils,road,0
+62,Unnamed B2,Jekabpils,track,1
+63,Unnamed B2,Daugapils,track,1
+64,Unnamed B2,Salakas,track,0
+65,Vilkomir,Salakas,track,0
+66,Vilkomir,Svencionys,track,0
+67,Vilnius,Svencionys,road,0
+68,Vilnius,Nastaniski,track,0
+69,Vilnius,Molodechno,road,0
+70,Vilnius,Volozhin,track,0
+71,Lida,Novgrudok,road,1
+72,Volkovysk,Novgrudok,track,0
+73,Slonim,Novgrudok,road,0
+74,Slonim,Nesvich,road,0
+75,Unnamed B5,Pinsk,road,1
+76,Unnamed B5,Unnamed C6,road,0
+77,Lutsk,Unnamed C6,track,0
+78,Livonia,Ostrov,track,0
+79,Livonia,Unnamed C1,track,0
+80,Jekabpils,Unnamed C1,track,0
+81,Ostrov,Unnamed C1,track,0
+82,Jekabpils,Daugapils,road,0
+83,Daugapils,Ludzha,road,0
+84,Ludzha,Ostrov,road,0
+85,Daugapils,Vidzy,road,1
+86,Daugapils,Drissa,road,1
+87,Salakas,Vidzy,track,0
+88,Vidzy,Drissa,road,0
+89,Svencionys,Vidzy,road,0
+90,Svencionys,Dokshitsy,track,0
+91,Nastaniski,Dokshitsy,road,0
+92,Molodechno,Dokshitsy,road,0
+93,Volozhin,Minsk,track,0
+94,Nastaniski,Molodechno,track,0
+95,Molodechno,Pleshchenitsy,track,0
+96,Novgrudok,Nesvich,road,0
+97,Nesvich,Minsk,road,1
+98,Nesvich,Slutsk,road,0
+99,Nesvich,Kletsk,road,0
+100,Pinsk,Kletsk,road,0
+101,Unnamed C6,Rovno,road,0
+102,Dubno,Rovno,road,0
+103,Dubno,Ostrog,road,0
+104,Rovno,Ostrog,road,0
+105,Ostrog,Novograd,road,0
+106,Ostrog,Moldavia,road,0
+107,Ostrov,Pskov,road,0
+108,Ostrov,Opochka,road,0
+109,Ludzha,Sevezh,road,0
+110,Drissa,Sevezh,road,1
+111,Drissa,Polotsk,road,1
+112,Drissa,Disna,track,0
+113,Dokshitsy,Disna,road,0
+114,Dokshitsy,Lepel,road,0
+115,Pleshchenitsy,Lepel,track,1
+116,Pleshchenitsy,Borisov,track,1
+117,Minsk,Borisov,track,1
+118,Minsk,Igumen,road,0
+119,Slutsk,Bobruysk,road,0
+120,Novograd,Zhitomir,road,0
+121,Opochka,Unnamed D1,track,0
+122,Opochka,Sevezh,road,0
+123,Rudnya,Unnamed D1,track,0
+124,Sevezh,Polotsk,road,0
+125,Rudnya,Polotsk,track,0
+126,Disna,Polotsk,road,1
+127,Kamen,Polotsk,track,1
+128,Lepel,Kamen,road,0
+129,Lepel,Senno,track,0
+130,Lepel,Kokhanovo,track,0
+131,Lepel,Borisov,track,0
+132,Borisov,Kokhanovo,road,0
+133,Senno,Kokhanovo,road,0
+134,Kokhanovo,Mogilev,road,0
+135,Igumen,Bobruysk,road,0
+136,Bobruysk,Mogilev,road,0
+137,Bobruysk,Ragostov,road,0
+138,Mogilev,Ragostov,road,0
+139,Unnamed D5,Mozyr,road,0
+140,Unnamed D5,Unnamed D6,road,0
+141,Zhitomir,Unnamed D6,road,0
+142,Zhitomir,Kiev,road,0
+143,Pskov,Bezhanitzy,road,0
+144,Rudnya,Velikiye Luki,track,0
+145,Rudnya,Vitebsk,track,1
+146,Polotsk,Vitebsk,road,1
+147,Kamen,Vitebsk,road,0
+148,Senno,Vitebsk,track,0
+149,Senno,Babinovichi,track,0
+150,Kokhanovo,Orsha,road,1
+151,Mogilev,Mstislavl,track,1
+152,Mogilev,Unnamed E4,track,1
+153,Ragostov,Unnamed E4,track,1
+154,Ragostov,Unnamed E5 West,road,0
+155,Mozyr,Unnamed E5 West,road,1
+156,Kiev,Kozelets,road,1
+157,Kiev,Ukraine,road,1
+158,Bezhanitzy,Unnamed E1,road,0
+159,Unnamed E1,Velikiye Luki,road,0
+160,Velikiye Luki,Toropets,track,0
+161,Velikiye Luki,Usvyaty,road,0
+162,Toropets,Unnamed E2,track,0
+163,Vitebsk,Usvyaty,road,1
+164,Vitebsk,Poreczie,road,0
+165,Smolensk,Poreczie,road ,0
+166,Vitebsk,Babinovichi,road,0
+167,Smolensk,Babinovichi,track,0
+168,Usvyaty,Poreczie,road,1
+169,Babinovichi,Orsha,road,1
+170,Smolensk,Orsha,road,1
+171,Orsha,Mstislavl,track,0
+172,Mstislavl,Unnamed E4,track,0
+173,Klimovich,Unnamed E4,track,0
+174,Ragostov,Novo Belitza,track,1
+175,Novo Belitza,Unnamed E5 East,track,1
+176,Unnamed E5 West,Unnamed E5 East,road,0
+177,Novozybkov,Gorodnya,track,0
+178,Toropets,Belyy,track,0
+179,Unnamed E1,Dukhovshchina,track,0
+180,Poreczie,Dukhovshchina,road,0
+181,Smolensk,Dukhovshchina,road,0
+182,Smolensk,Dorogobuzh,road,0
+183,Smolensk,Sverskovo,road,1
+184,Mstislavl,Sverskovo,track,0
+185,Klimovich,Roslavl,track,0
+186,Novozybkov,Starodub,track,0
+187,Gorodnya,Starodub,road,0
+188,Gorodnya,Chernigov,road,0
+189,Unnamed E5 East,Chernigov,road,1
+190,Kozelets,Chernigov,road,0
+191,Kozelets,Nezhin,track,0
+192,Belyy,Dukhovshchina,track,0
+193,Belyy,Unnamed F2,track,0
+194,Dukhovshchina,Dorogobuzh,road,0
+195,Unnamed F2,Sychevka,track,0
+196,Unnamed F2,Vyazma,track,0
+197,Unnamed F2,Dorogobuzh,track,0
+198,Dorogobuzh,Vyazma,road,0
+199,Sverskovo,Dorogobuzh,track,0
+200,Sverskovo,Roslavl,road,0
+201,Dorogobuzh,Unnamed F3,road,0
+202,Roslavl,Unnamed F3,road,0
+203,Roslavl,Bryansk,road,0
+204,Roslavl,Surazh,road,0
+205,Surazh,Starodub,road,0
+206,Bryansk,Trubshevsk,road,0
+207,Starodub,Novgorod Severskiy,track,0
+208,Trubshevsk,Novgorod Severskiy,road,0
+209,Sosnitsa,Novgorod Severskiy,road,0
+210,Chernigov,Sosnitsa,road,0
+211,Sosnitsa,Nezhin,track,0
+212,Sychevka,Staritsa,track,1
+213,Sychevka,Gzhatsk,track,0
+214,Staritsa,Gzhatsk,road,1
+215,Vyazma,Gzhatsk,road,0
+216,Vyazma,Silenki,track,0
+217,Vyazma,Yukhnov,road,0
+218,Unnamed F3,Yukhnov,road,0
+219,Bryansk,Karachev,road,0
+220,Torzhok,Tver,road,0
+221,Staritsa,Tver,road,1
+222,Staritsa,Voskresentsk,track,1
+223,Tver,Klin,road,1
+224,Gzhatsk,Mozhaysk,road,0
+225,Voskresentsk,Mozhaysk,track,0
+226,Gzhatsk,Maloyaroslavet,track,0
+227,Mozhaysk,Maloyaroslavet,track,0
+228,Silenki,Maloyaroslavet,track,0
+229,Yukhnov,Maloyaroslavet,track,0
+230,Maloyaroslavet,Tarutino,road,0
+231,Gzhatsk,Silenki,track,0
+232,Silenki,Yukhnov,track,0
+233,Maloyaroslavet,Kaluga,road,0
+234,Yukhnov,Kaluga,road,0
+235,Kaluga,Tarutino,road,0
+236,Yukhnov,Koselysk,track,0
+237,Koselysk,Kaluga,road,0
+238,Koselysk,Belev,road,0
+239,Belev,Orel,road,0
+240,Karachev,Orel,road,0
+241,Karachev,Voronezh,road,0
+242,Tver,Kortseva,track,0
+243,Klin,Moscow,road,0
+244,Voskresentsk,Moscow,track,0
+245,Mozhaysk,Moscow,road,0
+246,Maloyaroslavet,Moscow,road,0
+247,Tarutino,Moscow,road,0
+248,Kaluga,Serpukhov,road,0
+249,Orel,Unnamed H4,road,0
+250,Vladimir (Russia),Moscow,road,0
+251,Moscow,Unnamed H2,road,0
+252,Moscow,Serpukhov,road,0
+253,Tula,Serpukhov,road,0
+254,Tula,Ryazan,road,0
+255,Tula,Unnamed H3,road,0
+256,Unnamed H3,Unnamed H4,road,0

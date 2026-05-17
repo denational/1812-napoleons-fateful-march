@@ -1,0 +1,54 @@
+<!--
+<div class="scenario_info" data-scenario="The Eagles' March on Smolensk">
+    <p><i>
+        The French had planned to defeat the Russian armies near the border, in a quick campaign that would force the Czar to come to terms.
+        This plan proved flawed as the Russians immediately fell back in the face of the invasion and managed to extricate their dispersed forces and unite them for a stand at the gates to Russia: Smolensk.
+    </i></p>
+</div>
+
+<div class="scenario_info" data-scenario="The Eagles' March on Moscow">
+    <p><i>
+        Throughout the summer and early fall of 1812, the Russians managed to frustrate Napoléon´s plans for victory by falling back and refusing him the opportunity of destroying their army.
+        In mid-August the French defeated the Russians at Smolensk, but the Russians once again fell back in good order and in early September the French were closing in on Moscow itself.
+        At Borodino Napoléon once again defeated the Russians, but as the Russians deserted, and then torched their own capital it became obvious that winning a battle and winning a war were two entirely different things in Russia.
+    </i></p>
+</div>
+
+<div class="scenario_info" data-scenario="Hollow Victories">
+    <p><i>
+        After a month of retreating the Russian 1st army under Barclay de Tolly appeared to make a stand outside Vitebsk in late July. 
+        While the overjoyed Napoléon prepared his army for the impending battle, the Russians however slipped away again and fell back to Smolensk where they were joined by Bagration´s 2nd army.
+        Here, in mid-August of 1812, the French finally got their chance to fight a battle against the Russian army, but the result was disappointing. 
+        While the Russians lost the city and were pushed back, they were not defeated, and both sides suffered heavy losses. 
+        3 weeks later this repeated itself on an even grander scale outside Moscow at the battle of Borodino.
+    </i></p>
+</div>
+
+<div class="scenario_info" data-scenario="Battle of Smolensk Campaign Start">
+    <p><i>
+        In mid-August 1812, at Smolensk the newly combined Russian army, plagued by bitter internal intrigue and accusations of treason and cowardice, appeared to make a stand and offer battle. 
+        Napoléon felt he finally had his chance of a decisive battlefield victory that could decide the campaign and force the Czar to come to terms. 
+        The result however fell short of that, and the Russians fell back in good order.
+        The increasingly bewildered Napoléon now had no choice but to march on, in search of an honorable way out of his predicament.
+        The road east would lead to disaster for his Grande Armée.
+    </i></p>
+</div>
+
+<div class="scenario_info" data-scenario="The Retreat of the Grande Armée">
+    <p><i>
+        In mid-October 1812, with the Russian winter fast approaching, Napoléon finally abandoned hopes of victory and ordered his army to retreat from its exposed position in Moscow. 
+        The poorly clothed soldiers leaving the burnt-out city, heavily loaded with all kinds of loot, looked more like something out of the dark ages than the enlightenment. 
+        Over the coming weeks French morale plummeted as it seemed to the soldiers that the Russian weather and geography conspired with the Russian army and the marauding Cossacks to deny them any rest or safety. 
+        Even though Napoléon saved his army at the Berezina and later made his way out of Russia he had lost more than 80% of the men who had accompanied him into Russia.
+    </i></p>
+</div>
+
+<script>
+let scenario = document.querySelector("select[name='scenario']")
+scenario.onchange = function (evt) {
+	document.querySelectorAll(".scenario_info").forEach(e=>e.classList.remove("show"))
+	document.querySelector(`[data-scenario="${scenario.value}"]`).classList.add("show")
+}
+scenario.onchange()
+</script>
+-->

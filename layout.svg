@@ -1,0 +1,1403 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="2500"
+   height="2027"
+   version="1.1"
+   id="svg157"
+   sodipodi:docname="layout.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs157" />
+  <sodipodi:namedview
+     id="namedview157"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="0.7627035"
+     inkscape:cx="2025.0333"
+     inkscape:cy="1617.2733"
+     inkscape:window-width="1920"
+     inkscape:window-height="991"
+     inkscape:window-x="2391"
+     inkscape:window-y="-9"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg157" />
+  <image
+     xlink:href="map40.png"
+     x="0"
+     y="0"
+     width="2500"
+     height="2027"
+     image-rendering="pixelated"
+     sodipodi:insensitive="true"
+     id="image1" />
+  <circle
+     inkscape:label="Prussia North"
+     fill-opacity="0.5"
+     fill=""
+     cx="101.70031"
+     cy="495.16693"
+     id="circle2"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Tilsit"
+     fill-opacity="0.5"
+     fill=""
+     cx="160.19507"
+     cy="677.30444"
+     r="11"
+     id="circle3" />
+  <circle
+     inkscape:label="Kaltinenai"
+     fill-opacity="0.5"
+     fill=""
+     cx="218.66367"
+     cy="478.70407"
+     r="11"
+     id="circle4" />
+  <circle
+     inkscape:label="Nemaksciai"
+     fill-opacity="0.5"
+     fill=""
+     cx="291.43112"
+     cy="603.13843"
+     r="11"
+     id="circle5" />
+  <circle
+     inkscape:label="Prussia South"
+     fill-opacity="0.5"
+     fill=""
+     cx="101.53445"
+     cy="762.698"
+     id="circle6"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Kalvarija"
+     fill-opacity="0.5"
+     fill=""
+     cx="204.81206"
+     cy="789.24664"
+     r="11"
+     id="circle7" />
+  <circle
+     inkscape:label="Suwalki"
+     fill-opacity="0.5"
+     fill=""
+     cx="120.32925"
+     cy="918.75195"
+     r="11"
+     id="circle8" />
+  <circle
+     inkscape:label="Unnamed A3"
+     fill-opacity="0.5"
+     fill=""
+     cx="248.16399"
+     cy="885.85126"
+     r="11"
+     id="circle9" />
+  <circle
+     inkscape:label="Grodno"
+     fill-opacity="0.5"
+     fill=""
+     cx="316.99808"
+     cy="1009.63"
+     r="11"
+     id="circle10" />
+  <circle
+     inkscape:label="Szczuczy"
+     fill-opacity="0.5"
+     fill=""
+     cx="147.86288"
+     cy="1043.5967"
+     r="11"
+     id="circle11" />
+  <circle
+     inkscape:label="Grand Duchy of Warsaw North"
+     fill-opacity="0.5"
+     fill=""
+     cx="113.66235"
+     cy="1131.864"
+     id="circle12"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Bialystok"
+     fill-opacity="0.5"
+     fill=""
+     cx="261.93079"
+     cy="1169.2197"
+     r="11"
+     id="circle13" />
+  <circle
+     inkscape:label="Drohiczyn"
+     fill-opacity="0.5"
+     fill=""
+     cx="190.47446"
+     cy="1295.6207"
+     r="11"
+     id="circle14" />
+  <circle
+     inkscape:label="Grand Duchy of Warsaw South"
+     fill-opacity="0.5"
+     fill=""
+     cx="114.31792"
+     cy="1381.921"
+     id="circle15"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Biala"
+     fill-opacity="0.5"
+     fill=""
+     cx="198.34122"
+     cy="1495.9778"
+     r="11"
+     id="circle16" />
+  <circle
+     inkscape:label="Austria"
+     fill-opacity="0.5"
+     fill=""
+     cx="96.617737"
+     cy="1546.2222"
+     id="circle17"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Lublin"
+     fill-opacity="0.5"
+     fill=""
+     cx="121.64037"
+     cy="1653.7231"
+     r="11"
+     id="circle18" />
+  <circle
+     inkscape:label="Zamosc"
+     fill-opacity="0.5"
+     fill=""
+     cx="306.50906"
+     cy="1657.5339"
+     r="11"
+     id="circle19" />
+  <circle
+     inkscape:label="Riga"
+     fill-opacity="0.5"
+     fill=""
+     cx="402.66559"
+     cy="123.83897"
+     id="circle20"
+     style="stroke-width:1.63636"
+     r="18" />
+  <circle
+     inkscape:label="Venden"
+     fill-opacity="0.5"
+     fill=""
+     cx="573.97864"
+     cy="106.22739"
+     r="11"
+     id="circle21" />
+  <circle
+     inkscape:label="Friedrichstadt"
+     fill-opacity="0.5"
+     fill=""
+     cx="562.17853"
+     cy="209.68373"
+     r="11"
+     id="circle22" />
+  <circle
+     inkscape:label="Mitau"
+     fill-opacity="0.5"
+     fill=""
+     cx="445.39597"
+     cy="286.99295"
+     r="11"
+     id="circle23" />
+  <circle
+     inkscape:label="Eckau"
+     fill-opacity="0.5"
+     fill=""
+     cx="520.49152"
+     cy="355.61362"
+     r="11"
+     id="circle24" />
+  <circle
+     inkscape:label="Siauliai"
+     fill-opacity="0.5"
+     fill=""
+     cx="368.90976"
+     cy="413.10904"
+     r="11"
+     id="circle25" />
+  <circle
+     inkscape:label="Panevezys"
+     fill-opacity="0.5"
+     fill=""
+     cx="485.72507"
+     cy="484.97458"
+     r="11"
+     id="circle26" />
+  <circle
+     inkscape:label="Kedainiai"
+     fill-opacity="0.5"
+     fill=""
+     cx="385.59766"
+     cy="561.01208"
+     r="11"
+     id="circle27" />
+  <circle
+     inkscape:label="Vilkomir"
+     fill-opacity="0.5"
+     fill=""
+     cx="517.71021"
+     cy="606.45514"
+     r="11"
+     id="circle28" />
+  <circle
+     inkscape:label="Unnamed B2"
+     fill-opacity="0.5"
+     fill=""
+     cx="608.10303"
+     cy="430.31989"
+     r="11"
+     id="circle29" />
+  <circle
+     inkscape:label="Kovno"
+     fill-opacity="0.5"
+     fill=""
+     cx="387.45187"
+     cy="671.3822"
+     r="11"
+     id="circle30" />
+  <circle
+     inkscape:label="Vilna"
+     fill-opacity="0.5"
+     fill=""
+     cx="591.6076"
+     cy="754.56555"
+     id="circle31"
+     style="stroke-width:1.81818"
+     r="20" />
+  <circle
+     inkscape:label="Onuskis"
+     fill-opacity="0.5"
+     fill=""
+     cx="452.34927"
+     cy="807.69647"
+     r="11"
+     id="circle32" />
+  <circle
+     inkscape:label="Mostyr"
+     fill-opacity="0.5"
+     fill=""
+     cx="430.09872"
+     cy="931.47998"
+     r="11"
+     id="circle33" />
+  <circle
+     inkscape:label="Lida"
+     fill-opacity="0.5"
+     fill=""
+     cx="592.34222"
+     cy="1020.4969"
+     r="11"
+     id="circle34" />
+  <circle
+     inkscape:label="Volkovysk"
+     fill-opacity="0.5"
+     fill=""
+     cx="450.0773"
+     cy="1161.934"
+     r="11"
+     id="circle35" />
+  <circle
+     inkscape:label="Slonim"
+     fill-opacity="0.5"
+     fill=""
+     cx="607.41235"
+     cy="1239.1678"
+     r="11"
+     id="circle36" />
+  <circle
+     inkscape:label="Pruzhany"
+     fill-opacity="0.5"
+     fill=""
+     cx="484.82214"
+     cy="1301.3237"
+     r="11"
+     id="circle37" />
+  <circle
+     inkscape:label="Bielsk"
+     fill-opacity="0.5"
+     fill=""
+     cx="339.94275"
+     cy="1305.1345"
+     r="11"
+     id="circle38" />
+  <circle
+     inkscape:label="Kobryn"
+     fill-opacity="0.5"
+     fill=""
+     cx="479.57764"
+     cy="1419.0798"
+     r="11"
+     id="circle39" />
+  <circle
+     inkscape:label="Brest"
+     fill-opacity="0.5"
+     fill=""
+     cx="339.94278"
+     cy="1454.3577"
+     r="11"
+     id="circle40" />
+  <circle
+     inkscape:label="Ratno"
+     fill-opacity="0.5"
+     fill=""
+     cx="375.34317"
+     cy="1584.0365"
+     r="11"
+     id="circle41" />
+  <circle
+     inkscape:label="Kovel"
+     fill-opacity="0.5"
+     fill=""
+     cx="498.58896"
+     cy="1648.8146"
+     r="11"
+     id="circle42" />
+  <circle
+     inkscape:label="Unnamed B5"
+     fill-opacity="0.5"
+     fill=""
+     cx="591.02332"
+     cy="1574.6134"
+     r="11"
+     id="circle43" />
+  <circle
+     inkscape:label="Vladimir (Galicia)"
+     fill-opacity="0.5"
+     fill=""
+     cx="415.98804"
+     cy="1894.4055"
+     r="11"
+     id="circle44" />
+  <circle
+     inkscape:label="Lutsk"
+     fill-opacity="0.5"
+     fill=""
+     cx="539.23383"
+     cy="1786.1151"
+     r="11"
+     id="circle45" />
+  <circle
+     inkscape:label="Dubno"
+     fill-opacity="0.5"
+     fill=""
+     cx="629.04596"
+     cy="1871.8712"
+     r="11"
+     id="circle46" />
+  <circle
+     inkscape:label="Livonia"
+     fill-opacity="0.5"
+     fill=""
+     cx="702.15674"
+     cy="100.53712"
+     id="circle47"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Ostrov"
+     fill-opacity="0.5"
+     fill=""
+     cx="937.50378"
+     cy="98.825676"
+     id="circle48"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Unnamed C1"
+     fill-opacity="0.5"
+     fill=""
+     cx="823.93292"
+     cy="167.46671"
+     r="11"
+     id="circle49" />
+  <circle
+     inkscape:label="Jakobstadt"
+     fill-opacity="0.5"
+     fill=""
+     cx="694.13812"
+     cy="267.60898"
+     r="11"
+     id="circle50" />
+  <circle
+     inkscape:label="Ludzha"
+     fill-opacity="0.5"
+     fill=""
+     cx="891.14807"
+     cy="238.42"
+     r="11"
+     id="circle51" />
+  <circle
+     inkscape:label="Dünaburg"
+     fill-opacity="0.5"
+     fill=""
+     cx="768.30658"
+     cy="345.052"
+     r="11"
+     id="circle52" />
+  <circle
+     inkscape:label="Drissa"
+     fill-opacity="0.5"
+     fill=""
+     cx="906.44537"
+     cy="483.66916"
+     r="11"
+     id="circle53" />
+  <circle
+     inkscape:label="Vidzy"
+     fill-opacity="0.5"
+     fill=""
+     cx="778.0412"
+     cy="586.12921"
+     r="11"
+     id="circle54" />
+  <circle
+     inkscape:label="Salakas"
+     fill-opacity="0.5"
+     fill=""
+     cx="650.56415"
+     cy="530.5177"
+     r="11"
+     id="circle55" />
+  <circle
+     inkscape:label="Svencionys"
+     fill-opacity="0.5"
+     fill=""
+     cx="670.03339"
+     cy="658.93665"
+     r="11"
+     id="circle56" />
+  <circle
+     inkscape:label="Dokshitsy"
+     fill-opacity="0.5"
+     fill=""
+     cx="890.68457"
+     cy="753.05273"
+     r="11"
+     id="circle57" />
+  <circle
+     inkscape:label="Nastaniski"
+     fill-opacity="0.5"
+     fill=""
+     cx="752.54578"
+     cy="764.65643"
+     r="11"
+     id="circle58" />
+  <circle
+     inkscape:label="Molodechno"
+     fill-opacity="0.5"
+     fill=""
+     cx="764.13464"
+     cy="906.98199"
+     r="11"
+     id="circle59" />
+  <circle
+     inkscape:label="Volozhin"
+     fill-opacity="0.5"
+     fill=""
+     cx="676.05957"
+     cy="973.28491"
+     r="11"
+     id="circle60" />
+  <circle
+     inkscape:label="Minsk"
+     fill-opacity="0.5"
+     fill=""
+     cx="878.18915"
+     cy="983.98206"
+     id="circle61"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Pleshchenitsy"
+     fill-opacity="0.5"
+     fill=""
+     cx="921.27899"
+     cy="842.12921"
+     r="11"
+     id="circle62" />
+  <circle
+     inkscape:label="Novgrudok"
+     fill-opacity="0.5"
+     fill=""
+     cx="689.03906"
+     cy="1073.9204"
+     r="11"
+     id="circle63" />
+  <circle
+     inkscape:label="Nesvich"
+     fill-opacity="0.5"
+     fill=""
+     cx="779.43188"
+     cy="1174.0627"
+     r="11"
+     id="circle64" />
+  <circle
+     inkscape:label="Slutsk"
+     fill-opacity="0.5"
+     fill=""
+     cx="901.51398"
+     cy="1257.0671"
+     r="11"
+     id="circle65" />
+  <circle
+     inkscape:label="Kletsk"
+     fill-opacity="0.5"
+     fill=""
+     cx="743.52332"
+     cy="1300.8673"
+     r="11"
+     id="circle66" />
+  <circle
+     inkscape:label="Pinsk"
+     fill-opacity="0.5"
+     fill=""
+     cx="696.32281"
+     cy="1422.6793"
+     r="11"
+     id="circle67" />
+  <circle
+     inkscape:label="Unnamed C6"
+     fill-opacity="0.5"
+     fill=""
+     cx="677.96704"
+     cy="1686.0929"
+     r="11"
+     id="circle68" />
+  <circle
+     inkscape:label="Rovno"
+     fill-opacity="0.5"
+     fill=""
+     cx="742.21222"
+     cy="1784.3047"
+     r="11"
+     id="circle69" />
+  <circle
+     inkscape:label="Ostrog"
+     fill-opacity="0.5"
+     fill=""
+     cx="774.99036"
+     cy="1869.4053"
+     r="11"
+     id="circle70" />
+  <circle
+     inkscape:label="Novograd"
+     fill-opacity="0.5"
+     fill=""
+     cx="881.19147"
+     cy="1812.2488"
+     r="11"
+     id="circle71" />
+  <circle
+     inkscape:label="Moldavia"
+     fill-opacity="0.5"
+     fill=""
+     cx="869.93567"
+     cy="1910.3494"
+     id="circle72"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Pskov"
+     fill-opacity="0.5"
+     fill=""
+     cx="1124.9496"
+     cy="99.562477"
+     id="circle73"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Opochka"
+     fill-opacity="0.5"
+     fill=""
+     cx="1004.4373"
+     cy="209.0302"
+     r="11"
+     id="circle74" />
+  <circle
+     inkscape:label="Unnamed D1"
+     fill-opacity="0.5"
+     fill=""
+     cx="1148.6611"
+     cy="210.21875"
+     r="11"
+     id="circle75" />
+  <circle
+     inkscape:label="Sevezh"
+     fill-opacity="0.5"
+     fill=""
+     cx="1044.4266"
+     cy="328.09747"
+     r="11"
+     id="circle76" />
+  <circle
+     inkscape:label="Rudnya"
+     fill-opacity="0.5"
+     fill=""
+     cx="1216.1841"
+     cy="367.96423"
+     r="11"
+     id="circle77" />
+  <circle
+     inkscape:label="Polotsk"
+     fill-opacity="0.5"
+     fill=""
+     cx="1096.8717"
+     cy="516.65436"
+     r="11"
+     id="circle78" />
+  <circle
+     inkscape:label="Disna"
+     fill-opacity="0.5"
+     fill=""
+     cx="951.99231"
+     cy="661.41119"
+     r="11"
+     id="circle79" />
+  <circle
+     inkscape:label="Kamen"
+     fill-opacity="0.5"
+     fill=""
+     cx="1105.5175"
+     cy="687.66882"
+     r="11"
+     id="circle80" />
+  <circle
+     inkscape:label="Lepel"
+     fill-opacity="0.5"
+     fill=""
+     cx="1064.8726"
+     cy="770.14716"
+     r="11"
+     id="circle81" />
+  <circle
+     inkscape:label="Senno"
+     fill-opacity="0.5"
+     fill=""
+     cx="1236.63"
+     cy="785.10254"
+     r="11"
+     id="circle82" />
+  <circle
+     inkscape:label="Kokhanovo"
+     fill-opacity="0.5"
+     fill=""
+     cx="1220.241"
+     cy="898.39227"
+     r="11"
+     id="circle83" />
+  <circle
+     inkscape:label="Borisov"
+     fill-opacity="0.5"
+     fill=""
+     cx="1106.1731"
+     cy="929.73676"
+     r="11"
+     id="circle84" />
+  <circle
+     inkscape:label="Mogilev"
+     fill-opacity="0.5"
+     fill=""
+     cx="1233.8966"
+     cy="1023.2484"
+     id="circle85"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Bobruysk"
+     fill-opacity="0.5"
+     fill=""
+     cx="1109.4509"
+     cy="1213.3502"
+     r="11"
+     id="circle86" />
+  <circle
+     inkscape:label="Igumen"
+     fill-opacity="0.5"
+     fill=""
+     cx="967.8493"
+     cy="1126.0378"
+     r="11"
+     id="circle87" />
+  <circle
+     inkscape:label="Ragostov"
+     fill-opacity="0.5"
+     fill=""
+     cx="1253.6747"
+     cy="1255.0612"
+     r="11"
+     id="circle88" />
+  <circle
+     inkscape:label="Mozyr"
+     fill-opacity="0.5"
+     fill=""
+     cx="1093.0618"
+     cy="1455.5409"
+     r="11"
+     id="circle89" />
+  <circle
+     inkscape:label="Unnamed D5"
+     fill-opacity="0.5"
+     fill=""
+     cx="1055.6947"
+     cy="1593.0864"
+     r="11"
+     id="circle90" />
+  <circle
+     inkscape:label="Unnamed D6"
+     fill-opacity="0.5"
+     fill=""
+     cx="1035.3723"
+     cy="1756.199"
+     r="11"
+     id="circle91" />
+  <circle
+     inkscape:label="Zhitomir"
+     fill-opacity="0.5"
+     fill=""
+     cx="1030.7833"
+     cy="1866.2109"
+     r="11"
+     id="circle92" />
+  <circle
+     inkscape:label="Kiev"
+     fill-opacity="0.5"
+     fill=""
+     cx="1235.8632"
+     cy="1902.0331"
+     id="circle93"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Bezhanitzy"
+     fill-opacity="0.5"
+     fill=""
+     cx="1333.6545"
+     cy="99.417458"
+     id="circle94"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Unnamed E1"
+     fill-opacity="0.5"
+     fill=""
+     cx="1390.4094"
+     cy="195.93962"
+     r="11"
+     id="circle95" />
+  <circle
+     inkscape:label="Velikiye Luki"
+     fill-opacity="0.5"
+     fill=""
+     cx="1340.8092"
+     cy="275.68558"
+     r="11"
+     id="circle96" />
+  <circle
+     inkscape:label="Toropets"
+     fill-opacity="0.5"
+     fill=""
+     cx="1498.4172"
+     cy="233.51711"
+     r="11"
+     id="circle97" />
+  <circle
+     inkscape:label="Usvyaty"
+     fill-opacity="0.5"
+     fill=""
+     cx="1364.9141"
+     cy="419.41666"
+     r="11"
+     id="circle98" />
+  <circle
+     inkscape:label="Unnamed E2"
+     fill-opacity="0.5"
+     fill=""
+     cx="1488.6826"
+     cy="394.86322"
+     r="11"
+     id="circle99" />
+  <circle
+     inkscape:label="Poreczie"
+     fill-opacity="0.5"
+     fill=""
+     cx="1443.718"
+     cy="584.00763"
+     r="11"
+     id="circle100" />
+  <circle
+     inkscape:label="Vitebsk"
+     fill-opacity="0.5"
+     fill=""
+     cx="1289.839"
+     cy="599.80383"
+     id="circle101"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Smolensk"
+     fill-opacity="0.5"
+     fill=""
+     cx="1533.6677"
+     cy="670.27869"
+     id="circle102"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Babinovichi"
+     fill-opacity="0.5"
+     fill=""
+     cx="1362.5962"
+     cy="761.59296"
+     r="11"
+     id="circle103" />
+  <circle
+     inkscape:label="Orsha"
+     fill-opacity="0.5"
+     fill=""
+     cx="1392.2637"
+     cy="890.47546"
+     r="11"
+     id="circle104" />
+  <circle
+     inkscape:label="Mstislavl"
+     fill-opacity="0.5"
+     fill=""
+     cx="1461.333"
+     cy="975.3205"
+     r="11"
+     id="circle105" />
+  <circle
+     inkscape:label="Unnamed E4"
+     fill-opacity="0.5"
+     fill=""
+     cx="1409.4152"
+     cy="1119.5002"
+     r="11"
+     id="circle106" />
+  <circle
+     inkscape:label="Klimovich"
+     fill-opacity="0.5"
+     fill=""
+     cx="1526.694"
+     cy="1119.9786"
+     r="11"
+     id="circle107" />
+  <circle
+     inkscape:label="Novozybkov"
+     fill-opacity="0.5"
+     fill=""
+     cx="1479.4116"
+     cy="1256.2781"
+     r="11"
+     id="circle108" />
+  <circle
+     inkscape:label="Novo Belitza"
+     fill-opacity="0.5"
+     fill=""
+     cx="1366.3047"
+     cy="1373.1082"
+     r="11"
+     id="circle109" />
+  <circle
+     inkscape:label="Unnamed E5 West"
+     fill-opacity="0.5"
+     fill=""
+     cx="1260.6146"
+     cy="1400.9363"
+     r="11"
+     id="circle110" />
+  <circle
+     inkscape:label="Unnamed E5 East"
+     fill-opacity="0.5"
+     fill=""
+     cx="1305.1157"
+     cy="1609.0864"
+     r="11"
+     id="circle111" />
+  <circle
+     inkscape:label="Gorodnya"
+     fill-opacity="0.5"
+     fill=""
+     cx="1497.0266"
+     cy="1545.131"
+     r="11"
+     id="circle112" />
+  <circle
+     inkscape:label="Kozelets"
+     fill-opacity="0.5"
+     fill=""
+     cx="1438.1554"
+     cy="1809.371"
+     r="11"
+     id="circle113" />
+  <circle
+     inkscape:label="Ukraine"
+     fill-opacity="0.5"
+     fill=""
+     cx="1458.1086"
+     cy="1908.6066"
+     id="circle114"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Belyy"
+     fill-opacity="0.5"
+     fill=""
+     cx="1611.5242"
+     cy="379.34006"
+     r="11"
+     id="circle115" />
+  <circle
+     inkscape:label="Dukhovshchina"
+     fill-opacity="0.5"
+     fill=""
+     cx="1582.7839"
+     cy="524.91046"
+     r="11"
+     id="circle116" />
+  <circle
+     inkscape:label="Sychevka"
+     fill-opacity="0.5"
+     fill=""
+     cx="1772.8406"
+     cy="410.89133"
+     r="11"
+     id="circle117" />
+  <circle
+     inkscape:label="Unnamed F2"
+     fill-opacity="0.5"
+     fill=""
+     cx="1721.2189"
+     cy="544.59937"
+     r="11"
+     id="circle118" />
+  <circle
+     inkscape:label="Vyazma"
+     fill-opacity="0.5"
+     fill=""
+     cx="1810.6846"
+     cy="655.86688"
+     r="11"
+     id="circle119" />
+  <circle
+     inkscape:label="Dorogobuzh"
+     fill-opacity="0.5"
+     fill=""
+     cx="1710.0936"
+     cy="759.25403"
+     r="11"
+     id="circle120" />
+  <circle
+     inkscape:label="Sverskovo"
+     fill-opacity="0.5"
+     fill=""
+     cx="1571.0278"
+     cy="886.74591"
+     r="11"
+     id="circle121" />
+  <circle
+     inkscape:label="Unnamed F3"
+     fill-opacity="0.5"
+     fill=""
+     cx="1783.335"
+     cy="858.02051"
+     r="11"
+     id="circle122" />
+  <circle
+     inkscape:label="Roslavl"
+     fill-opacity="0.5"
+     fill=""
+     cx="1625.7271"
+     cy="1007.2994"
+     r="11"
+     id="circle123" />
+  <circle
+     inkscape:label="Bryansk"
+     fill-opacity="0.5"
+     fill=""
+     cx="1787.0435"
+     cy="1105.1239"
+     r="11"
+     id="circle124" />
+  <circle
+     inkscape:label="Surazh"
+     fill-opacity="0.5"
+     fill=""
+     cx="1641.4878"
+     cy="1182.552"
+     r="11"
+     id="circle125" />
+  <circle
+     inkscape:label="Trubshevsk"
+     fill-opacity="0.5"
+     fill=""
+     cx="1787.507"
+     cy="1280.8401"
+     r="11"
+     id="circle126" />
+  <circle
+     inkscape:label="Starodub"
+     fill-opacity="0.5"
+     fill=""
+     cx="1611.8204"
+     cy="1318.4027"
+     r="11"
+     id="circle127" />
+  <circle
+     inkscape:label="Novgorod Severskiy"
+     fill-opacity="0.5"
+     fill=""
+     cx="1747.1779"
+     cy="1452.8479"
+     r="11"
+     id="circle128" />
+  <circle
+     inkscape:label="Sosnitsa"
+     fill-opacity="0.5"
+     fill=""
+     cx="1662.6232"
+     cy="1610.9009"
+     r="11"
+     id="circle129" />
+  <circle
+     inkscape:label="Chernigov"
+     fill-opacity="0.5"
+     fill=""
+     cx="1583.3002"
+     cy="1768.7689"
+     r="11"
+     id="circle130" />
+  <circle
+     inkscape:label="Nezhin"
+     fill-opacity="0.5"
+     fill=""
+     cx="1736.0463"
+     cy="1797.1633"
+     r="11"
+     id="circle131" />
+  <circle
+     inkscape:label="Torzhok"
+     fill-opacity="0.5"
+     fill=""
+     cx="1888.7924"
+     cy="86.021996"
+     r="11"
+     id="circle132" />
+  <circle
+     inkscape:label="Tver"
+     fill-opacity="0.5"
+     fill=""
+     cx="2049.2939"
+     cy="112.66624"
+     id="circle133"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Staritsa"
+     fill-opacity="0.5"
+     fill=""
+     cx="1878.959"
+     cy="254.25647"
+     r="11"
+     id="circle134" />
+  <circle
+     inkscape:label="Voskresentsk"
+     fill-opacity="0.5"
+     fill=""
+     cx="2028.4272"
+     cy="360.99063"
+     r="11"
+     id="circle135" />
+  <circle
+     inkscape:label="Klin"
+     fill-opacity="0.5"
+     fill=""
+     cx="2171.3398"
+     cy="281.54495"
+     r="11"
+     id="circle136" />
+  <circle
+     inkscape:label="Gzhatsk"
+     fill-opacity="0.5"
+     fill=""
+     cx="1880.9257"
+     cy="501.69147"
+     r="11"
+     id="circle137" />
+  <circle
+     inkscape:label="Mozhaysk"
+     fill-opacity="0.5"
+     fill=""
+     cx="2031.7051"
+     cy="479.9353"
+     r="11"
+     id="circle138" />
+  <circle
+     inkscape:label="Silenki"
+     fill-opacity="0.5"
+     fill=""
+     cx="1932.7151"
+     cy="615.51422"
+     r="11"
+     id="circle139" />
+  <circle
+     inkscape:label="Maloyaroslavet"
+     fill-opacity="0.5"
+     fill=""
+     cx="2057.9275"
+     cy="605.55823"
+     r="11"
+     id="circle140" />
+  <circle
+     inkscape:label="Tarutino"
+     fill-opacity="0.5"
+     fill=""
+     cx="2177.24"
+     cy="566.10187"
+     r="11"
+     id="circle141" />
+  <circle
+     inkscape:label="Yukhnov"
+     fill-opacity="0.5"
+     fill=""
+     cx="1934.6818"
+     cy="780.34833"
+     r="11"
+     id="circle142" />
+  <circle
+     inkscape:label="Kaluga"
+     fill-opacity="0.5"
+     fill=""
+     cx="2114.8501"
+     cy="732.25842"
+     id="circle143"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Koselysk"
+     fill-opacity="0.5"
+     fill=""
+     cx="2016.6271"
+     cy="904.00452"
+     r="11"
+     id="circle144" />
+  <circle
+     inkscape:label="Belev"
+     fill-opacity="0.5"
+     fill=""
+     cx="2084.8057"
+     cy="1024.5055"
+     r="11"
+     id="circle145" />
+  <circle
+     inkscape:label="Orel"
+     fill-opacity="0.5"
+     fill=""
+     cx="2093.9834"
+     cy="1184.3402"
+     r="11"
+     id="circle146" />
+  <circle
+     inkscape:label="Karachev"
+     fill-opacity="0.5"
+     fill=""
+     cx="1943.8596"
+     cy="1215.0291"
+     r="11"
+     id="circle147" />
+  <circle
+     inkscape:label="Voronezh"
+     fill-opacity="0.5"
+     fill=""
+     cx="2198.7622"
+     cy="1246.9178"
+     id="circle148"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Kortseva"
+     fill-opacity="0.5"
+     fill=""
+     cx="2199.5291"
+     cy="130.48318"
+     r="11"
+     id="circle149" />
+  <circle
+     inkscape:label="Vladimir (Russia)"
+     fill-opacity="0.5"
+     fill=""
+     cx="2367.8975"
+     cy="153.19406"
+     id="circle150"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Moscow"
+     fill-opacity="0.5"
+     fill=""
+     cx="2234.8184"
+     cy="406.11868"
+     id="circle151"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Unnamed H2"
+     fill-opacity="0.5"
+     fill=""
+     cx="2376.531"
+     cy="414.6297"
+     r="11"
+     id="circle152" />
+  <circle
+     inkscape:label="Serpukhov"
+     fill-opacity="0.5"
+     fill=""
+     cx="2276.23"
+     cy="589.54236"
+     r="11"
+     id="circle153" />
+  <circle
+     inkscape:label="Ryazan"
+     fill-opacity="0.5"
+     fill=""
+     cx="2388.22"
+     cy="744.02136"
+     id="circle154"
+     style="stroke-width:2.18182"
+     r="24" />
+  <circle
+     inkscape:label="Tula"
+     fill-opacity="0.5"
+     fill=""
+     cx="2261.1521"
+     cy="772.85474"
+     r="11"
+     id="circle155" />
+  <circle
+     inkscape:label="Unnamed H3"
+     fill-opacity="0.5"
+     fill=""
+     cx="2267.7078"
+     cy="958.91199"
+     r="11"
+     id="circle156" />
+  <circle
+     inkscape:label="Unnamed H4"
+     fill-opacity="0.5"
+     fill=""
+     cx="2240.8296"
+     cy="1087.2798"
+     r="11"
+     id="circle157" />
+  <rect
+     style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.597"
+     id="rect1"
+     width="245.17999"
+     height="266.81403"
+     x="50.478333"
+     y="1693.9741"
+     inkscape:label="France Force Pool" />
+  <rect
+     style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.597"
+     id="rect2"
+     width="244.52499"
+     height="264.19177"
+     x="53.100582"
+     y="59.656208"
+     inkscape:label="Russia Force Pool" />
+  <rect
+     style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.597"
+     id="rect3"
+     width="275.99191"
+     height="131.76811"
+     x="1579.2506"
+     y="1829.02"
+     inkscape:label="France Casualties" />
+  <rect
+     style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.597"
+     id="rect4"
+     width="51.133896"
+     height="220.26909"
+     x="1984.3884"
+     y="1729.3745"
+     inkscape:label="Initiative Track" />
+  <rect
+     style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:1.00465"
+     id="rect5"
+     width="54.659626"
+     height="1143.5493"
+     x="2346.4629"
+     y="818.34619"
+     inkscape:label="VP Track" />
+  <rect
+     style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.597"
+     id="rect6"
+     width="49.331097"
+     height="57.689522"
+     x="1985.5356"
+     y="1311.781"
+     inkscape:label="June 5" />
+  <rect
+     style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.597"
+     id="rect7"
+     width="301.55887"
+     height="58.672867"
+     x="1984.3884"
+     y="1380.2874"
+     inkscape:label="July" />
+  <rect
+     style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.597"
+     id="rect8"
+     width="302.54221"
+     height="60.311771"
+     x="1984.0607"
+     y="1448.7937"
+     inkscape:label="AUG" />
+  <rect
+     style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.597"
+     id="rect9"
+     width="301.88666"
+     height="59.32843"
+     x="1984.0607"
+     y="1518.2833"
+     inkscape:label="SEPT" />
+  <rect
+     style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.597"
+     id="rect10"
+     width="302.54221"
+     height="58.345085"
+     x="1984.3884"
+     y="1586.7897"
+     inkscape:label="OCT" />
+  <rect
+     style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.597"
+     id="rect11"
+     width="301.88666"
+     height="60.311771"
+     x="1984.0607"
+     y="1656.9348"
+     inkscape:label="NOV" />
+</svg>
