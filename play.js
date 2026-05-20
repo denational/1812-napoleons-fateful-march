@@ -342,7 +342,10 @@ function on_init() {
 //=== UPDATE VIEW ===
 function on_update() {
     begin_update()
+
+    //Reset counters
     reset_used()
+    num_devastated = 0
 
     update_tracks()
     update_leaders()
@@ -353,6 +356,10 @@ function on_update() {
     for (let c of V.current_hand) {
         populate("hand", 0, "card", c)
     }
+
+    action_button("done", "Done")
+    action_button("draw", "Draw")
+    action_button("undo", "Undo")
 
     end_update()
 }
@@ -452,6 +459,8 @@ function update_devastation() {
 function escape_text(text) {
     escape_html(text)
     escape_typography(text)
+
+    text = escape_tip_class_sub(text, /C(\d+)/g, "tip", "card card_$1", data.cards.map(card => card.name))
     return text
 }
 
@@ -462,6 +471,10 @@ function on_log(text) {
         case "=":
             text = text.substring(1)
             p.className = 'h1'
+            break
+        case "#":
+            text = text.substring(1)
+            p.className = 'h2'
             break
     }
     

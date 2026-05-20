@@ -31,6 +31,8 @@ body.Russia header.your_turn {background-color: var(--russia);}
     }
 }
 
+/* LOGGING */
+
 #log {
     background-color: hsl(52, 30%, 89%)
 }
@@ -41,6 +43,17 @@ body.Russia header.your_turn {background-color: var(--russia);}
     padding:2px 0;
     text-align: center;
     font-variant-caps: small-caps;
+}
+
+#log .h2 { 
+    background-color: hsl(34, 50%, 80%);
+    padding:2px 0;
+    text-align: center;
+    font-variant-caps: small-caps;
+}
+
+#log .tip {
+    font-style: italic; 
 }
 
 /* SPACES */
@@ -276,7 +289,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
 .card {
     background-size: 110%;
 	background-repeat: no-repeat;
-	background-position: -1px;
+	background-position: -4px -10px; 
 	background-color: transparent;
 	width: 250px;
 	height: 365px;
@@ -286,10 +299,10 @@ body.Russia header.your_turn {background-color: var(--russia);}
 
 .card.action {
 	filter:
-		drop-shadow(0 -2px 0 white)
-		drop-shadow(0 2px 0 white)
-		drop-shadow(-2px 0 0 white)
-		drop-shadow(2px 0 0 white)
+		drop-shadow(0 -2px 0 yellow)
+		drop-shadow(0 2px 0 yellow)
+		drop-shadow(-2px 0 0 yellow)
+		drop-shadow(2px 0 0 yellow)
 }
 
 .card_0{background-image: url(cards/ru/card_00.png);}

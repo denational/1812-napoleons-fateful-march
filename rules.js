@@ -32,8 +32,7 @@ var G, L, R, V, P = {}
 //=== DATA ===
 const spaces = data.spaces
 const leaders = data.leaders
-const france_cards = data.france_cards
-const russia_cards = data.russia_cards
+const cards = data.cards
 const pieces = data.pieces
 const orders = data.orders
 
@@ -248,6 +247,16 @@ const last_ru_card = 53
 const first_fr_card = 54
 const last_fr_card = 107
 
+const RUSSIA_DUMMY = 0
+const WELL_DISCIPLINED_RETREAT = 1
+const CONFUSED_RETREAT = 2
+const EVASIVE_MANEUVERS = 4
+
+const FRANCE_DUMMY = 54
+const HARD_MARCHING = first_fr_card + 1
+const FAST_MARCHING = first_fr_card + 9
+const MURATS_CAVALRY = first_fr_card + 13
+
 /* TURN */
 const JUNE_5 = 0
 const JULY_R = 1
@@ -284,6 +293,7 @@ const NOV_5 = 30
 const DUMMY = 0
 
 //=== DATA FUNCTIONS ===
+/* LEADERS */
 function get_leader_nationality(leader) {
 	return leaders[leader].faction
 }
@@ -300,10 +310,196 @@ function get_leader_vp(leader) {
 	return leaders[leader].vp
 }
 
+function setup_leader(who, where) {
+	G.leaders[who] = where
+}
+
+/* DEPOT/DEVASTATION */
+
+function set_devastation(where, level) {
+	G.devastation[where] = level
+}
+
+function setup_depot(who, where) {
+	let depot = (who === RUSSIA) ? G.russian.depots : G.french.depots
+	depot[depot.indexOf(AVAILABLE)] = where
+}
+
+/* TROOPS */
+function is_fresh_or_exhausted(type) {
+	return (type % 2 === 0) ? FRESH : EXHAUSTED
+}
+
+function get_map_from_type(type) {
+	switch(type) {
+		case FRESH_INFANTRY:
+		case EXHAUSTED_INFANTRY:
+			return G.infantry
+		case FRESH_CAVALRY:
+		case EXHAUSTED_CAVALRY:
+			return G.cavalry
+		case FRESH_COSSACK:
+		case EXHAUSTED_COSSACK:
+			return G.cossack
+		case FRESH_GUARD:
+		case EXHAUSTED_GUARD:
+			return G.guard
+	}
+}
+
+function init_troop_entry(type, where) {
+	map_set(get_map_from_type(type), where, 0)
+}
+
+function setup_troop(owner, where, type, number) {
+	if (!Object.hasOwn(G.troops, where))
+		G.troops[where] = {}
+	if (!Object.hasOwn(G.troops[where], owner)) {
+        G.troops[where][owner] = {}
+    }
+	G.troops[where][owner][type] = (G.troops[where][owner][type] ?? 0) + number
+}
+
+function setup_russian_troop(where, type, number) {
+	setup_troop(RUSSIA, where, type, number)
+}
+
+function setup_french_troop(where, type, number) {
+	setup_troop(FRANCE, where, type, number)
+}
+
+/* HAND */
 function get_card(side, number) {
 	return (side === RUSSIA) ? number : (first_fr_card + number)
 }
 
+function is_must_play_event(card) {
+	if (cards[card].immediate === "true") {log(`C${card} is a Must-Play Event.`)}
+	return cards[card].immediate === "true"
+}
+
+function get_france_hand() {
+	return G.hand[FRANCE]
+}
+
+function push_to_hand(who, cards) {
+	if (Array.isArray(cards)) {
+		for (let c of cards) {
+			G.hand[who].push(c)
+		}
+	} else {
+		G.hand[who].push(cards)
+	}
+}
+
+function get_russia_hand() {
+	return G.hand[RUSSIA]
+}
+
+function discard_card(card) {
+	if (card >= first_ru_card && card <= last_ru_card) {
+		array_delete_item(get_russia_hand(), card)
+		G.discard[RUSSIA].push(card)
+	} else {
+		array_delete_item(get_france_hand(), card)
+		G.discard[FRANCE].push(card)
+	}
+}
+
+function get_hand(who) {
+	return (who === RUSSIA) ? G.hand[RUSSIA] : G.hand[FRANCE]
+}
+
+function is_dummy(card) {
+	return card === FRANCE_DUMMY || card === RUSSIA_DUMMY
+}
+
+function get_card_name(card) {
+	return cards[card].name
+}
+
+function draw_card(who) {
+	G.hand[who].push(G.deck[who].pop())
+}
+
+P.setup_hand = {
+	_begin() {
+		log_h2("Setup")
+		L.has_discarded = [false, false]
+		L.cards_discarded = [[], []]
+	},
+	prompt() {
+		if (L.has_discarded[R]) {
+			V.prompt = "Review drawn cards."
+			button("done")
+		} else {
+			V.prompt = "You may discard any cards in your hand before drawing new cards."
+			for (let card of get_hand(R)) {
+				if (!is_dummy(card)) {
+					action("card", card)
+				}
+			}
+			button("draw")
+			if (L.cards_discarded[R].length > 0)
+				button("undo")
+		}
+ 	},
+	card(card) {
+		push_undo()
+		console.log(L.cards_discarded[R])
+		discard_card(card)
+		L.cards_discarded[R].push(card)
+	},
+	undo() {
+		let c = G.discard[R].pop()
+		G.hand[R].push(c)
+		array_delete_item(L.cards_discarded[R], c)
+	},
+	draw() {
+		L.has_discarded[R] = true
+
+		for (let who = RUSSIA; who <= FRANCE; ++who) {
+			for (let c of L.cards_discarded[who]) {
+				log(`${ROLES[who]} discarded C${c}.`)
+			}
+		}
+
+		while (get_hand(R).length < 4) {
+			draw_card(R)
+			let card = G.hand[R][G.hand[R].length - 1]
+			while (is_must_play_event(card)) {
+				discard_card(G.hand[R][G.hand[R].length - 1])
+				draw_card(R)
+				card = G.hand[R][G.hand[R].length - 1]
+			}
+		}
+	},
+	done() {
+		set_delete(G.active, R)
+
+		if (G.active.length === 0)
+			call("june")
+	}
+}
+/*
+P.june = script(`
+	call turn	
+`)
+
+P.turn = script(`
+	call draw_card	
+`)
+
+P.draw_card - {
+	prompt() {
+		V.prompt = "Draw a card to your hard."
+		button("draw")
+	},
+	draw() {
+		draw_card(R)
+	}
+}
+*/
 //=== SETUP ===
 function on_setup(scenario, options) {
 
@@ -328,8 +524,12 @@ function on_setup(scenario, options) {
 
 function setup_grand_campaign() {
 	log_h1("The Grand Campaign")
+	log("French Logistic Preparations.")
+	log("Winter.")
 	G.turn = JUNE_5
 	G.last_turn = NOV_5
+
+	G.french_logistic_preparations = true
 
 	G.vp = -14
 	G.initiative = 1
@@ -344,14 +544,18 @@ function setup_grand_campaign() {
 	shuffle(G.deck[RUSSIA])
 	shuffle(G.deck[FRANCE])
 
-	G.hand = [[get_card(RUSSIA, DUMMY)], [get_card(FRANCE, DUMMY)]]
-	G.hand[FRANCE].push(get_card(FRANCE, 1), get_card(FRANCE, 9), get_card(FRANCE, 13))
-	G.hand[RUSSIA].push(get_card(RUSSIA, 1), get_card(RUSSIA, 2), get_card(RUSSIA, 4))
-	
+	let cards = [[WELL_DISCIPLINED_RETREAT, CONFUSED_RETREAT, EVASIVE_MANEUVERS], [HARD_MARCHING, FAST_MARCHING, MURATS_CAVALRY]]
+	for (let who = RUSSIA; who <= FRANCE; ++who) {
+		for (let c = 0; c < cards[who].length; ++c) {
+			array_delete_item(G.deck[who], cards[who][c])
+		}
+	}
+
+	G.hand = [[], []]
 	setup_june_5()
 
 	G.active = [RUSSIA, FRANCE]
-	call("setup_discard")
+	call("setup_hand")
 }
 
 function setup_june_5() {
@@ -436,124 +640,16 @@ function setup_june_5() {
 	set_devastation(S_KALVARIJA, 1)
 	set_devastation(S_SUWALKI, 1)
 	set_devastation(S_SZCZUCZY, 1)
+
+	push_to_hand(FRANCE, [FRANCE_DUMMY, HARD_MARCHING, FAST_MARCHING, MURATS_CAVALRY])
+	push_to_hand(RUSSIA, [RUSSIA_DUMMY, WELL_DISCIPLINED_RETREAT, CONFUSED_RETREAT, EVASIVE_MANEUVERS])
 }
 
-function set_devastation(where, level) {
-	G.devastation[where] = level
-}
-
-function setup_depot(who, where) {
-	let depot = (who === RUSSIA) ? G.russian.depots : G.french.depots
-	depot[depot.indexOf(AVAILABLE)] = where
-}
-
-function setup_leader(who, where) {
-	G.leaders[who] = where
-}
-
-function convert_to_binary(decimal) {
-	return (decimal >>> 0).toString(2)
-}
-
-function concat_binary(n1, n2) {
-	let b1 = convert_to_binary(n1).toString()
-	let b2 = convert_to_binary(n2).toString()
-	return parseInt(n1 + n2, 2)
-}
-
-function assemble_troop(owner, number) {
-    const packed = (owner << 6) | (number & 0x3F)
-    console.log("PACK", { owner, number, packed })
-    return packed
-}
-
-function is_fresh_or_exhausted(type) {
-	return (type % 2 === 0) ? FRESH : EXHAUSTED
-}
-
-function get_map_from_type(type) {
-	switch(type) {
-		case FRESH_INFANTRY:
-		case EXHAUSTED_INFANTRY:
-			return G.infantry
-		case FRESH_CAVALRY:
-		case EXHAUSTED_CAVALRY:
-			return G.cavalry
-		case FRESH_COSSACK:
-		case EXHAUSTED_COSSACK:
-			return G.cossack
-		case FRESH_GUARD:
-		case EXHAUSTED_GUARD:
-			return G.guard
-	}
-}
-
-function init_troop_entry(type, where) {
-	map_set(get_map_from_type(type), where, 0)
-}
-
-function setup_troop(owner, where, type, number) {
-	if (!Object.hasOwn(G.troops, where))
-		G.troops[where] = {}
-	if (!Object.hasOwn(G.troops[where], owner)) {
-        G.troops[where][owner] = {}
-    }
-	G.troops[where][owner][type] = (G.troops[where][owner][type] ?? 0) + number
-}
-
-function setup_russian_troop(where, type, number) {
-	setup_troop(RUSSIA, where, type, number)
-}
-
-function setup_french_troop(where, type, number) {
-	setup_troop(FRANCE, where, type, number)
-}
-
-function get_france_hand() {
-	return G.deck[FRANCE]
-}
-
-function get_russia_hand() {
-	return G.deck[RUSSIA]
-}
-
-function discard_card(card) {
-	if (card >= first_ru_card && card <= last_ru_card) {
-		set_delete(get_russia_hand(), card)
-		G.discard[RUSSIA].push(card)
-	} else {
-		set_delete(get_france_hand(), card)
-		G.discard[FRANCE].push(card)
-	}
-}
-
-P.setup_discard = {
-	_begin() {
-		
-	},
-	prompt() {
-		V.prompt = "You may discard any cards in your hand before drawing new cards."
-		for (let card of get_france_hand()) {
-			if (card != get_card(FRANCE, DUMMY) || card != get_card(RUSSIA, DUMMY))
-				action("card", card)
-		}
-		action("done")
- 	},
-	card(card) {
-		push_undo()
-		discard_card()
-	},
-	done() {
-		end()
-	}
-}
-
-
-function on_static_view() {}
+//=== VIEW ===
 function on_view() {
 	V.turn = G.turn
 	V.last_turn = G.last_turn
-
+	V.french_logistic_preparations = G.french_logistic_preparations
 	V.vp = G.vp
 	V.initiative = G.initiative
 	V.leaders = G.leaders
@@ -569,7 +665,18 @@ function on_assert() {}
 //=== LOG ===
 function log_h1(msg) {
 	log(`=${msg}`)
-} 
+	log_br()
+}
+
+function log_h2(msg) {
+	log_br()
+	log(`#${msg}`)
+	log_br()
+}
+
+function log_br() {
+	log("")
+}
 
 //=== FRAMEWORK ===
 function log(s) {
@@ -654,7 +761,7 @@ exports.setup = function (seed, scenario, options) {
 
 	return G
 }
-/*
+
 exports.static_view = function (game) {
 	var SV = null
 	if (typeof on_static_view === "function") {
@@ -667,7 +774,7 @@ exports.static_view = function (game) {
 		_save()
 	}
 	return SV
-}*/
+}
 
 exports.view = function (state, role) {
 	G = state
