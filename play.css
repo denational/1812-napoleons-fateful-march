@@ -35,6 +35,14 @@ body.Russia header.your_turn {background-color: var(--russia);}
     background-color: hsl(52, 30%, 89%)
 }
 
+#log .h1 { 
+    background-color: hsl(200, 34%, 73%);
+    font-weight: bold;
+    padding:2px 0;
+    text-align: center;
+    font-variant-caps: small-caps;
+}
+
 /* SPACES */
 .space {
 	box-sizing: border-box;
@@ -198,19 +206,19 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	align-items: center;
 }
 
-.piece.infantry.fresh.fr { background-image: url(pieces/fresh-infantry_fr.png);}
-.piece.infantry.fresh.ru { background-image: url(pieces/fresh-infantry_ru.png);}
-.piece.infantry.fresh.pr { background-image: url(pieces/fresh-infantry_pr.png);}
-.piece.infantry.fresh.au { background-image: url(pieces/fresh-infantry_au.png);}
-.piece.infantry.exhausted.fr { background-image: url(pieces/exhausted-infantry_fr.png);}
-.piece.infantry.exhausted.ru { background-image: url(pieces/exhausted-infantry_ru.png);}
-.piece.infantry.exhausted.pr { background-image: url(pieces/exhausted-infantry_pr.png);}
-.piece.infantry.exhausted.au { background-image: url(pieces/exhausted-infantry_au.png);}
+.piece.infantry.fr.fresh { background-image: url(pieces/fresh-infantry_fr.png);}
+.piece.infantry.ru.fresh { background-image: url(pieces/fresh-infantry_ru.png);}
+.piece.infantry.pr.fresh { background-image: url(pieces/fresh-infantry_pr.png);}
+.piece.infantry.au.fresh { background-image: url(pieces/fresh-infantry_au.png);}
+.piece.infantry.fr.exhausted { background-image: url(pieces/exhausted-infantry_fr.png);}
+.piece.infantry.ru.exhausted { background-image: url(pieces/exhausted-infantry_ru.png);}
+.piece.infantry.pr.exhausted { background-image: url(pieces/exhausted-infantry_pr.png);}
+.piece.infantry.au.exhausted { background-image: url(pieces/exhausted-infantry_au.png);}
 
-.piece.cavalry.fresh.fr { background-image: url(pieces/fresh-cavalry_fr.png);}
-.piece.cavalry.fresh.ru { background-image: url(pieces/fresh-cavalry_ru.png);}
-.piece.cavalry.exhausted.fr { background-image: url(pieces/exhausted-cavalry_fr.png);}
-.piece.cavalry.exhausted.ru { background-image: url(pieces/exhausted-cavalry_ru.png);}
+.piece.cavalry.fr.fresh { background-image: url(pieces/fresh-cavalry_fr.png);}
+.piece.cavalry.ru.fresh { background-image: url(pieces/fresh-cavalry_ru.png);}
+.piece.cavalry.fr.exhausted { background-image: url(pieces/exhausted-cavalry_fr.png);}
+.piece.cavalry.ru.exhausted { background-image: url(pieces/exhausted-cavalry_ru.png);}
 
 .piece.cossack.fresh {background-image: url(pieces/fresh-cossack.png);}
 .piece.cossack.exhausted {background-image: url(pieces/exhausted-cossack.png);}
@@ -242,16 +250,16 @@ body.Russia header.your_turn {background-color: var(--russia);}
 .marker.initiative.fr {background-image: url(pieces/initiative_fr.png);}
 .marker.initiative.ru {background-image: url(pieces/initiative_ru.png);}
 
-.marker.devastation1, .marker.devastation2, .marker.devastation3 {
+.marker.devastation {
 	width: 40px;
 	height: 40px;
 	left: -15px;
 	z-index: -2;
 }
 
-.marker.devastation1 { background-image: url(pieces/devastation-l1.png);}
-.marker.devastation2 { background-image: url(pieces/devastation-l2.png);}
-.marker.devastation3 { background-image: url(pieces/devastation-l3.png);}
+.marker.devastation.lvl1 { background-image: url(pieces/devastation-l1.png);}
+.marker.devastation.lvl2 { background-image: url(pieces/devastation-l2.png);}
+.marker.devastation.lvl3 { background-image: url(pieces/devastation-l3.png);}
 
 .marker.depot {
 	position: relative;
@@ -266,13 +274,22 @@ body.Russia header.your_turn {background-color: var(--russia);}
 
 /* CARDS */
 .card {
-    background-size: cover;
+    background-size: 110%;
 	background-repeat: no-repeat;
+	background-position: -1px;
 	background-color: transparent;
 	width: 250px;
 	height: 365px;
 	border-radius: 16px;
 	box-shadow: 1px 1px 5px rgba(0, 0, 0, 0.5);
+}
+
+.card.action {
+	filter:
+		drop-shadow(0 -2px 0 white)
+		drop-shadow(0 2px 0 white)
+		drop-shadow(-2px 0 0 white)
+		drop-shadow(2px 0 0 white)
 }
 
 .card_0{background-image: url(cards/ru/card_00.png);}

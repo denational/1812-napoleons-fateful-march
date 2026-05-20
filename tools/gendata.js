@@ -197,7 +197,7 @@ def_card(FRANCE,    24, "Jérôme Goes Home",          BOTH,   EVENT,  0, true, 
 def_card(FRANCE,    25, "Good Leadership",           BOTH,   EVENT,  2)
 def_card(FRANCE,    26, "Combined Arms",             BOTH,   BATTLE, 3)
 def_card(FRANCE,    27, "Confusions and Delays",     BOTH,   BATTLE, 3)
-def_card(FRANCE,    28, "Saint–Cyr\'s VI Corps",      BOTH,   BATTLE, 3, true)
+def_card(FRANCE,    28, "Saint–Cyr\'s VI Corps",     BOTH,   BATTLE, 3, true)
 def_card(FRANCE,    29, "Eblé's Pontoneers",         BOTH,   BATTLE, 3)
 def_card(FRANCE,    30, "Stubborn Rearguard",        BOTH,   RESP,   3)
 def_card(FRANCE,    31, "The Imperial Guard",        BOTH,   BATTLE, 4, true)

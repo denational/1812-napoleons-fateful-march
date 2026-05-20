@@ -1,64 +1,239 @@
 "use strict"
 
+
 const RUSSIA = 0
 const FRANCE = 1
 const PRUSSIA = 2
 const AUSTRIA = 3
+
+
 const ROLES = ["Russia", "France"]
-
-const spaces = data.spaces
-const france_cards = data.france_cards
-const russia_cards = data.russia_cards
-const leaders = data.leaders
-
 const abbreviations = ["ru", "fr", "pr", "au"]
+
+
+function get_abbreviation(who) {
+    return abbreviations[who]
+}
+
+
+/* SPACES */
+const spaces = data.spaces
+const space_length = spaces.length
+
 
 const AVAILABLE = 0
 const FRENCH_CASUALTIES = 156
 const OUT_OF_PLAY = 157
 
-/* LEADERS */
-const ALEXANDER = 0
-const KUTUZOV = 1
-const TOLLY = 2 
-const BAGRATION = 3
-const TORMASOV = 4
-const WITTGENSTEIN = 5
-const CHICHAGOV = 6
-const PLATOV = 7
 
-const NAPOLEON = 8
-const JEROME = 9
-const BEAUHARNAIS = 10
-const DAVOUT = 11
-const MURAT = 12
-const SCHWARZENBERG = 13
+function get_space_name(space) {
+    return spaces[space].name
+}
+
+
+/* LEADERS */
+const leaders = data.leaders
+const first_ru_leader = 0
+const last_ru_leader = 7
+const first_fr_leader = 8
+const last_fr_leader = 13
+
+
+function get_leader_name(leader) {
+    return leaders[leader].name
+}
+
+
+function get_leader_short_name(leader) {
+    return leaders[leader].short_name
+}
+
+
+function get_leader_location(leader) {
+    return V.leaders[leader]
+}
+
+
+function get_leader_faction(leader) {
+    return leaders[leader].faction
+}
+
+
+function get_first_leader(faction) {
+    return (faction === RUSSIA) ? first_ru_leader : first_fr_leader
+}
+
+
+function get_last_leader(faction) {
+    return (faction === RUSSIA) ? last_ru_leader : last_fr_leader
+}
+
+
+function has_friendly_leader(who, s) {
+    return get_seniormost_leader(who, s) !== -1
+}
+
+
+function is_seniormost_leader(who, space) {
+    let faction = get_leader_faction(who)
+    for (let leader = get_first_leader(faction); leader <= get_last_leader(faction); ++leader) {
+        if (get_leader_location(leader) === space) {
+            return (who === leader)
+        }
+    }
+    return false
+}
+
+
+function get_seniormost_leader(faction, space) {
+    for (let leader = get_first_leader(faction); leader <= get_last_leader(faction); ++leader) {
+        if (get_leader_location(leader) === space) {
+            return leader
+        }
+    }
+    return -1
+}
+
 
 /* TROOPS */
 const FRESH_INFANTRY = 0
-const EXHAUSTED_INFANTRY = 4
+const EXHAUSTED_INFANTRY = 1
+const FRESH_CAVALRY = 2
+const EXHAUSTED_CAVALRY = 3
+const FRESH_COSSACK = 4
+const EXHAUSTED_COSSACK = 5
+const FRESH_GUARD = 6
+const EXHAUSTED_GUARD = 7
 
-const first_ru_infantry_fresh = 1
-const first_fr_infantry_fresh = first_ru_infantry_fresh + spaces.length
-const first_pr_infantry_fresh = first_fr_infantry_fresh + spaces.length
-const first_au_infantry_fresh = first_pr_infantry_fresh + spaces.length
-const first_ru_infantry_exhausted = first_au_infantry_fresh + spaces.length
-const first_fr_infantry_exhausted = first_ru_infantry_exhausted + spaces.length
-const first_pr_infantry_exhausted = first_fr_infantry_exhausted + spaces.length
-const first_au_infantry_exhausted = first_pr_infantry_exhausted + spaces.length
-const first_infantry = [
-    first_ru_infantry_fresh, first_fr_infantry_fresh, first_pr_infantry_fresh, first_au_infantry_fresh,
-    first_ru_infantry_exhausted, first_fr_infantry_exhausted, first_pr_infantry_exhausted, first_au_infantry_exhausted
+
+const first_ru_inf = 0
+const last_ru_inf = 79
+const first_fr_inf = 80
+const last_fr_inf = 134
+const first_pr_inf = 135
+const last_pr_inf = 139
+const first_au_inf = 140
+const last_au_inf = 150
+
+
+const first_ru_cav = 0
+const last_ru_cav = 15
+const first_fr_cav = 16
+const last_fr_cav = 30
+
+
+const first_ru_cossack = 0
+const last_ru_cossack = 15
+
+
+const first_fr_guard = 0
+const last_fr_guard = 4
+
+
+var used_troops = [
+    [first_ru_inf, first_fr_inf, first_pr_inf, first_au_inf],
+    [first_ru_cav, first_fr_cav],
+    [first_ru_cossack, first_fr_guard],
 ]
 
-const first_ru_cavalry_fresh = 1
-const first_fr_cavalry_fresh = first_ru_cavalry_fresh + spaces.length
-const first_ru_cavalry_exhausted = first_fr_cavalry_fresh + spaces.length
-const first_fr_cavalry_exhausted = first_ru_cavalry_exhausted + spaces.length
-const first_cavalry = [
-    first_ru_cavalry_fresh, first_fr_cavalry_fresh,
-    first_ru_cavalry_exhausted,  first_fr_cavalry_exhausted
+
+const last_troops = [
+    [last_ru_inf, last_fr_inf, last_pr_inf, last_au_inf],
+    [last_ru_cav, last_fr_cav],
+    [last_ru_cossack, last_fr_guard],
 ]
+
+const INFANTRY = 0
+const CAVALRY = 1
+const SPECIAL = 2
+
+function get_troop_name(type) {
+    switch(type) {
+        case FRESH_INFANTRY:
+        case EXHAUSTED_INFANTRY:
+            return "infantry"
+        case FRESH_CAVALRY:
+        case EXHAUSTED_CAVALRY:
+            return "cavalry"
+        case FRESH_COSSACK:
+        case EXHAUSTED_COSSACK:
+            return "cossack"
+        case FRESH_GUARD:
+        case EXHAUSTED_GUARD:
+            return "guard"
+        default:
+            return "unknown"
+    }
+}
+
+function get_troop_bucket(type) {
+    switch(type) {
+        case FRESH_INFANTRY:
+        case EXHAUSTED_INFANTRY:
+        case FRESH_CAVALRY:
+        case EXHAUSTED_CAVALRY:
+            return get_troop_name(type)
+        default:
+            return "special"
+    }
+}
+
+function is_fresh(type) {
+    switch(type) {
+        case FRESH_INFANTRY:
+        case FRESH_CAVALRY:
+        case FRESH_COSSACK:
+        case FRESH_GUARD:
+            return true
+    }
+    return false
+}
+
+function get_exhaustion(type) {
+    return is_fresh(type) ? "fresh" : "exhausted"
+}
+
+function get_used(who, type) {
+    switch(type) {
+        case FRESH_INFANTRY:
+        case EXHAUSTED_INFANTRY:
+            return used_troops[INFANTRY][who]
+        case FRESH_CAVALRY:
+        case EXHAUSTED_CAVALRY:
+            return used_troops[CAVALRY][who]
+        case FRESH_COSSACK:
+        case EXHAUSTED_COSSACK:
+            return used_troops[SPECIAL][RUSSIA]
+        case FRESH_GUARD:
+        case EXHAUSTED_GUARD:
+            return used_troops[SPECIAL][FRANCE]
+    }
+}
+
+function incr_used(who, type) {
+    switch(type) {
+        case FRESH_INFANTRY:
+        case EXHAUSTED_INFANTRY:
+            return used_troops[INFANTRY][who]++; break
+        case FRESH_CAVALRY:
+        case EXHAUSTED_CAVALRY:
+            return used_troops[CAVALRY][who]++; break
+        case FRESH_COSSACK:
+        case EXHAUSTED_COSSACK:
+            return used_troops[SPECIAL][RUSSIA]++; break
+        case FRESH_GUARD:
+        case EXHAUSTED_GUARD:
+            return used_troops[SPECIAL][FRANCE]++; break
+    }
+}
+
+function reset_used() {
+    used_troops = [
+        [first_ru_inf, first_fr_inf, first_pr_inf, first_au_inf],
+        [first_ru_cav, first_fr_cav],
+        [first_ru_cossack, first_fr_guard],
+    ]
+}
 
 /* TIME */
 const JUNE_5 = 0
@@ -73,93 +248,77 @@ const OCT_5 = 24
 const NOV_R = 25
 const NOV_5 = 30
 
-function piece_on_map(piece) {
-    return piece >= 1 && piece < FRENCH_CASUALTIES
+var num_devastated = 0
+
+/* MISC FUNCTIONS */
+function get_pool(side) {
+    return (side === RUSSIA) ? "ru_pool" : "fr_pool"
 }
 
-//=== DATA FUNCTIONS
-function get_leader_short_name(leader) {
-    return leaders[leader].short_name
-}
-
-function get_leader_faction(leader) {
-    return (leader >= ALEXANDER && leader <= PLATOV) ? RUSSIA : FRANCE
-}
-
-function get_seniormost_leader(faction, space) {
-    switch(faction) {
-        case RUSSIA:
-            return V.leaders.slice(ALEXANDER, PLATOV + 1).indexOf(space)
-        case FRANCE:
-        case AUSTRIA:
-        case PRUSSIA:
-            return NAPOLEON + V.leaders.slice(NAPOLEON).indexOf(space)
-    }
-}
-
-function has_leader(space) {
-    return V.leaders.includes(space)
-}
-
-function has_friendly_leader(who, space) {
-    return (who === RUSSIA && has_russian_leader(space)) || ((who === FRANCE || who === AUSTRIA || who === PRUSSIA) && has_french_leader(space))
-}
-
-function has_russian_leader(space) {
-    return V.leaders.slice(ALEXANDER, PLATOV + 1).includes(space)
-}
-
-function has_french_leader(space) {
-    return V.leaders.slice(NAPOLEON).includes(space)
-}
-
-function get_leader_loc(leader) {
-    return V.leaders[leader]
-}
-
-function is_seniormost_leader(leader, space) {
-    return get_seniormost_leader(get_leader_faction(leader), space) === leader
-}
-//=== INIT VIEW ===
+//=== INITIALIZE VIEW ===
 function on_init() {
     define_board("#map", 2500, 2027, [0, 0, 0, 0])
-    //Hand
     define_panel("#hand", "hand", 0)
-    //Generals
-    define_panel("#fr_leaders", "fr_leaders", 0)
-    define_panel("#ru_leaders", "ru_leaders", 0)
-
+    define_panel("#ru_leaders", "leaders", RUSSIA)
+    define_panel("#fr_leaders", "leaders", FRANCE)
+   
     /* SPACES */
-    for (let s = 1; s < spaces.length; ++s) {
-        define_stack("space", s, layout[spaces[s].name], -20, -14).tooltip(`${spaces[s].name} - ${spaces[s].type}`)
+    for (let s = 1; s < space_length; ++s) {
+        define_stack("space", s, layout[get_space_name(s)], -20, -14)
     }
-    define_layout("fr_pool", FRANCE, layout["France Force Pool"], "square")
-    define_layout("ru_pool", RUSSIA, layout["Russia Force Pool"], "square")
-    define_layout("fr_casualties", FRANCE, layout["France Casualties"], "square")
+    define_layout("ru_pool", 0, layout["Russia Force Pool"], "square")
+    define_layout("fr_pool", 0, layout["France Force Pool"], "square")
+    define_layout("fr_casualties", 0, layout["France Casualties"], "square")
 
     /* LEADERS */
+    function define_leader_board(leader) {
+        const leader_board = define_thing("leader_board", leader)
+            .keyword(get_leader_short_name(leader))
+        define_thing("subordinate_leaders", leader)
+            .static_child(leader_board)
+            .keyword("square")
+        define_thing("subordinate_infantry", leader)
+            .static_child(leader_board)
+            .keyword("square")
+        define_thing("subordinate_cavalry", leader)
+            .static_child(leader_board)
+            .keyword("square")
+        define_thing("subordinate_special", leader)
+            .static_child(leader_board)
+            .keyword("square")
+    }
+
     for (let leader = 0; leader < leaders.length; ++leader) {
         define_piece("leader", leader, get_leader_short_name(leader))
         define_leader_board(leader)
     }
 
     /* TROOPS */
-    define_infantry()
-    define_cavalry()
-    define_cossack()
-    define_guard()
+    //Modified define_piece_list() adding a number keyword (to update values on counters)
+    function define_troop_list(action, a, b, keywords) {
+        for (var i = a; i <= b; ++i)
+            define_piece(action, i, keywords)
+                .keyword(`n${i}`)
+    }
+
+    define_troop_list("infantry", first_ru_inf, first_fr_inf - 1, "ru")
+    define_troop_list("infantry", first_fr_inf, first_pr_inf - 1, "fr")
+    define_troop_list("infantry", first_pr_inf, first_au_inf - 1, "pr")
+    define_troop_list("infantry", first_au_inf, (8 * space_length) - 1, "au")
+
+    define_troop_list("cavalry", first_ru_cav, last_ru_cav, "ru")
+    define_troop_list("cavalry", first_fr_cav, last_fr_cav, "fr")
+
+    define_troop_list("cossack", 0, 15, "ru")
+    define_troop_list("guard", 0, 4, "fr")
 
     /* CARDS */
     define_card_list("card", 0, 107, "card_")
 
-    /* DEVASTATION */
-    for (let i = 1; i <= 3; ++i) {
-        define_marker_list(`devastation${i}`, 1, spaces.length - 1)
-    }
-    
-    /* DEPOTS */
-    define_marker_list("depot", 0, spaces.length - 1, "ru")
-    define_marker_list("depot", spaces.length, (2 * spaces.length) - 1, "fr")
+    /* DEVASTATION/DEPOTS */
+    define_marker_list("devastation", 0, 80)
+    define_marker_list("depot", 0, 13, "ru")
+    define_marker_list("depot", 14, 20, "fr")
 
     /* TRACKS */
     define_layout_track_v("track-vp", 0, 20, layout["VP Track"])
@@ -180,84 +339,19 @@ function on_init() {
     define_marker("initiative", RUSSIA, "ru")
 }
 
-function define_troop_list(action, a, b, keywords) { //Modified define_piece_list adding a number keyword (to update values on counters)
-	    for (var i = a; i <= b; ++i)
-		    define_piece(action, i, keywords)
-                .keyword(`n${i}`)
-}
-
-function define_infantry() {
-    const sides = ["fresh", "exhausted"]
-    const owners = abbreviations
-    let i = 0
-    for (let side = 0; side < sides.length; ++side) {
-        for (let who = RUSSIA; who < owners.length; ++who) {
-            define_troop_list("infantry", first_infantry[i], first_infantry[i] + spaces.length - 1, `${sides[side]} ${owners[who]}`)
-            i++
-        }
-    }
-}
-
-function define_cavalry() {
-    define_troop_list("cavalry", 0, spaces.length - 1, "fresh ru")
-    define_troop_list("cavalry", spaces.length, (2 * spaces.length) - 1, "fresh fr")
-    define_troop_list("cavalry", 2 * spaces.length, (3* spaces.length) - 1, "exhausted ru")
-    define_troop_list("cavalry", 3 * spaces.length, (4* spaces.length - 1), "exhausted fr")
-}
-
-function define_guard() {
-    define_troop_list("guard", 0, spaces.length - 1, "fresh")
-    define_troop_list("guard", spaces.length, (2* spaces.length) - 1, "exhausted")
-}
-
-function define_cossack() {
-    define_troop_list("cossack", 0, spaces.length - 1, "fresh")
-    define_troop_list("cossack", spaces.length, (2* spaces.length) - 1, "exhausted")
-}
-
-function define_leader_board(leader) {
-    const leader_board = define_thing("leader_board", leader)
-        .keyword(get_leader_short_name(leader))
-    define_thing("subordinate_leaders", leader)
-        .static_child(leader_board)
-        .keyword("square")
-    define_thing("subordinate_infantry", leader)
-        .static_child(leader_board)
-        .keyword("square")
-    define_thing("subordinate_cavalry", leader)
-        .static_child(leader_board)
-        .keyword("square")
-    define_thing("subordinate_special", leader)
-        .static_child(leader_board)
-        .keyword("square")
-}
-
 //=== UPDATE VIEW ===
 function on_update() {
     begin_update()
+    reset_used()
 
     update_tracks()
     update_leaders()
+    update_troops()
+    update_depots()
+    update_devastation()
 
     for (let c of V.current_hand) {
         populate("hand", 0, "card", c)
-    }
-
-    for (let s = 0; s < V.depot.length; ++s) {
-        if (V.depot[s] === RUSSIA || V.depot[s] === FRANCE) {
-            populate("space", s, "depot", (V.depot[s] === RUSSIA) ? s : s + spaces.length)
-        }
-    }
-
-    update_infantry()
-    update_cavalry()
-    update_cossack()
-    update_guard()
-
-    for (let s = 0; s < V.devastation.length; ++s) {
-        if (V.devastation[s] > 0) {
-            populate("space", s, `devastation${V.devastation[s]}`, s)
-        }
     }
 
     end_update()
@@ -285,97 +379,98 @@ function update_tracks() {
 
 function update_leaders() {
     for (let leader = 0; leader < V.leaders.length; ++leader) {
-        switch(V.leaders[leader]) {
-            case OUT_OF_PLAY:
-                break
+        switch(get_leader_location(leader)) {
+            case OUT_OF_PLAY: continue;
             case AVAILABLE:
-                populate(leaders[leader].faction === RUSSIA ? "ru_pool" : "fr_pool", leaders[leader].faction, "leader", leader); break
+                populate(get_pool(get_leader_faction(leader)), 0, "leader", leader); break
             case FRENCH_CASUALTIES:
-                populate("fr_casualties", FRANCE, "leader", leader); break
+                populate("fr_casualties", 0, "leader", leader); break
             default:
-                if (is_seniormost_leader(leader, get_leader_loc(leader))) { //Only the seniormost leader is put on-map
-                    populate("space", V.leaders[leader], "leader", leader)
-                    populate(((get_leader_faction(leader) === RUSSIA) ? "ru_leaders" : "fr_leaders"), 0, "leader_board", leader)
-                    populate("leader_board", leader, "subordinate_leaders", leader)
-                    populate("leader_board", leader, "subordinate_infantry", leader)
-                    populate("leader_board", leader, "subordinate_special", leader)
-                } else { //Others go onto the most senior leader's mat
-                    populate("subordinate_leaders", get_seniormost_leader(leaders[leader].faction, V.leaders[leader]), "leader", leader)
-                }
-        }
-    }
-}
-
-function update_infantry() {
-    const sides = ["fresh", "exhausted"]
-    const owners = abbreviations
-
-    for (let who = 0; who < owners.length; ++who) {
-        for (let s = 1; s < V.infantry[who].length; ++s) {
-            for (let inf = 0; inf < first_infantry.length; ++inf) {
-                if (V.infantry[who][s][inf] !== 0) {
-                    if (has_friendly_leader(who, s)) {
-                        populate("subordinate_infantry", get_seniormost_leader(who, s), "infantry", first_infantry[inf] + s)
-                    } else {
-                        populate("space", s, "infantry", first_infantry[inf] + s)
-                    }
-                    let cntr = document.querySelector(`.piece.infantry.${sides[Math.trunc(inf / 4)]}.${owners[who]}.n${first_infantry[inf] + s}`)
-                    cntr.setAttribute("count", V.infantry[who][s][inf])
-                }
-            }
-        }
-    }
-}
-
-function update_cavalry() {
-    const sides = ["fresh", "exhausted"]
-    const owners = ["ru", "fr"]
-
-    for (let who = 0; who < owners.length; ++who) {
-        for (let s = 1; s < V.cavalry[who].length; ++s) {
-            for (let cav = 0; cav < 2; ++cav) {
-                if (V.cavalry[who][s][cav] !== 0) {
-                    if (has_friendly_leader(who, s)) {
-                        populate("subordinate_cavalry", get_seniormost_leader(who, s), "cavalry", first_cavalry[cav] + s)
-                    } else {
-                        populate("space", s, "cavalry", first_cavalry[cav] + s)
-                    }
-                    let cntr = document.querySelector(`.piece.cavalry.${sides[Math.trunc(cav / 2)]}.${owners[who]}.n${first_cavalry[cav] + s}`)
-                    cntr.setAttribute("count", V.cavalry[who][s][cav])
-                }
-            }
-        }
-    }
-}
-
-function update_cossack() {
-    for (let s = 1; s < V.cossack.length; ++s) {
-        for (let side = 0; side < V.cossack[s].length; ++side) {
-            if (V.cossack[s][side] !== 0) {
-                if (has_friendly_leader(RUSSIA, s)) {
-                        populate("subordinate_special", get_seniormost_leader(RUSSIA, s), "cossack", (side === 0 ? s : (spaces.length + s)))
+                if (is_seniormost_leader(leader, get_leader_location(leader))) {
+                    populate("space", get_leader_location(leader), "leader", leader)
+                    populate("leaders", get_leader_faction(leader), "leader_board", leader)
                 } else {
-                        populate("space", s, "cossack", (side === 0 ? s : (spaces.length + s)))
+                    populate("subordinate_leaders", get_seniormost_leader(get_leader_faction(leader), get_leader_location(leader)), "leader", leader)
                 }
-                let cntr = document.querySelector(`.piece.cossack.${ (side === 0 ? "fresh" : "exhausted")}.n${side === 0 ? s : (spaces.length + s)}`)
-                cntr.setAttribute("count", V.cossack[s][side])
+        }
+    }
+}
+
+function update_troops() {
+    for (let space in V.troops) {
+        for (let who in V.troops[space]) {
+            for (let type in V.troops[space][who]) {
+                const s = Number(space)
+                const owner = Number(who)
+                const troop_type = Number(type)
+
+                if (is_fresh(troop_type))
+                    update_keyword(get_troop_name(troop_type), get_used(owner, troop_type), "fresh")
+                else
+                    update_keyword(get_troop_name(troop_type), get_used(owner, troop_type), "exhausted")
+
+                if (has_friendly_leader(owner, s)) {
+                    populate(`subordinate_${get_troop_bucket(troop_type)}`, get_seniormost_leader(owner, s), get_troop_name(troop_type), get_used(owner, troop_type))
+                } else {
+                    populate("space", s, get_troop_name(troop_type), get_used(owner, troop_type))
+                }
+                const cntr = document.querySelector(`.piece.${get_troop_name(troop_type)}.${get_abbreviation(owner)}.n${get_used(owner, troop_type)}`)
+
+                if (!cntr) {
+                    console.warn("Missing troop element", { space: get_space_name(space), who: get_abbreviation(who), type: type})
+                    continue
+                }
+
+                cntr.setAttribute("count", V.troops[space][who][type])
+                incr_used(owner, troop_type)
             }
         }
     }
 }
 
-function update_guard() {
-    for (let s = 1; s < V.guard.length; ++s) {
-        for (let side = 0; side < V.guard[s].length; ++side) {
-            if (V.guard[s][side] !== 0) {
-                if (has_friendly_leader(FRANCE, s)) {
-                        populate("subordinate_special", get_seniormost_leader(FRANCE, s), "guard", (side === 0 ? s : (spaces.length + s)))
-                } else {
-                        populate("space", s, "guard", (side === 0 ? s : (spaces.length + s)))
-                }
-                let cntr = document.querySelector(`.piece.guard.${ (side === 0 ? "fresh" : "exhausted")}.n${side === 0 ? s : (spaces.length + s)}`)
-                cntr.setAttribute("count", V.guard[s][side])
-            }
+function update_depots() {
+    for (let depot = 0; depot < V.depot.length; ++depot) {
+        if (V.depot[depot] === AVAILABLE) {
+            populate(get_pool((depot < 14 ? RUSSIA : FRANCE)), 0, "depot", depot)
+        } else {
+            populate("space", V.depot[depot], "depot", depot)
         }
     }
 }
+
+function update_devastation() {
+    for (let dev in V.devastation) {
+        update_keyword("devastation", num_devastated, `lvl${V.devastation[dev]}`)
+        
+        populate("space", Number(dev), "devastation", num_devastated)
+
+        num_devastated++
+    }
+}
+
+//=== LOG/PROMPT (WIP) ===
+function escape_text(text) {
+    escape_html(text)
+    escape_typography(text)
+    return text
+}
+
+function on_log(text) {
+    var p = document.createElement("div")
+
+    switch(text[0]) {
+        case "=":
+            text = text.substring(1)
+            p.className = 'h1'
+            break
+    }
+    
+    p.innerHTML = escape_text(text)
+    return p
+}
+
+function on_prompt(text) {
+    return escape_text(text)
+}
+
+scroll_with_middle_mouse("main")
