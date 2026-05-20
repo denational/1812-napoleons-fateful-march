@@ -359,6 +359,7 @@ function on_update() {
 
     action_button("done", "Done")
     action_button("draw", "Draw")
+    action_button("confirm", "Confirm")
     action_button("undo", "Undo")
 
     end_update()
@@ -464,10 +465,22 @@ function escape_text(text) {
     return text
 }
 
-function on_log(text) {
+function on_log(text, ix) {
     var p = document.createElement("div")
+    let is_box_header = false
+
+	update_log_boxes(ix)
 
     switch(text[0]) {
+        case "}":
+			close_log_box(ix)
+			return p
+		case "{":
+            let side = (Number(text.substring(2)) >= 54) ? "fr" : "ru"
+			open_log_box(ix, side)
+			is_box_header = true
+			text = text.substring(1)
+			break
         case "=":
             text = text.substring(1)
             p.className = 'h1'
@@ -479,6 +492,10 @@ function on_log(text) {
     }
     
     p.innerHTML = escape_text(text)
+    if (is_box_header) {
+		p.classList.add("header")
+	}
+    apply_log_boxes(ix, p, "group")
     return p
 }
 

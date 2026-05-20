@@ -1,6 +1,12 @@
 :root {
     --russia: hsl(100, 14%, 66%);
     --france: hsl(206, 55%, 73%);
+
+	--russia_dark: hsl(100, 15%, 60%);
+	--france_dark: hsl(213, 44%, 73%);
+
+	--russia_light: hsl(101, 38%, 79%);
+	--france_light: hsl(199, 36%, 79%);
 }
 
 main {background-color: slategray;}
@@ -31,6 +37,10 @@ body.Russia header.your_turn {background-color: var(--russia);}
     }
 }
 
+.tip {
+	font-style: italic;
+}
+
 /* LOGGING */
 
 #log {
@@ -50,6 +60,23 @@ body.Russia header.your_turn {background-color: var(--russia);}
     padding:2px 0;
     text-align: center;
     font-variant-caps: small-caps;
+}
+
+#log {
+	& .group.header.fr { background-color: var(--france_dark); font-style: italic; }
+	& .group.header.ru { background-color: var(--russia_dark); font-style: italic; }
+
+	& .group.fr { background-color: var(--france_light); }
+	& .group.ru { background-color: var(--russia_light); }
+
+	& .group.header {
+		padding: 4px 4px;
+	}
+
+	& .group {
+		margin: 0 6px;
+		padding: 0px 8px;
+	}
 }
 
 #log .tip {
@@ -108,6 +135,14 @@ body.Russia header.your_turn {background-color: var(--russia);}
     width: 67px;
     height: 67px;
 	position: relative;
+}
+
+.piece.leader.action {
+	filter:
+		drop-shadow(0 -2px 0 yellow)
+		drop-shadow(0 2px 0 yellow)
+		drop-shadow(-2px 0 0 yellow)
+		drop-shadow(2px 0 0 yellow)
 }
 
 .space > .piece.leader {

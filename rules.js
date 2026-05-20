@@ -290,6 +290,10 @@ const NOV_3 = 28
 const NOV_4 = 29
 const NOV_5 = 30
 
+function get_turn_number(turn) {
+	return (turn % 6 === 1) ? "R" : (turn % 6 === 0) ? 5 : ((turn % 6) - 1)
+}
+
 const DUMMY = 0
 
 //=== DATA FUNCTIONS ===
@@ -374,8 +378,7 @@ function get_card(side, number) {
 }
 
 function is_must_play_event(card) {
-	if (cards[card].immediate === "true") {log(`C${card} is a Must-Play Event.`)}
-	return cards[card].immediate === "true"
+	return cards[card].immediate || cards[card].immediate === "true"
 }
 
 function get_france_hand() {
@@ -458,12 +461,6 @@ P.setup_hand = {
 	draw() {
 		L.has_discarded[R] = true
 
-		for (let who = RUSSIA; who <= FRANCE; ++who) {
-			for (let c of L.cards_discarded[who]) {
-				log(`${ROLES[who]} discarded C${c}.`)
-			}
-		}
-
 		while (get_hand(R).length < 4) {
 			draw_card(R)
 			let card = G.hand[R][G.hand[R].length - 1]
@@ -477,29 +474,134 @@ P.setup_hand = {
 	done() {
 		set_delete(G.active, R)
 
-		if (G.active.length === 0)
+		if (G.active.length === 0) {
+			for (let who = RUSSIA; who <= FRANCE; ++who) {
+				for (let c of L.cards_discarded[who]) {
+					log(`${ROLES[who]} discarded C${c}.`)
+				}
+			}
+
 			call("june")
+		}
 	}
 }
-/*
+
+function who_has_initiative() {
+	return (G.initiative > 0 ? FRANCE : RUSSIA)
+}
+
 P.june = script(`
+	log "=June"
+
+	set G.active [RUSSIA, FRANCE]
 	call turn	
 `)
 
 P.turn = script(`
-	call draw_card	
+	eval {
+		log_h2("Turn " + get_turn_number(G.turn))
+	}
+	
+	set G.active (1 - G.who_has_initiative)
+	call draw_card
+	set G.active G.who_has_initiative
+	call draw_card
+
+	set G.active [RUSSIA, FRANCE]
+	call play_card_for_ops
+
+
 `)
 
-P.draw_card - {
+P.draw_card = {
+	_begin() {
+		L.has_drawn_card = false
+		L.executed_event = false
+	},
 	prompt() {
-		V.prompt = "Draw a card to your hard."
-		button("draw")
+		if (L.executed_event) {
+			V.prompt = "Draw a card: done."
+			button("done")
+		} else if (L.has_drawn_card) {
+			V.prompt = `You drew C${L.drawn_card}.`
+			button("confirm")
+		} else {
+			V.prompt = "Draw a card."
+			button("draw")
+		}
 	},
 	draw() {
-		draw_card(R)
+		draw_card(G.active)
+		L.drawn_card = G.hand[G.active][G.hand[G.active].length - 1]
+		L.has_drawn_card = true
+		log(`${ROLES[G.active]} drew a card.`)
+		if (is_must_play_event(L.drawn_card)) {
+			call("event", { card: L.drawn_card })
+		}
+	},
+	done() {
+		end()
+	},
+	confirm() {
+		end()
+	},
+	_resume() {
+		L.executed_event = true
 	}
 }
-*/
+
+//=== EVENTS ===
+
+P.event = script(`
+	eval {card_box_begin(L.card)}
+	call ("event_" + L.card)
+	eval {
+		discard_card(L.card)
+		card_box_end()
+	}
+`)
+
+
+P.event_76 = {
+	_begin() {
+	},
+	prompt() {
+		V.prompt = `C76: Russia may designate one order to remove after placing orders.`
+		button("confirm")
+	},
+	confirm() {
+		log("Russia may designate one order to remove after placing orders.")
+		end()
+	}
+}
+
+function set_out_of_play(leader) {
+	G.leaders[leader] = OUT_OF_PLAY
+}
+
+P.event_78 = {
+	prompt() {
+		V.prompt = `C78: Remove Jérôme from play.`
+		action("leader", JEROME)
+	},
+	leader(leader) {
+		push_undo()
+		set_out_of_play(JEROME)
+		log("Jérôme removed from play.")
+		end()
+	}
+}
+
+P.event_93 = {
+	prompt() {
+		V.prompt = "C93: todo-not implemented yet."
+		button("done")
+	},
+	done() {
+		end()
+	}
+}
+
 //=== SETUP ===
 function on_setup(scenario, options) {
 
@@ -523,7 +625,7 @@ function on_setup(scenario, options) {
 }
 
 function setup_grand_campaign() {
-	log_h1("The Grand Campaign")
+	log_h1("The Grand Campaign", false)
 	log("French Logistic Preparations.")
 	log("Winter.")
 	G.turn = JUNE_5
@@ -533,6 +635,7 @@ function setup_grand_campaign() {
 
 	G.vp = -14
 	G.initiative = 1
+	G.who_has_initiative = FRANCE
 	//1-45, 1-39 
 	
 	for (let card = 1; card <= 45; ++card) {
@@ -663,7 +766,8 @@ function on_query(q) {}
 function on_assert() {}
 
 //=== LOG ===
-function log_h1(msg) {
+function log_h1(msg, br = true) {
+	if (br) log_br()
 	log(`=${msg}`)
 	log_br()
 }
@@ -676,6 +780,15 @@ function log_h2(msg) {
 
 function log_br() {
 	log("")
+}
+
+function card_box_begin(card) {
+	log_br()
+	log(`{C${card}`)
+}
+
+function card_box_end() {
+	log ("}")
 }
 
 //=== FRAMEWORK ===
