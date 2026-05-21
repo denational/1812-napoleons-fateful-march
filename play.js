@@ -258,6 +258,8 @@ function get_pool(side) {
 //=== INITIALIZE VIEW ===
 function on_init() {
     define_board("#map", 2500, 2027, [0, 0, 0, 0])
+    define_panel("#played_ru", "played", RUSSIA)
+    define_panel("#played_fr", "played", FRANCE)
     define_panel("#hand", "hand", 0)
     define_panel("#ru_leaders", "leaders", RUSSIA)
     define_panel("#fr_leaders", "leaders", FRANCE)
@@ -343,6 +345,9 @@ function on_init() {
 function on_update() {
     begin_update()
 
+    roles[RUSSIA].stat.innerHTML = `${V.hand_length[RUSSIA]} cards`
+    roles[FRANCE].stat.innerHTML = `${V.hand_length[FRANCE]} cards`
+
     //Reset counters
     reset_used()
     num_devastated = 0
@@ -357,9 +362,18 @@ function on_update() {
         populate("hand", 0, "card", c)
     }
 
+    for (let c of V.russian.played_cards) {
+        populate("played", RUSSIA, "card", c)
+    }
+
+    for (let c of V.french.played_cards) {
+        populate("played", FRANCE, "card", c)
+    }
+
     action_button("done", "Done")
     action_button("draw", "Draw")
     action_button("confirm", "Confirm")
+    action_button("pass", "Pass")
     action_button("undo", "Undo")
 
     end_update()

@@ -378,7 +378,7 @@ function get_card(side, number) {
 }
 
 function is_must_play_event(card) {
-	return cards[card].immediate || cards[card].immediate === "true"
+	return cards[card].immediate === "true" || cards[card].immediate === true
 }
 
 function get_france_hand() {
@@ -442,9 +442,13 @@ P.setup_hand = {
 					action("card", card)
 				}
 			}
-			button("draw")
-			if (L.cards_discarded[R].length > 0)
+			if (L.cards_discarded[R].length == 0) {
+				button("pass")
+			}
+			if (L.cards_discarded[R].length > 0) {
 				button("undo")
+				button("draw")
+			}
 		}
  	},
 	card(card) {
@@ -470,6 +474,10 @@ P.setup_hand = {
 				card = G.hand[R][G.hand[R].length - 1]
 			}
 		}
+	},
+	pass() {
+		log(`${ROLES[R]} did not discard cards.`)
+		this.done()
 	},
 	done() {
 		set_delete(G.active, R)
@@ -508,7 +516,10 @@ P.turn = script(`
 	call draw_card
 
 	set G.active [RUSSIA, FRANCE]
-	call play_card_for_ops
+	call play_card_for_orders
+
+	set G.active [RUSSIA, FRANCE]
+	call choose_orders
 
 
 `)
@@ -547,6 +558,63 @@ P.draw_card = {
 	},
 	_resume() {
 		L.executed_event = true
+	}
+}
+
+function get_card_ops(card) {
+	return cards[card].ops
+}
+
+function place_card_on_table(c) {
+	if (c < 54) {
+		G.russian.played_cards.push(c)
+	} else {
+		G.french.played_cards.push(c)
+	}
+}
+
+function get_played_cards(who) {
+	return (who === RUSSIA) ? G.russian.played_cards : G.french.played_cards
+}
+
+P.play_card_for_orders = {
+	_begin() {
+		log_h2("Play Cards")
+		L.played_card = [-1, -1]
+		L.ops_played = [-1, -1]
+	},
+	prompt() {
+		if (L.played_card[R] === -1) {
+			V.prompt = "Play a card to gain additional orders, or play a Dummy."
+			for (let c of G.hand[R]) {
+				action("card", c)
+			}
+		} else {
+			V.prompt = `You played C${L.played_card[R]}.`
+			button("confirm")
+			button("undo")
+		}
+	},
+	card(c) {
+		push_undo()
+		L.played_card[R] = c
+		L.ops_played[R] = get_card_ops(c)
+		array_delete_item(G.hand[R], c)
+		place_card_on_table(c)
+	},
+	undo() {
+		L.played_card[R] = -1
+		L.ops_played[R] = -1
+		G.hand[R].push(get_played_cards(R).pop())
+	},
+	confirm() {
+		set_delete(G.active, R)
+
+		if (G.active.length === 0) {
+			for (let who = RUSSIA; who <= FRANCE; ++who) {
+				log(`${ROLES[who]} played C${L.played_card[who]} (${L.ops_played[who]}).`)
+			}	
+		}
 	}
 }
 
@@ -610,7 +678,9 @@ function on_setup(scenario, options) {
 	G.devastation = {}
 
 	G.french = {}
+	G.french.played_cards = []
 	G.russian = {}
+	G.russian.played_cards = []
 
 	G.russian.depots = Array(14).fill(AVAILABLE)
 	G.french.depots = Array(7).fill(AVAILABLE)
@@ -759,8 +829,12 @@ function on_view() {
 	V.current_hand = (R === RUSSIA) ? G.hand[RUSSIA] : G.hand[FRANCE]
 	V.active = G.active
 	V.troops = G.troops
+	V.hand_length = [G.hand[RUSSIA].length, G.hand[FRANCE].length]
 	V.devastation = G.devastation
 	V.depot = [...G.russian.depots, ...G.french.depots]
+
+	V.french = G.french
+	V.russian = G.russian
 }
 function on_query(q) {}
 function on_assert() {}
