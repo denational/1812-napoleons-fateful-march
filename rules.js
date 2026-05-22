@@ -590,7 +590,7 @@ P.play_card_for_orders = {
 				action("card", c)
 			}
 		} else {
-			V.prompt = `You played C${L.played_card[R]}.`
+			V.prompt = `You played C${L.played_card[R]} for ${L.ops_played[R]} additional Orders.`
 			button("confirm")
 			button("undo")
 		}
@@ -613,8 +613,31 @@ P.play_card_for_orders = {
 		if (G.active.length === 0) {
 			for (let who = RUSSIA; who <= FRANCE; ++who) {
 				log(`${ROLES[who]} played C${L.played_card[who]} (${L.ops_played[who]}).`)
-			}	
+				for (let c of get_played_cards(who)) {
+					G.discard[who].push(c)
+				}
+			}
+			G.additional_orders = L.ops_played
+			end()	
 		}
+	}
+}
+
+//P.play_events - not implemented yet
+
+P.choose_orders = {
+	_begin() {
+		L.additional_orders = G.additional_orders.slice()
+		delete G.additional_orders
+		L.chosen_orders = [[], []]
+		G.orders_board = true
+	},
+	prompt() {
+		V.prompt = "todo"
+		button("done")
+	},
+	done() {
+		end()
 	}
 }
 
@@ -685,9 +708,15 @@ function on_setup(scenario, options) {
 	G.russian.depots = Array(14).fill(AVAILABLE)
 	G.french.depots = Array(7).fill(AVAILABLE)
 
+	G.russian.orders = {}
+	G.french.orders = {}
+
 	G.deck = [[], []]
 	G.discard = [[], []]
 
+	setup_orders()
+	console.log(G.french.orders)
+	console.log(G.russian.orders)
 	switch(scenario) {
 		default:
 			setup_grand_campaign()
@@ -818,6 +847,63 @@ function setup_june_5() {
 	push_to_hand(RUSSIA, [RUSSIA_DUMMY, WELL_DISCIPLINED_RETREAT, CONFUSED_RETREAT, EVASIVE_MANEUVERS])
 }
 
+const FORCED_MARCH = "forced_march"
+const CAVALRY_PATROLS = "cavalry_patrols"
+const MARCH = "march"
+const EVADE = "evade"
+const DEFEND = "defend"
+const RALLY = "rally"
+const COSSACK_RAID = "cossack_raid"
+const PLACE_DEPOT = "place_depot"
+const FORAGE = "forage"
+const DUMMY_ORDER = "dummy_order"
+
+let num = 1
+
+function define_order(who, what, where, num_orders) {
+    for (let i = 0; i < num_orders; ++i) {
+        if (who === RUSSIA) {
+            if (!G.russian.orders[where]) {
+                G.russian.orders[where] = []
+            }
+            G.russian.orders[where].push({ type: what, id: num })
+        } else {
+            if (!G.french.orders[where]) {
+                G.french.orders[where] = []
+            }
+            G.french.orders[where].push({ type: what, id: num })
+        }
+        num++
+    }
+}
+
+function setup_order_list(who, what, num) {
+    define_order(who, what, AVAILABLE, num);
+}
+
+function setup_orders() {
+	setup_order_list(RUSSIA, FORCED_MARCH, 4)
+	setup_order_list(RUSSIA, CAVALRY_PATROLS, 2)
+	setup_order_list(RUSSIA, MARCH, 5)
+	setup_order_list(RUSSIA, EVADE, 4)
+	setup_order_list(RUSSIA, DEFEND, 2)
+	setup_order_list(RUSSIA, RALLY, 2)
+	setup_order_list(RUSSIA, COSSACK_RAID, 2)
+	setup_order_list(RUSSIA, PLACE_DEPOT, 1)
+	setup_order_list(RUSSIA, FORAGE, 2)
+	setup_order_list(RUSSIA, DUMMY_ORDER, 4)
+
+	setup_order_list(FRANCE, FORCED_MARCH, 5)
+	setup_order_list(FRANCE, CAVALRY_PATROLS, 1)
+	setup_order_list(FRANCE, MARCH, 5)
+	setup_order_list(FRANCE, EVADE, 3)
+	setup_order_list(FRANCE, DEFEND, 1)
+	setup_order_list(FRANCE, RALLY, 2)
+	setup_order_list(FRANCE, PLACE_DEPOT, 1)
+	setup_order_list(FRANCE, FORAGE, 3)
+	setup_order_list(FRANCE, DUMMY_ORDER, 4)
+}
+
 //=== VIEW ===
 function on_view() {
 	V.turn = G.turn
@@ -835,6 +921,8 @@ function on_view() {
 
 	V.french = G.french
 	V.russian = G.russian
+
+	V.orders_board = G.orders_board
 }
 function on_query(q) {}
 function on_assert() {}

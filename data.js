@@ -4001,99 +4001,269 @@ const data = {
   ],
   "orders": [
     {
-      "side": 0,
-      "type": "Forced March",
-      "number": 4
+      "owner": 0,
+      "type": "forced_march",
+      "id": 1
     },
     {
-      "side": 0,
-      "type": "Cavalry Patrols",
-      "number": 2
+      "owner": 0,
+      "type": "forced_march",
+      "id": 2
     },
     {
-      "side": 0,
-      "type": "March",
-      "number": 5
+      "owner": 0,
+      "type": "forced_march",
+      "id": 3
     },
     {
-      "side": 0,
-      "type": "Evade",
-      "number": 4
+      "owner": 0,
+      "type": "forced_march",
+      "id": 4
     },
     {
-      "side": 0,
-      "type": "Defend",
-      "number": 2
+      "owner": 0,
+      "type": "cavalry_patrols",
+      "id": 5
     },
     {
-      "side": 0,
-      "type": "Rally",
-      "number": 2
+      "owner": 0,
+      "type": "cavalry_patrols",
+      "id": 6
     },
     {
-      "side": 0,
-      "type": "Cossack Raid",
-      "number": 2
+      "owner": 0,
+      "type": "march",
+      "id": 7
     },
     {
-      "side": 0,
-      "type": "Place Depot",
-      "number": 1
+      "owner": 0,
+      "type": "march",
+      "id": 8
     },
     {
-      "side": 0,
-      "type": "Forage",
-      "number": 2
+      "owner": 0,
+      "type": "march",
+      "id": 9
     },
     {
-      "side": 0,
-      "type": "Dummy",
-      "number": 4
+      "owner": 0,
+      "type": "march",
+      "id": 10
     },
     {
-      "side": 1,
-      "type": "Forced March",
-      "number": 5
+      "owner": 0,
+      "type": "march",
+      "id": 11
     },
     {
-      "side": 1,
-      "type": "Cavalry Patrols",
-      "number": 1
+      "owner": 0,
+      "type": "evade",
+      "id": 12
     },
     {
-      "side": 1,
-      "type": "March",
-      "number": 5
+      "owner": 0,
+      "type": "evade",
+      "id": 13
     },
     {
-      "side": 1,
-      "type": "Evade",
-      "number": 3
+      "owner": 0,
+      "type": "evade",
+      "id": 14
     },
     {
-      "side": 1,
-      "type": "Defend",
-      "number": 1
+      "owner": 0,
+      "type": "evade",
+      "id": 15
     },
     {
-      "side": 1,
-      "type": "Rally",
-      "number": 2
+      "owner": 0,
+      "type": "defend",
+      "id": 16
     },
     {
-      "side": 1,
-      "type": "Place Depot",
-      "number": 1
+      "owner": 0,
+      "type": "defend",
+      "id": 17
     },
     {
-      "side": 1,
-      "type": "Forage",
-      "number": 3
+      "owner": 0,
+      "type": "rally",
+      "id": 18
     },
     {
-      "side": 1,
-      "type": "Dummy",
-      "number": 4
+      "owner": 0,
+      "type": "rally",
+      "id": 19
+    },
+    {
+      "owner": 0,
+      "type": "cossack_raid",
+      "id": 20
+    },
+    {
+      "owner": 0,
+      "type": "cossack_raid",
+      "id": 21
+    },
+    {
+      "owner": 0,
+      "type": "place_depot",
+      "id": 22
+    },
+    {
+      "owner": 0,
+      "type": "forage",
+      "id": 23
+    },
+    {
+      "owner": 0,
+      "type": "forage",
+      "id": 24
+    },
+    {
+      "owner": 0,
+      "type": "dummy_order",
+      "id": 25
+    },
+    {
+      "owner": 0,
+      "type": "dummy_order",
+      "id": 26
+    },
+    {
+      "owner": 0,
+      "type": "dummy_order",
+      "id": 27
+    },
+    {
+      "owner": 0,
+      "type": "dummy_order",
+      "id": 28
+    },
+    {
+      "owner": 1,
+      "type": "forced_march",
+      "id": 29
+    },
+    {
+      "owner": 1,
+      "type": "forced_march",
+      "id": 30
+    },
+    {
+      "owner": 1,
+      "type": "forced_march",
+      "id": 31
+    },
+    {
+      "owner": 1,
+      "type": "forced_march",
+      "id": 32
+    },
+    {
+      "owner": 1,
+      "type": "forced_march",
+      "id": 33
+    },
+    {
+      "owner": 1,
+      "type": "cavalry_patrols",
+      "id": 34
+    },
+    {
+      "owner": 1,
+      "type": "march",
+      "id": 35
+    },
+    {
+      "owner": 1,
+      "type": "march",
+      "id": 36
+    },
+    {
+      "owner": 1,
+      "type": "march",
+      "id": 37
+    },
+    {
+      "owner": 1,
+      "type": "march",
+      "id": 38
+    },
+    {
+      "owner": 1,
+      "type": "march",
+      "id": 39
+    },
+    {
+      "owner": 1,
+      "type": "evade",
+      "id": 40
+    },
+    {
+      "owner": 1,
+      "type": "evade",
+      "id": 41
+    },
+    {
+      "owner": 1,
+      "type": "evade",
+      "id": 42
+    },
+    {
+      "owner": 1,
+      "type": "defend",
+      "id": 43
+    },
+    {
+      "owner": 1,
+      "type": "rally",
+      "id": 44
+    },
+    {
+      "owner": 1,
+      "type": "rally",
+      "id": 45
+    },
+    {
+      "owner": 1,
+      "type": "place_depot",
+      "id": 46
+    },
+    {
+      "owner": 1,
+      "type": "forage",
+      "id": 47
+    },
+    {
+      "owner": 1,
+      "type": "forage",
+      "id": 48
+    },
+    {
+      "owner": 1,
+      "type": "forage",
+      "id": 49
+    },
+    {
+      "owner": 1,
+      "type": "dummy_order",
+      "id": 50
+    },
+    {
+      "owner": 1,
+      "type": "dummy_order",
+      "id": 51
+    },
+    {
+      "owner": 1,
+      "type": "dummy_order",
+      "id": 52
+    },
+    {
+      "owner": 1,
+      "type": "dummy_order",
+      "id": 53
     }
   ]
 }

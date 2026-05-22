@@ -276,33 +276,46 @@ def_piece(FRANCE,   AUSTRIA,    INFANTRY,   1,  6)
 def_piece(FRANCE,   FRANCE,     DEPOT_MARKER, -1, 7)
 
 //=== ORDERS ===
-data.orders = []
+const FORCED_MARCH = "forced_march"
+const CAVALRY_PATROLS = "cavalry_patrols"
+const MARCH = "march"
+const EVADE = "evade"
+const DEFEND = "defend"
+const RALLY = "rally"
+const COSSACK_RAID = "cossack_raid"
+const PLACE_DEPOT = "place_depot"
+const FORAGE = "forage"
+const DUMMY_ORDER = "dummy_order"
 
-function def_order(side, type, number) {
-    data.orders.push({side, type, number})
+data.orders = []
+let num = 1
+function define_order(who, type, num_of_type) {
+    for (i = 0; i < num_of_type; ++i) {
+        data.orders.push({owner: who, type, id: num})
+        num++
+    }
 }
 
-def_order(RUSSIA,   "Forced March",     4)
-def_order(RUSSIA,   "Cavalry Patrols",  2)
-def_order(RUSSIA,   "March",            5)
-def_order(RUSSIA,   "Evade",            4)
-def_order(RUSSIA,   "Defend",           2)
-def_order(RUSSIA,   "Rally",            2)
-def_order(RUSSIA,   "Cossack Raid",     2)
-def_order(RUSSIA,   "Place Depot",      1)
-def_order(RUSSIA,   "Forage",           2)
-def_order(RUSSIA,   "Dummy",            4)
+define_order(RUSSIA, FORCED_MARCH, 4)
+define_order(RUSSIA, CAVALRY_PATROLS, 2)
+define_order(RUSSIA, MARCH, 5)
+define_order(RUSSIA, EVADE, 4)
+define_order(RUSSIA, DEFEND, 2)
+define_order(RUSSIA, RALLY, 2)
+define_order(RUSSIA, COSSACK_RAID, 2)
+define_order(RUSSIA, PLACE_DEPOT, 1)
+define_order(RUSSIA, FORAGE, 2)
+define_order(RUSSIA, DUMMY_ORDER, 4)
 
-def_order(FRANCE,   "Forced March",     5)
-def_order(FRANCE,   "Cavalry Patrols",  1)
-def_order(FRANCE,   "March",            5)
-def_order(FRANCE,   "Evade",            3)
-def_order(FRANCE,   "Defend",           1)
-def_order(FRANCE,   "Rally",            2)
-def_order(FRANCE,   "Place Depot",      1)
-def_order(FRANCE,   "Forage",           3)
-def_order(FRANCE,   "Dummy",            4)
-
+define_order(FRANCE, FORCED_MARCH, 5)
+define_order(FRANCE, CAVALRY_PATROLS, 1)
+define_order(FRANCE, MARCH, 5)
+define_order(FRANCE, EVADE, 3)
+define_order(FRANCE, DEFEND, 1)
+define_order(FRANCE, RALLY, 2)
+define_order(FRANCE, PLACE_DEPOT, 1)
+define_order(FRANCE, FORAGE, 3)
+define_order(FRANCE, DUMMY_ORDER, 4)
 
 
 fs.writeFileSync("data.js", "const data = " + JSON.stringify(data, 0, 2) + "\nif (typeof module !== 'undefined') module.exports = data\n", "utf8")

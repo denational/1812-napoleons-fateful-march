@@ -94,6 +94,9 @@ function get_seniormost_leader(faction, space) {
     return -1
 }
 
+/* ORDERS */
+const first_ru_order = 0
+const first_fr_order = 29
 
 /* TROOPS */
 const FRESH_INFANTRY = 0
@@ -255,22 +258,32 @@ function get_pool(side) {
     return (side === RUSSIA) ? "ru_pool" : "fr_pool"
 }
 
+function get_played_cards(side) {
+    return (side === RUSSIA) ? V.russian.played_cards : V.french.played_cards
+}
+
 //=== INITIALIZE VIEW ===
 function on_init() {
     define_board("#map", 2500, 2027, [0, 0, 0, 0])
-    define_panel("#played_ru", "played", RUSSIA)
-    define_panel("#played_fr", "played", FRANCE)
+    define_panel("#plan_orders", "plan_orders", 0)
+    define_panel("#played", "played", 0)
     define_panel("#hand", "hand", 0)
     define_panel("#ru_leaders", "leaders", RUSSIA)
     define_panel("#fr_leaders", "leaders", FRANCE)
    
     /* SPACES */
     for (let s = 1; s < space_length; ++s) {
+        console.log(get_space_name(s))
         define_stack("space", s, layout[get_space_name(s)], -20, -14)
     }
     define_layout("ru_pool", 0, layout["Russia Force Pool"], "square")
     define_layout("fr_pool", 0, layout["France Force Pool"], "square")
     define_layout("fr_casualties", 0, layout["France Casualties"], "square")
+
+    /* ORDERS */
+    data.orders.forEach(({ owner, type, id }) => {
+        define_piece("order", id, `${type} ${get_abbreviation(owner)}`)
+    })
 
     /* LEADERS */
     function define_leader_board(leader) {
@@ -362,13 +375,30 @@ function on_update() {
         populate("hand", 0, "card", c)
     }
 
-    for (let c of V.russian.played_cards) {
-        populate("played", RUSSIA, "card", c)
+    if (get_played_cards(R).length === 0) {
+        update_panel_show("played", 0, false)
+    } else {
+        update_panel_show("played", 0, true)
+        for (let c of get_played_cards(R)) {
+            populate("played", 0, "card", c)
+        }
     }
 
-    for (let c of V.french.played_cards) {
-        populate("played", FRANCE, "card", c)
+    if (!V.orders_board) {
+        update_panel_show("plan_orders", 0, false)
+    } else {
+        update_panel_show("plan_orders", 0, true)
+        if (R === RUSSIA) {
+            for (let i = 1; i <= 26; ++i) {
+                populate("plan_orders", 0, "order", i)
+            }
+        } else if (R === FRANCE) {
+            for (let i = first_fr_order; i <= 53; ++i) {
+                populate("plan_orders", 0, "order", i)
+            }
+        }
     }
+    
 
     action_button("done", "Done")
     action_button("draw", "Draw")

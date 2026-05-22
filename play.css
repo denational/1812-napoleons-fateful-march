@@ -83,6 +83,18 @@ body.Russia header.your_turn {background-color: var(--russia);}
     font-style: italic; 
 }
 
+/* ORDER PLANNING MINIBOARD */
+#plan_orders {
+	width: 750px;
+	height: 500px;
+	justify-self: center;
+	background-image: url(pieces/retreat_from_moscow.jpg);
+}
+
+#plan_orders .panel-head {
+	background-color: #0005;
+}
+
 /* SPACES */
 .space {
 	box-sizing: border-box;
@@ -204,8 +216,6 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	z-index: 4;
 }
 
-
-
 .leader_board.Alexander { background-image: url(leader-boards/leader-board_Alexander.png);}
 .leader_board.Kutuzov { background-image: url(leader-boards/leader-board_Kutuzov.png);}
 .leader_board.Tolly { background-image: url(leader-boards/leader-board_Tolly.png);}
@@ -221,6 +231,43 @@ body.Russia header.your_turn {background-color: var(--russia);}
 .leader_board.Davout { background-image: url(leader-boards/leader-board_Davout.png);}
 .leader_board.Murat {background-image: url(leader-boards/leader-board_Murat.png);}
 .leader_board.Schwarzenberg { background-image: url(leader-boards/leader-board_Schwarzenberg.png);}
+
+/* ORDERS */
+.piece.order {
+	width: 70px;
+	height:90px;
+	background-image: url(pieces/fr\ order\ back.png);
+	position: relative;
+}
+
+.piece.order.forced_march.ru {background-image: url(pieces/forced_march_ru.png);}
+.piece.order.forced_march.fr {background-image: url(pieces/forced_march_fr.png);}
+
+.piece.order.cavalry_patrols.ru { background-image: url(pieces/cavalry_patrols_ru.png);}
+.piece.order.cavalry_patrols.fr { background-image: url(pieces/cavalry_patrols_fr.png);}
+
+.piece.order.march.ru { background-image: url(pieces/march_ru.png);}
+.piece.order.march.fr { background-image: url(pieces/march_fr.png);}
+
+.piece.order.evade.ru { background-image: url(pieces/evade_ru.png);}
+.piece.order.evade.fr { background-image: url(pieces/evade_fr.png);}
+
+.piece.order.defend.ru { background-image: url(pieces/defend_ru.png);}
+.piece.order.defend.fr { background-image: url(pieces/defend_fr.png);}
+
+.piece.order.rally.ru { background-image: url(pieces/rally_ru.png);}
+.piece.order.rally.fr { background-image: url(pieces/rally_fr.png);}
+
+.piece.order.cossack_raid.ru { background-image: url(pieces/cossack_raid_ru.png);}
+
+.piece.order.place_depot.ru { background-image: url(pieces/place_depot_ru.png);}
+.piece.order.place_depot.fr { background-image: url(pieces/place_depot_fr.png);}
+
+.piece.order.forage.ru { background-image: url(pieces/forage_ru.png);}
+.piece.order.forage.fr { background-image: url(pieces/forage_fr.png);}
+
+.piece.order.dummy_order.ru { background-image: url(pieces/dummy_order_ru.png);}
+.piece.order.dummy_order.fr { background-image: url(pieces/dummy_order_fr.png);}
 
 /* TROOPS */
 .piece.infantry, .piece.cavalry, .piece.cossack, .piece.guard {
@@ -313,8 +360,8 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	position: relative;
 	width: 40px;
 	height: 40px;
-	right: -20px;
-	top: -20px;
+	left: -30px;
+	bottom: -20px;
 }
 
 .marker.depot.ru { background-image: url(pieces/green_cube.svg);}
