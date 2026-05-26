@@ -215,6 +215,12 @@ const DAVOUT = 11
 const MURAT = 12
 const SCHWARZENBERG = 13
 
+/* ORDERS */
+const first_ru_order = 0
+const last_ru_order = 28
+const first_fr_order = 29
+const last_fr_order = 53
+
 /* TROOPS */
 const FRESH = 0
 const EXHAUSTED = 1
@@ -521,6 +527,9 @@ P.turn = script(`
 	set G.active [RUSSIA, FRANCE]
 	call choose_orders
 
+	set G.active [RUSSIA, FRANCE]
+	call place_orders
+
 
 `)
 
@@ -562,7 +571,7 @@ P.draw_card = {
 }
 
 function get_card_ops(card) {
-	return cards[card].ops
+	return Number(cards[card].ops)
 }
 
 function place_card_on_table(c) {
@@ -571,6 +580,11 @@ function place_card_on_table(c) {
 	} else {
 		G.french.played_cards.push(c)
 	}
+}
+
+function discard_cards_from_table() {
+	G.russian.played_cards = []
+	G.french.played_cards = []
 }
 
 function get_played_cards(who) {
@@ -617,30 +631,125 @@ P.play_card_for_orders = {
 					G.discard[who].push(c)
 				}
 			}
-			G.additional_orders = L.ops_played
+			discard_cards_from_table()
+			G.additional_orders = L.ops_played.slice()
 			end()	
 		}
 	}
 }
 
-//P.play_events - not implemented yet
+function get_first_order(who) {
+	return (who === RUSSIA) ? first_ru_order : first_fr_order
+}
+
+function get_last_order(who) {
+	return (who === RUSSIA) ? last_ru_order : last_fr_order
+}
+
+function select_order(order) {
+
+}
+
+function get_object_who(who) {
+	return (who === RUSSIA) ? G.russian : G.french
+}
+
+function find_first_available_order(who, type, where) {
+	return get_object_who(who).orders[where]?.find(order => (order.type === type)) ?? -1
+}
+
+function toggle_selected(who, type) {
+	if (find_first_available_order(who, type, AVAILABLE) === -1) {
+		console.log("Order not found!")
+		return
+	}
+	find_first_available_order(who, type, AVAILABLE).selected = !find_first_available_order(who, type, AVAILABLE).selected
+}
+
+function get_order_type(ix) {
+	return data.orders.find(order => (ix === order.id)).type
+}
+
+function get_selected_orders(who) {
+	return (who === RUSSIA) ? G.russian.selected_orders : G.french.selected_orders
+}
 
 P.choose_orders = {
 	_begin() {
-		L.additional_orders = G.additional_orders.slice()
-		delete G.additional_orders
-		L.chosen_orders = [[], []]
+		log_h2("Choose Orders")
+
+		G.russian.selected_orders = []
+		G.french.selected_orders = []
+
+		L.num_orders = [0, 0]
+		for (let who = RUSSIA; who <= FRANCE; ++who) {
+			L.num_orders[who] = 2 + G.additional_orders[who]
+		}
+
+		L.is_finished = [false, false]
+
 		G.orders_board = true
 	},
 	prompt() {
-		V.prompt = "todo"
-		button("done")
+		if (L.num_orders[R] > 0) {
+			V.prompt = `Select up to ${L.num_orders[R]} orders.`
+			for (let order = get_first_order(R); order <= get_last_order(R); ++order) {
+				if (!get_selected_orders(R).includes(order)) {
+					action("order", order)
+				}
+			}
+		} else {
+			V.prompt = `Select orders: Done.`
+			button("done")
+		}
+		if (get_selected_orders(R).length > 0) {
+			button("undo")
+		}
+	},
+	order(order) {
+		toggle_selected(R, get_order_type(order))
+		get_selected_orders(R).push(order)
+		L.num_orders[R]--
+	},
+	undo() {
+		toggle_selected(R, get_order_type(get_selected_orders(R)[get_selected_orders(R).length - 1]))
+		array_delete(get_selected_orders(R), get_selected_orders(R).length - 1)
+		L.num_orders[R]++
 	},
 	done() {
-		end()
+		L.is_finished[R] = true
+		set_delete(G.active, R)
+
+		if (L.is_finished[RUSSIA] && L.is_finished[FRANCE]) {
+			end()
+		}
+	}
+}
+/*
+function has_friendly_sp(who, where) {
+	if (!G.troops[where]) { return false }
+	if (who === RUSSIA) {
+		return (RUSSIA in G.troops[where])
+	} else {
+		return (FRANCE in G.troops[where]) || (PRUSSIA in G.troops[where]) || (AUSTRIA in G.troops[where])
 	}
 }
 
+P.place_orders = {
+	_begin() {
+		L.remaining_orders = [G.russian.selected_orders.length, G.french.selected_orders.length]
+		L.selected_orders = [G.russian.selected_orders, G.french.selected_orders]
+	},
+	prompt() {
+		V.prompt = `Place ${L.remaining_orders} orders in any spaces with a friendly SP.`
+		for (let s = 1; s < spaces.length; ++s) {
+			if (has_friendly_sp(R, s)) {
+				action("space", s)
+			}
+		}
+	}
+}
+*/
 //=== EVENTS ===
 
 P.event = script(`
@@ -866,12 +975,12 @@ function define_order(who, what, where, num_orders) {
             if (!G.russian.orders[where]) {
                 G.russian.orders[where] = []
             }
-            G.russian.orders[where].push({ type: what, id: num })
+            G.russian.orders[where].push({ type: what, id: num, selected: false })
         } else {
             if (!G.french.orders[where]) {
                 G.french.orders[where] = []
             }
-            G.french.orders[where].push({ type: what, id: num })
+            G.french.orders[where].push({ type: what, id: num, selected: false })
         }
         num++
     }

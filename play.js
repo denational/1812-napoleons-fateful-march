@@ -96,7 +96,9 @@ function get_seniormost_leader(faction, space) {
 
 /* ORDERS */
 const first_ru_order = 0
+const last_ru_order = 28
 const first_fr_order = 29
+const last_fr_order = 53
 
 /* TROOPS */
 const FRESH_INFANTRY = 0
@@ -273,8 +275,8 @@ function on_init() {
    
     /* SPACES */
     for (let s = 1; s < space_length; ++s) {
-        console.log(get_space_name(s))
-        define_stack("space", s, layout[get_space_name(s)], -20, -14)
+        define_space("space", s, layout[get_space_name(s)])
+        define_stack("space_stack", s, layout[get_space_name(s)])
     }
     define_layout("ru_pool", 0, layout["Russia Force Pool"], "square")
     define_layout("fr_pool", 0, layout["France Force Pool"], "square")
@@ -314,6 +316,7 @@ function on_init() {
         for (var i = a; i <= b; ++i)
             define_piece(action, i, keywords)
                 .keyword(`n${i}`)
+                .stackable()
     }
 
     define_troop_list("infantry", first_ru_inf, first_fr_inf - 1, "ru")
@@ -388,6 +391,12 @@ function on_update() {
         update_panel_show("plan_orders", 0, false)
     } else {
         update_panel_show("plan_orders", 0, true)
+        if (V.french.selected_orders) {
+            for (let o of V.french.selected_orders) {
+                update_keyword("order", o, "selected")
+            }
+        }
+        
         if (R === RUSSIA) {
             for (let i = 1; i <= 26; ++i) {
                 populate("plan_orders", 0, "order", i)
@@ -464,7 +473,7 @@ function update_troops() {
                 if (has_friendly_leader(owner, s)) {
                     populate(`subordinate_${get_troop_bucket(troop_type)}`, get_seniormost_leader(owner, s), get_troop_name(troop_type), get_used(owner, troop_type))
                 } else {
-                    populate("space", s, get_troop_name(troop_type), get_used(owner, troop_type))
+                    populate("space_stack", s, get_troop_name(troop_type), get_used(owner, troop_type))
                 }
                 const cntr = document.querySelector(`.piece.${get_troop_name(troop_type)}.${get_abbreviation(owner)}.n${get_used(owner, troop_type)}`)
 

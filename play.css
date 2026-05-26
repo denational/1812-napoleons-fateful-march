@@ -100,11 +100,12 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	box-sizing: border-box;
 	position: absolute;
 	border: 3px solid transparent;
-	border-radius: 50% 50% 0 0;
+	border-radius: 50% 50% 50% 50%;
 }
 
 .space.action {
 	border-color: yellow;
+	z-index: 10;
 }
 
 /* PANELS */
@@ -240,6 +241,22 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	position: relative;
 }
 
+.piece.order.action {
+	filter:
+		drop-shadow(0 -2px 0 yellow)
+		drop-shadow(0 2px 0 yellow)
+		drop-shadow(-2px 0 0 yellow)
+		drop-shadow(2px 0 0 yellow)
+}
+
+.piece.order.selected {
+	filter:
+		drop-shadow(0 -2px 0 lightgreen)
+		drop-shadow(0 2px 0 lightgreen)
+		drop-shadow(-2px 0 0 lightgreen)
+		drop-shadow(2px 0 0 lightgreen)
+}
+
 .piece.order.forced_march.ru {background-image: url(pieces/forced_march_ru.png);}
 .piece.order.forced_march.fr {background-image: url(pieces/forced_march_fr.png);}
 
@@ -276,6 +293,10 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	position: relative
 }
 
+.stack > .piece.infantry, .piece.cavalry, .piece.cossack, .piece.guard {
+	position: absolute;
+}
+/*
 .space > .piece.infantry,
 .space > .piece.cavalry,
 .space > .piece.cossack,
@@ -284,6 +305,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
     left: -20px;
     top: -20px;
 }
+	*/
 
 .piece.infantry::after, .piece.cavalry::after, .piece.cossack::after, .piece.guard::after {
 	position: absolute;
