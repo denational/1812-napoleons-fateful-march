@@ -18,6 +18,9 @@ const SCENARIOS = [
     //"The Retreat of the Grande Armée",
 ]
 
+var G, L, R, V, P = {}
+
+//=== DATA ===
 function get_name(who) {
 	switch(who) {
 		case RUSSIA: return "Russia"
@@ -27,9 +30,6 @@ function get_name(who) {
 	}
 }
 
-var G, L, R, V, P = {}
-
-//=== DATA ===
 const spaces = data.spaces
 const leaders = data.leaders
 const cards = data.cards
@@ -434,6 +434,8 @@ function draw_card(who) {
 P.setup_hand = {
 	_begin() {
 		log_h2("Setup")
+		G.state = "setup_hand"
+
 		L.has_discarded = [false, false]
 		L.cards_discarded = [[], []]
 	},
@@ -513,7 +515,7 @@ P.june = script(`
 
 P.turn = script(`
 	eval {
-		log_h2("Turn " + get_turn_number(G.turn))
+		log_h1("Turn " + get_turn_number(G.turn))
 	}
 	
 	set G.active (1 - G.who_has_initiative)
@@ -535,6 +537,7 @@ P.turn = script(`
 
 P.draw_card = {
 	_begin() {
+		G.state = "draw_card"
 		L.has_drawn_card = false
 		L.executed_event = false
 	},
@@ -583,6 +586,16 @@ function place_card_on_table(c) {
 }
 
 function discard_cards_from_table() {
+	for (let who = RUSSIA; who <= FRANCE; ++who) {
+		for (let card of get_played_cards(who)) {
+			if (is_dummy(card)) {
+				array_insert(G.hand[who], 0, card)
+			} else {
+				G.discard[who].push(card)
+			}
+		}
+	}
+
 	G.russian.played_cards = []
 	G.french.played_cards = []
 }
@@ -594,6 +607,8 @@ function get_played_cards(who) {
 P.play_card_for_orders = {
 	_begin() {
 		log_h2("Play Cards")
+		G.state = "play_card_for_orders"
+
 		L.played_card = [-1, -1]
 		L.ops_played = [-1, -1]
 	},
@@ -646,10 +661,6 @@ function get_last_order(who) {
 	return (who === RUSSIA) ? last_ru_order : last_fr_order
 }
 
-function select_order(order) {
-
-}
-
 function get_object_who(who) {
 	return (who === RUSSIA) ? G.russian : G.french
 }
@@ -677,6 +688,7 @@ function get_selected_orders(who) {
 P.choose_orders = {
 	_begin() {
 		log_h2("Choose Orders")
+		G.state = "choose_orders"
 
 		G.russian.selected_orders = []
 		G.french.selected_orders = []
@@ -687,8 +699,6 @@ P.choose_orders = {
 		}
 
 		L.is_finished = [false, false]
-
-		G.orders_board = true
 	},
 	prompt() {
 		if (L.num_orders[R] > 0) {
@@ -720,12 +730,19 @@ P.choose_orders = {
 		L.is_finished[R] = true
 		set_delete(G.active, R)
 
+		for (let order of get_selected_orders(R)) {
+			toggle_selected(R, get_order_type(order))
+		}
+
 		if (L.is_finished[RUSSIA] && L.is_finished[FRANCE]) {
+			for (let who = RUSSIA; who <= FRANCE; ++who) {
+				log(`${ROLES[who]} chose ${get_selected_orders(who).length} orders.`)
+			}
 			end()
 		}
 	}
 }
-/*
+
 function has_friendly_sp(who, where) {
 	if (!G.troops[where]) { return false }
 	if (who === RUSSIA) {
@@ -735,21 +752,89 @@ function has_friendly_sp(who, where) {
 	}
 }
 
+function is_russian_order(order) {
+	return (first_ru_order <= order) && (order <= last_ru_order)
+}
+
+function is_french_order(order) {
+	return (first_fr_order <= order) && (order <= last_fr_order)
+}
+
+function get_order_owner(order) {
+	return is_russian_order(order) ? RUSSIA : FRANCE
+}
+
+function get_player_orders(who) {
+	return (who === RUSSIA) ? G.russian.orders : G.french.orders
+}
+
+function move_order_from_pool(order, where) {
+	let player_orders = get_player_orders(get_order_owner(order))
+
+	if (!player_orders[where]) {
+		player_orders[where] = []
+	}
+
+	let order_ix = player_orders[AVAILABLE].findIndex(o => (o.id == order)) ?? null
+
+	if (order_ix !== null) {
+		player_orders[where].push(object_copy(player_orders[AVAILABLE][order_ix]))
+		array_delete(player_orders[AVAILABLE], order_ix)
+	} else {     
+		console.log(`Order ${order} not found in Available.`)
+	}
+}
+
 P.place_orders = {
 	_begin() {
-		L.remaining_orders = [G.russian.selected_orders.length, G.french.selected_orders.length]
+		log_h2("Place Orders")
+		G.state = "place_orders"
+
 		L.selected_orders = [G.russian.selected_orders, G.french.selected_orders]
+
+		L.selected_order = [-1, -1]
+		L.is_order_selected = [false, false]
+
+		L.is_finished = [false, false]
 	},
 	prompt() {
-		V.prompt = `Place ${L.remaining_orders} orders in any spaces with a friendly SP.`
-		for (let s = 1; s < spaces.length; ++s) {
-			if (has_friendly_sp(R, s)) {
-				action("space", s)
+		if (L.selected_orders[R].length === 0) {
+			V.prompt = `Place orders: Done.`
+			button("done")
+		} else if (L.selected_order[R] !== -1) {
+			V.prompt = `Select a space with friendly SPs to place ${get_order_type(L.selected_order[R])}.`
+			for (let space = 1; space < spaces.length; ++space) {
+				if (has_friendly_sp(R, space)) {
+					action("space", space)
+				}   
 			}
+			if (G.french_logistic_preparations && (R === FRANCE) && (get_order_type(L.selected_order[R]) === PLACE_DEPOT)) { //French Logistic Preparations special rule
+				action("space", S_KOVNO)
+			}
+		} else {
+			V.prompt = `Select an order to place (${L.selected_orders[R].length} remaining).`
+			for (let order of L.selected_orders[R]) {
+				action("order", order)
+			}
+		}
+	},
+	order(order) {
+		L.selected_order[R] = order
+	},
+	space(space) {
+		move_order_from_pool(L.selected_order[R], space)
+		array_delete_item(L.selected_orders[R], L.selected_order[R])
+		L.selected_order[R] = -1
+	},
+	done() {
+		L.is_finished[R] = true
+
+		if (L.is_finished[RUSSIA] && L.is_finished[FRANCE]) {
+			end()
 		}
 	}
 }
-*/
+
 //=== EVENTS ===
 
 P.event = script(`
@@ -804,6 +889,7 @@ P.event_93 = {
 
 //=== SETUP ===
 function on_setup(scenario, options) {
+	G.state = ""
 
 	G.leaders = Array(leaders.length).fill(AVAILABLE)
 	G.troops = {}
@@ -824,8 +910,6 @@ function on_setup(scenario, options) {
 	G.discard = [[], []]
 
 	setup_orders()
-	console.log(G.french.orders)
-	console.log(G.russian.orders)
 	switch(scenario) {
 		default:
 			setup_grand_campaign()
@@ -1015,6 +1099,8 @@ function setup_orders() {
 
 //=== VIEW ===
 function on_view() {
+	V.state = G.state
+
 	V.turn = G.turn
 	V.last_turn = G.last_turn
 	V.french_logistic_preparations = G.french_logistic_preparations
@@ -1031,7 +1117,6 @@ function on_view() {
 	V.french = G.french
 	V.russian = G.russian
 
-	V.orders_board = G.orders_board
 }
 function on_query(q) {}
 function on_assert() {}

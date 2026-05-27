@@ -105,7 +105,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
 
 .space.action {
 	border-color: yellow;
-	z-index: 10;
+	z-index: 20;
 }
 
 /* PANELS */

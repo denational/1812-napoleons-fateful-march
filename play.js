@@ -15,21 +15,21 @@ function get_abbreviation(who) {
     return abbreviations[who]
 }
 
+function enemy(who) {
+    return 1 - who
+}
 
 /* SPACES */
 const spaces = data.spaces
 const space_length = spaces.length
 
-
 const AVAILABLE = 0
 const FRENCH_CASUALTIES = 156
 const OUT_OF_PLAY = 157
 
-
 function get_space_name(space) {
     return spaces[space].name
 }
-
 
 /* LEADERS */
 const leaders = data.leaders
@@ -38,41 +38,33 @@ const last_ru_leader = 7
 const first_fr_leader = 8
 const last_fr_leader = 13
 
-
 function get_leader_name(leader) {
     return leaders[leader].name
 }
-
 
 function get_leader_short_name(leader) {
     return leaders[leader].short_name
 }
 
-
 function get_leader_location(leader) {
     return V.leaders[leader]
 }
-
 
 function get_leader_faction(leader) {
     return leaders[leader].faction
 }
 
-
 function get_first_leader(faction) {
     return (faction === RUSSIA) ? first_ru_leader : first_fr_leader
 }
-
 
 function get_last_leader(faction) {
     return (faction === RUSSIA) ? last_ru_leader : last_fr_leader
 }
 
-
 function has_friendly_leader(who, s) {
     return get_seniormost_leader(who, s) !== -1
 }
-
 
 function is_seniormost_leader(who, space) {
     let faction = get_leader_faction(who)
@@ -83,7 +75,6 @@ function is_seniormost_leader(who, space) {
     }
     return false
 }
-
 
 function get_seniormost_leader(faction, space) {
     for (let leader = get_first_leader(faction); leader <= get_last_leader(faction); ++leader) {
@@ -100,6 +91,10 @@ const last_ru_order = 28
 const first_fr_order = 29
 const last_fr_order = 53
 
+function get_player_orders(who) {
+    return (who === RUSSIA) ? G.russian.orders : (who === FRANCE) ? G.french.orders : null
+}
+
 /* TROOPS */
 const FRESH_INFANTRY = 0
 const EXHAUSTED_INFANTRY = 1
@@ -110,7 +105,6 @@ const EXHAUSTED_COSSACK = 5
 const FRESH_GUARD = 6
 const EXHAUSTED_GUARD = 7
 
-
 const first_ru_inf = 0
 const last_ru_inf = 79
 const first_fr_inf = 80
@@ -120,27 +114,22 @@ const last_pr_inf = 139
 const first_au_inf = 140
 const last_au_inf = 150
 
-
 const first_ru_cav = 0
 const last_ru_cav = 15
 const first_fr_cav = 16
 const last_fr_cav = 30
 
-
 const first_ru_cossack = 0
 const last_ru_cossack = 15
 
-
 const first_fr_guard = 0
 const last_fr_guard = 4
-
 
 var used_troops = [
     [first_ru_inf, first_fr_inf, first_pr_inf, first_au_inf],
     [first_ru_cav, first_fr_cav],
     [first_ru_cossack, first_fr_guard],
 ]
-
 
 const last_troops = [
     [last_ru_inf, last_fr_inf, last_pr_inf, last_au_inf],
@@ -387,27 +376,7 @@ function on_update() {
         }
     }
 
-    if (!V.orders_board) {
-        update_panel_show("plan_orders", 0, false)
-    } else {
-        update_panel_show("plan_orders", 0, true)
-        if (V.french.selected_orders) {
-            for (let o of V.french.selected_orders) {
-                update_keyword("order", o, "selected")
-            }
-        }
-        
-        if (R === RUSSIA) {
-            for (let i = 1; i <= 26; ++i) {
-                populate("plan_orders", 0, "order", i)
-            }
-        } else if (R === FRANCE) {
-            for (let i = first_fr_order; i <= 53; ++i) {
-                populate("plan_orders", 0, "order", i)
-            }
-        }
-    }
-    
+    update_orders()    
 
     action_button("done", "Done")
     action_button("draw", "Draw")
@@ -506,6 +475,40 @@ function update_devastation() {
         populate("space", Number(dev), "devastation", num_devastated)
 
         num_devastated++
+    }
+}
+
+function update_orders() {
+    //Show/hide the orders panel depending on current state
+    if (V.state === "choose_orders" || V.state === "place_orders") {
+        update_panel_show("plan_orders", 0, true)
+    } else {
+        update_panel_show("plan_orders", 0, false)
+    }
+
+    //Show the green outline for selected orders
+    if (V.state === "choose_orders") {
+        if (V.russian.selected_orders) {
+            for (let order of V.russian.selected_orders) {
+                update_keyword("order", order, "selected")
+            }
+        }
+        if (V.french.selected_orders) {
+            for (let order of V.french.selected_orders) {
+                update_keyword("order", order, "selected")
+            }
+        }
+    }
+
+    //Populate orders
+    for (const [space, orders] of Object.entries(get_player_orders(R))) {
+        for (let order of orders) {
+            if (Number(space) === AVAILABLE && (V.state === "choose_orders" || V.state === "place_orders")) {
+                populate("plan_orders", 0, "order", Number(order.id))
+            } else if (Number(space) !== AVAILABLE) {
+                populate("space", Number(space), "order", Number(order.id))
+            }
+        }
     }
 }
 
