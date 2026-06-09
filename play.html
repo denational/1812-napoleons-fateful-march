@@ -1,71 +1,76 @@
-<!DOCTYPE html>
-<html>
-    <head>
-        <meta name="viewport" content="width=device-width, height=device-height, user-scalable=no, interactive-widget=resizes-content, viewport-fit=cover">
-		<meta name="theme-color" content="#444">
-		<meta charset="UTF-8">
-		<title>1812</title>
-		<link id="favicon" rel="icon" href="favicon.svg">
-		<link rel="stylesheet" href="/fonts/fonts.css">
-		<link rel="stylesheet" href="/common/client.css">
-		<link rel="stylesheet" href="world.css">
-		<link rel="stylesheet" href="play.css">
-		<script defer src="/common/client.js"></script>
-		<script defer src="world.js"></script>
-		<script defer src="data.js"></script>
-		<script defer src="layout.js"></script>
-		<script defer src="play.js"></script>
-    </head>
-    <body>
-        <div id="tip" hidden></div>
+<!doctype html>
+<html lang="en">
+<head>
+	<meta name="viewport" content="width=device-width,
+		height=device-height,
+		user-scalable=no,
+		interactive-widget=resizes-content,
+		viewport-fit=cover">
+	<meta name="theme-color" content="#444">
+	<meta charset="UTF-8">
+	<title>
+		1812: NAPOLEON'S FATEFUL MARCH
+	</title>
+	<link rel="icon" href="favicon.svg">
+	<link rel="stylesheet" href="/fonts/fonts.css">
+	<link rel="stylesheet" href="/common/client.css">
+	<link rel="stylesheet" href="world.css">
+	<link rel="stylesheet" href="play.css">
+	<script defer src="/common/client.js"></script>
+	<script defer src="world.js"></script>
+	<script defer src="data.js"></script>
+	<script defer src="layout.js"></script>
+	<script defer src="play.js"></script>
+	
+</head>
+<body>
 
-        <header>
-            <div id="toolbar">
-				<details id="tools_menu">
-					<summary><img src="/images/cog.svg"></summary>
-					<menu>
-                        <li><a href="https://cdn.shopify.com/s/files/1/0295/6650/0908/files/VUCA_1812_RULEBOOK_LIVINGRULES_1_2_2.pdf?v=1730198733" target="_blank">Rules</a>
-                        <li><a href="https://cdn.shopify.com/s/files/1/0295/6650/0908/files/VUCA_1812_PLAYBOOK_ONL_JAN24_2_e1eca527-ee9a-4106-bcb0-81d3f47afea5.pdf?v=1719222124" target="_blank">Scenario Book</a>
-                        <li><a href="https://cdn.shopify.com/s/files/1/0295/6650/0908/files/VUCA_1812_PLAYER_AID_LIVING_1_1.pdf?v=1726150575" target="_blank">Player Aids</a>
-					</menu>
-				</details>
-				<button id="world_button" onclick="toggle_markers_and_pieces()"><img src="/images/earth-africa-europe.svg"></button>
-			</div>
-        </header>
+<header>
+	<div id="toolbar">
+		<details>
+			<summary><img src="/images/cog.svg"></summary>
+			<menu>
+				<li><a href="https://cdn.shopify.com/s/files/1/0295/6650/0908/files/VUCA_1812_RULEBOOK_LIVINGRULES_1_2_2.pdf?v=1730198733" target="_blank">Rules</a>
+                <li><a href="https://cdn.shopify.com/s/files/1/0295/6650/0908/files/VUCA_1812_PLAYBOOK_ONL_JAN24_2_e1eca527-ee9a-4106-bcb0-81d3f47afea5.pdf?v=1719222124" target="_blank">Playbook</a>
+                <li><a href="https://cdn.shopify.com/s/files/1/0295/6650/0908/files/VUCA_1812_PLAYER_AID_LIVING_1_1.pdf?v=1726150575" target="_blank">Player Aids</a>
+				<li class="separator">
+			</menu>
+		</details>
+		<button id="world_button" onclick="toggle_markers_and_pieces()"><img src="/images/earth-africa-europe.svg"></button>
+	</div>
+</header>
 
-        <aside>
-			<div id="roles"></div>
-			<div id="log"></div>
-		</aside>
+<aside>
+	<div id="roles"></div>
+	<div id="log"></div>
+</aside>
 
-        <main>
-            <div id="mapwrap">
-				<div class="board" id="map"></div>
-			</div>
-			<div id="panels">
-				<div id="plan_orders" class="panel">
-					<div class="panel-head">Orders</div>
-					<div class="panel-body"></div>
-				</div>
-				<div id="played" class="panel">
-					<div class="panel-head">Played</div>
-					<div class="panel-body"></div>
-				</div>
-				<div id="hand" class="panel">
-					<div class="panel-head">Hand</div>
-					<div class="panel-body"></div>
-				</div>
-				<div id="fr_leaders" class="panel">
-					<div class="panel-head">French Leaders</div>
-					<div class="panel-body"></div>
-				</div>
-				<div id="ru_leaders" class="panel">
-					<div class="panel-head">Russian Leaders</div>
-					<div class="panel-body"></div>
-				</div>
-			</div>
-        </main>
+<main data-min-zoom="0.5" data-max-zoom="2.0">
+	<div id="mapwrap">
+		<div class="board" id="map"></div>
+	</div>
+	<div id="plan_orders" class="panel">
+		<div class="panel-head">Orders</div>
+		<div class="panel-body"></div>
+	</div>
+	<div id="played" class="panel">
+		<div class="panel-head">Played</div>
+		<div class="panel-body"></div>
+	</div>
+	<div id="hand" class="panel">
+		<div class="panel-head">Hand</div>
+		<div class="panel-body"></div>
+	</div>
+	<div id="ru_leaders" class="panel">
+		<div class="panel-head">Russian Leaders</div>
+		<div class="panel-body"></div>
+	</div>
+	<div id="fr_leaders" class="panel">
+		<div class="panel-head">French Leaders</div>
+		<div class="panel-body"></div>
+	</div>
+</main>
 
-        <footer id="status"></footer>
-    </body>
-</html>
+<footer id="status"></footer>
+
+</body>

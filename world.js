@@ -1,3 +1,5 @@
+/* WORLD JAVASCRIPT - DO NOT EDIT */
+
 "use strict"
 
 var G, V, R // convenient aliases so that we can share bits of code verbatim from rules.js
@@ -97,6 +99,7 @@ const world = {
 	keyword_list: [],
 	text_list: [],
 	log_boxes: [],
+	window_list: [],
 	focus: null,
 	mouse_focus: false,
 	last_focus: null,
@@ -341,7 +344,7 @@ function lookup_thing(action, id) {
 
 function _on_click_thing(evt) {
 	if (evt.button === 0) {
-		var thing = evt.target.thing
+		var thing = evt.currentTarget.thing
 		evt.stopPropagation()
 		if (_focus_stack(thing.element.parentElement.thing))
 			if (!send_action(thing.my_action, thing.my_id))
@@ -351,7 +354,7 @@ function _on_click_thing(evt) {
 
 function _on_click_stackable(evt) {
 	if (evt.button === 0) {
-		var thing = evt.target.thing
+		var thing = evt.currentTarget.thing
 		evt.stopPropagation()
 		_focus_stack(thing.element.parentElement.thing)
 	}
@@ -359,7 +362,7 @@ function _on_click_stackable(evt) {
 
 function _on_focus_stackable(evt) {
 	if (world.mouse_focus) {
-		var thing = evt.target.thing
+		var thing = evt.currentTarget.thing
 		_focus_stack(thing.element.parentElement.thing)
 	}
 }
@@ -629,6 +632,11 @@ function update_size(action, id, w, h) {
 	thing.element.style.height = Math.round(h) + "px"
 }
 
+function update_show(action, id, show) {
+	var thing = lookup_thing(action, id)
+	thing.element.hidden = !show
+}
+
 function update_style(action, id, key, value) {
 	var thing = lookup_thing(action, id)
 	thing.element.style.setProperty(key, value)
@@ -658,17 +666,6 @@ function update_text_html(action, id, text) {
 	var thing = lookup_thing(action, id)
 	thing.ensure_text()
 	thing.my_text_html = text
-}
-
-function update_position(action, id, x, y) {
-	var thing = lookup_thing(action, id)
-	thing.element.style.left = Math.round(x) + "px"
-	thing.element.style.top = Math.round(y) + "px"
-}
-
-function update_show(action, id, show) {
-	var thing = lookup_thing(action, id)
-	thing.element.hidden = !show
 }
 
 /* STACKS */
@@ -897,15 +894,21 @@ function begin_update() {
 }
 
 function end_update() {
-	for (var e of document.querySelectorAll(".layout.square"))
+	var e, thing
+
+	for (e of document.querySelectorAll(".layout.square"))
 		e.style.setProperty("--square", Math.ceil(Math.sqrt(e.childElementCount)))
+
+	/* FIXME: workaround WebKit bug with :has(:empty) selectors */
+	for (e of document.querySelectorAll(".panel.autohide"))
+		e.hidden = (e.querySelector(".panel-body").children.length === 0)
 
 	_layout_stacks()
 
-	for (var thing of world.keyword_list)
+	for (thing of world.keyword_list)
 		thing.element.setAttribute("class", [ ...thing.my_keywords, ...thing.my_dynamic_keywords ].join(" "))
 
-	for (var thing of world.text_list) {
+	for (thing of world.text_list) {
 		if (thing.my_text_html !== null)
 			thing.element.innerHTML = thing.my_text_html
 		else if (thing.my_text !== null)
@@ -914,11 +917,11 @@ function end_update() {
 			thing.element.textContent = ""
 	}
 
-	for (var thing of world.action_list) {
+	for (thing of world.action_list) {
 		thing.element.classList.toggle("action", is_action(thing.my_action, thing.my_id))
 	}
 
-	for (var thing of world.button_list) {
+	for (thing of world.button_list) {
 		if (is_action(thing.my_action, thing.my_id)) {
 			thing.element.disabled = false
 			thing.element.hidden = false
@@ -931,10 +934,23 @@ function end_update() {
 		}
 	}
 
+	for (thing of world.window_list) {
+		if (thing.auto_update && !thing.element.hidden) {
+			var text = thing.auto_update()
+			if (text instanceof Element)
+				thing.body.replaceChildren(text)
+			else
+				thing.body.innerHTML = text
+		}
+	}
+
 	_animate_end()
 }
 
 /* PANELS */
+
+/* FIXME: workaround WebKit bug with :has(:empty) selectors */
+document.querySelectorAll(".panel.autohide").forEach(e => e.hidden = true)
 
 function create_panel(parent, action, id, text) {
 	var panel = document.createElement("div")
@@ -1073,13 +1089,127 @@ function update_overlay_position(action, id, x, y, grav_x=0.5, grav_y=0.5, top=1
 function update_overlay_text(action, id, text) {
 	var thing = lookup_thing(action, id)
 	assert(thing.my_overlay, "not an overlay")
-	return thing.my_overlay_head.textContent = text
+	thing.my_overlay_head.textContent = text
 }
 
 function update_overlay_text_html(action, id, text) {
 	var thing = lookup_thing(action, id)
 	assert(thing.my_overlay, "not an overlay")
-	return thing.my_overlay_head.innerHTML = text
+	thing.my_overlay_head.innerHTML = text
+}
+
+/* WINDOWS */
+
+function create_window(html_id, title, auto_update, should_resize) {
+	var element = document.createElement("div")
+	element.id = html_id
+	element.className = "window"
+	element.hidden = true
+
+	var wind_head = document.createElement("div")
+	wind_head.className = "window-head"
+	wind_head.innerHTML = title
+	element.append(wind_head)
+	drag_element_with_mouse(element, wind_head)
+
+	var wind_close = document.createElement("div")
+	wind_close.className = "window-close"
+	wind_close.textContent = "\u2716"
+	wind_close.onclick = function () { element.hidden = true }
+	element.append(wind_close)
+
+	var wind_body = document.createElement("div")
+	wind_body.className = "window-body"
+	element.append(wind_body)
+
+	if (should_resize) {
+		var wind_resize = document.createElement("div")
+		wind_resize.className = "window-resize"
+		element.append(wind_resize)
+		resize_element_with_mouse(element, wind_resize)
+	}
+
+	document.body.append(element)
+
+	world.window_list.push({
+		element,
+		head: wind_head,
+		body: wind_body,
+		auto_update: auto_update,
+	})
+}
+
+document.body.addEventListener("keydown", function (e) {
+	if (e.key === "Escape") {
+		for (var wind of world.window_list) {
+			if (!wind.element.hidden) {
+				e.preventDefault()
+				wind.element.hidden = true
+			}
+		}
+	}
+})
+
+window.addEventListener("resize", function (e) {
+	if (window.innerWidth < 800) {
+		for (var wind of world.window_list) {
+			wind.element.style.top = null
+			wind.element.style.left = null
+			wind.element.style.width = null
+			wind.element.style.height = null
+		}
+	}
+})
+
+function lookup_window(html_id) {
+	for (var wind of world.window_list)
+		if (wind.element.id === html_id)
+			return wind
+	throw new Error(`cannot find window: ${html_id}`)
+}
+
+function show_window(html_id) {
+	var wind = lookup_window(html_id)
+
+	// close other windows if mobile
+	if (window.innerWidth < 800) {
+		for (var other of world.window_list)
+			if (other !== wind)
+				other.element.hidden = true
+	}
+
+	// auto-update when window is shown
+	if (wind.auto_update && wind.element.hidden) {
+		var text = wind.auto_update()
+		if (text instanceof Element)
+			wind.body.replaceChildren(text)
+		else
+			wind.body.innerHTML = text
+	}
+
+	wind.element.hidden = false
+}
+
+function hide_window(html_id) {
+	lookup_window(html_id).element.hidden = true
+}
+
+function toggle_window(html_id) {
+	if (lookup_window(html_id).element.hidden)
+		show_window(html_id)
+	else
+		hide_window(html_id)
+}
+
+function update_window_title(html_id, title) {
+	lookup_window(html_id).head.innerHTML = title
+}
+
+function update_window_content(html_id, body) {
+	if (body instanceof Element)
+		lookup_window(html_id).body.replaceChildren(body)
+	else
+		lookup_window(html_id).body.innerHTML = body
 }
 
 /* LOG FORMATTING */
@@ -1197,7 +1327,7 @@ function update_log_boxes(ix) {
 			box.close = -1
 	}
 	// remove boxes that are popped out of existence
-	world.log_boxes = world.log_boxes.filter(box => box.open >= 0 || box.close >= 0)
+	world.log_boxes = world.log_boxes.filter(box => box.open >= 0)
 }
 
 function open_log_box(ix, keyword) {
@@ -1205,8 +1335,12 @@ function open_log_box(ix, keyword) {
 }
 
 function close_log_box(ix) {
-	if (world.log_boxes.length > 0)
-		world.log_boxes[world.log_boxes.length-1].close = ix
+	for (var i = world.log_boxes.length - 1; i >= 0; --i) {
+		if (world.log_boxes[i].close < 0) {
+			world.log_boxes[i].close = ix
+			return
+		}
+	}
 }
 
 function apply_log_boxes(ix, div, common) {
@@ -1238,7 +1372,7 @@ function _set_preference(name, value, onchange) {
 	document.body.dataset[name] = value
 	close_toolbar_menus()
 	if (typeof onchange === "function")
-		onchange()
+		onchange(name, value)
 	on_update()
 }
 
@@ -1262,7 +1396,7 @@ function init_preference_checkbox(name, initial, onchange) {
 	var input = document.querySelector(`input[name="${name}"]`)
 	world.prefs[name] = input
 	input.checked = value
-	input.onchange = () => _set_preference(name, input.value, onchange)
+	input.onchange = () => _set_preference(name, input.checked, onchange)
 	document.body.dataset[name] = value
 }
 

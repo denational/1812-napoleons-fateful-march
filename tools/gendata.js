@@ -67,28 +67,80 @@ fs.createReadStream(names)
             }
             })
             .on('end', () => { //Not the most pretty way to do it, but it works
+
+//=== SCENARIO DATA ===
+data.scenarios = []
+
+const JUNE_5 = 0
+const JULY_R = 1
+const JULY_1 = 2
+const JULY_2 = 3
+const JULY_3 = 4
+const JULY_4 = 5
+const JULY_5 = 6
+const AUG_R = 7
+const AUG_1 = 8
+const AUG_2 = 9
+const AUG_3 = 10
+const AUG_4 = 11
+const AUG_5 = 12
+const SEPT_R = 13
+const SEPT_1 = 14
+const SEPT_2 = 15
+const SEPT_3 = 16
+const SEPT_4 = 17
+const SEPT_5 = 18
+const OCT_R = 19
+const OCT_1 = 20
+const OCT_2 = 21
+const OCT_3 = 22
+const OCT_4 = 23
+const OCT_5 = 24
+const NOV_R = 25
+const NOV_1 = 26
+const NOV_2 = 27
+const NOV_3 = 28
+const NOV_4 = 29
+const NOV_5 = 30
+
+const first_fr_card = 54
+
+function fr(card) {
+    return first_fr_card + card
+}
+
+function def_scenario(id, name, start, end, vp, initiative, ru_hand_size, fr_hand_size, ru_cards, fr_cards, ru_removed, fr_removed, french_logistic_preparations, winter) {
+    data.scenarios.push({id, name, start, end, vp, initiative, hand_size: [ru_hand_size, fr_hand_size], cards_in_hand: [ru_cards, fr_cards], removed_cards: [ru_removed, fr_removed], french_logistic_preparations, winter})
+}
+
+def_scenario(1, "The Eagles' March on Smolensk",    JUNE_5, AUG_4,  -11, 1, 3, 4, [1, 2, 4],              [fr(1), fr(9), fr(13)],             [],             [],                                     true,  false)
+def_scenario(2, "The Eagles' March on Moscow",      JUNE_5, SEPT_5, -19, 1, 3, 4, [1, 2, 4],              [fr(1), fr(9), fr(13)],             [],             [],                                     true,  false)
+def_scenario(3, "The Grand Campaign",               JUNE_5, NOV_5,  -14, 1, 3, 4, [1, 2, 4],              [fr(1), fr(9), fr(13)],             [],             [],                                     true,  true)
+def_scenario(4, "Hollow Victories",                 JULY_5, SEPT_5, -15, 2, 2, 2, [3, 8],                 [fr(5), fr(7)],                     [2, 6, 19, 43], [fr(1), fr(9), fr(17), fr(24)],         false, false)
+def_scenario(5, "Battle of Smolensk Campaign Start",AUG_3,  NOV_5,  -8,  3, 3, 3, [3, 9, 16, 17, 22, 40], [fr(2), fr(4), fr(11), fr(14)],     [2, 6, 19, 43], [fr(1), fr(5), fr(9), fr(17), fr(24)],  false, true)
+def_scenario(6, "The Retreat of the Grande Armée",  OCT_3,  NOV_5,  16, -1, 3, 3, [20, 25, 37, 48, 50],   [fr(27), fr(28), fr(36), fr(37)],   [15, 16, 17, 18, 19, 40, 43, 52], [fr(15), fr(17), fr(19), fr(20), fr(24), fr(34)], false, true)
 //=== LEADERS ===
 data.leaders = []
 
-function def_leader(faction, name, seniority, vp, short_name) {
-    data.leaders.push({faction, name, seniority, vp, short_name})
+function def_leader(id, faction, name, seniority, vp, short_name) {
+    data.leaders.push({id, faction, name, seniority, vp, short_name})
 }
 
-def_leader(RUSSIA, "Tsar Alexander I", 4, 5, "Alexander")
-def_leader(RUSSIA, "Mikhail Kutuzov", 3, 2, "Kutuzov")
-def_leader(RUSSIA, "Barclay de Tolly", 2, 1, "Tolly")
-def_leader(RUSSIA, "Pyotr Bagration", 2, 1, "Bagration")
-def_leader(RUSSIA, "Alexander Tormasov", 2, 1, "Tormasov")
-def_leader(RUSSIA, "Peter Wittgenstein", 1, 1, "Wittgenstein")
-def_leader(RUSSIA, "Pavel Chichagov", 1, 1, "Chichagov")
-def_leader(RUSSIA, "Matvei Platov", 1, 0, "Platov")
+def_leader(0,  RUSSIA, "Tsar Alexander I",       4, 5, "Alexander")
+def_leader(1,  RUSSIA, "Mikhail Kutuzov",        3, 2, "Kutuzov")
+def_leader(2,  RUSSIA, "Barclay de Tolly",       2, 1, "Tolly")
+def_leader(3,  RUSSIA, "Pyotr Bagration",        2, 1, "Bagration")
+def_leader(4,  RUSSIA, "Alexander Tormasov",     2, 1, "Tormasov")
+def_leader(5,  RUSSIA, "Peter Wittgenstein",     1, 1, "Wittgenstein")
+def_leader(6,  RUSSIA, "Pavel Chichagov",        1, 1, "Chichagov")
+def_leader(7,  RUSSIA, "Matvei Platov",          1, 0, "Platov")
 
-def_leader(FRANCE, "Emperor Napoléon", 4, 10, "Napoleon")
-def_leader(FRANCE, "Jerome Bonaparte", 3, 3, "Jerome")
-def_leader(FRANCE, "Eugene de Beauharnais", 3, 3, "Beauharnais")
-def_leader(FRANCE, "Louis-Nicolas Davout", 2, 2, "Davout")
-def_leader(FRANCE, "Joachim Murat", 1, 2, "Murat")
-def_leader(FRANCE, "Karl von Schwarzenberg", 1, 1, "Schwarzenberg")
+def_leader(8,  FRANCE, "Emperor Napoléon",       4, 10,"Napoleon")
+def_leader(9,  FRANCE, "Jerome Bonaparte",       3, 3, "Jerome")
+def_leader(10, FRANCE, "Eugene de Beauharnais",  3, 3, "Beauharnais")
+def_leader(11, FRANCE, "Louis-Nicolas Davout",   2, 2, "Davout")
+def_leader(12, FRANCE, "Joachim Murat",          1, 2, "Murat")
+def_leader(13, FRANCE, "Karl von Schwarzenberg", 1, 1, "Schwarzenberg")
 
 //=== CARDS ===
 data.cards = []
@@ -105,10 +157,10 @@ const RESP = 3 //Response
 function def_card(faction, id, name, season, type, ops, permanently_remove = false, immediate = false) {
     switch(faction) {
         case RUSSIA:
-            data.cards.push({id, name, season, type, ops, permanently_remove, immediate})
+            data.cards.push({id, who: faction, name, season, type, ops, permanently_remove, immediate})
             break
         case FRANCE:
-            data.cards.push({id: (id + 54), name, season, type, ops, permanently_remove, immediate})
+            data.cards.push({id: (id + 54), who: faction, name, season, type, ops, permanently_remove, immediate})
     }
 }
 
@@ -176,7 +228,7 @@ def_card(FRANCE,    3,  "War Weariness",             SUMMER, EVENT,  3, true)
 def_card(FRANCE,    4,  "Holy Mother Russia",        SUMMER, EVENT,  3, true)
 def_card(FRANCE,    5,  "Polish Support",            SUMMER, EVENT,  2, true)
 def_card(FRANCE,    6,  "Outflanking",               SUMMER, BATTLE, 4)
-def_card(FRANCE,    7,  "Unsuccessful Disengagement",SUMMER, EVENT,  3, false, true)
+def_card(FRANCE,    7,  "Unsuccessful Disengagement",SUMMER, EVENT,  3, false)
 def_card(FRANCE,    8,  "Infighting & Intrigue",     SUMMER, EVENT,  2)
 def_card(FRANCE,    9,  "Fast Marching",             SUMMER, EVENT,  3, true)
 def_card(FRANCE,    10, "Fast Marching",             SUMMER, EVENT,  3, true)

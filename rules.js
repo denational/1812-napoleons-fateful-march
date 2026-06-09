@@ -1,43 +1,188 @@
-
 "use strict"
 
 const data = require("./data")
 
-const RUSSIA = 0
-const FRANCE = 1
-const PRUSSIA = 2
-const AUSTRIA = 3
 const ROLES = ["Russia", "France"]
 
-const SCENARIOS = [
-    //"The Eagles' March on Smolensk",
-    //"The Eagles' March on Moscow",
-    "The Grand Campaign",
-    //"Hollow Victories",
-    //"Battle of Smolensk Campaign Start",
-    //"The Retreat of the Grande Armée",
-]
+var G, L, R, V = {} //Game, local state, role of player who triggered view object, view
+var P = {} //States and procedures table
+var E = {} //Can play event checks
 
-var G, L, R, V, P = {}
+//=== CONSTANTS ===
+/* NATIONS */
+const RU = 0 //Russia
+const FR = 1 //France
+const PR = 2 //Prussia
+const AU = 3 //Austria
 
-//=== DATA ===
-function get_name(who) {
-	switch(who) {
-		case RUSSIA: return "Russia"
-		case FRANCE: return "France"
-		case PRUSSIA: return "Prussia"
-		case AUSTRIA: return "Austria"
+function get_nation_name(nation) {
+	switch(nation) {
+		case RU: return "Russia"
+		case FR: return "France"
+		case PR: return "Prussia"
+		case AU: return "Austria"
+		default: return nation
 	}
 }
 
-const spaces = data.spaces
-const leaders = data.leaders
+function get_faction(nation) {
+	switch(nation) {
+		case RU: 
+			return RU
+		case FR:
+		case PR:
+		case AU:
+			return FR
+		default: 
+			return -1
+	}
+}
+
+/* CARDS */
 const cards = data.cards
-const pieces = data.pieces
-const orders = data.orders
+const first_ru_card = 0
+const last_ru_card = 53
+const first_fr_card = 54
+const last_fr_card = 107
+//RU cards
+const DUMMY_RU = 0
+const WELL_DISCIPLINED_RETREAT = 1
+const CONFUSED_RETREAT = 2
+const OPOLCHENIE = 3
+const EVASIVE_MANEUVERS = 4
+const IDLE_RESERVES = 5
+const BAGRATIONS_RETREAT = 6
+const INDECISION = 7
+const FIGHTING_WITHDRAWAL = 8
+const UNINSPIRED_TACTICS = 9
+const SCORCHED_EARTH = 10
+const HOLY_MOTHER_RUSSIA_RU = 11
+const OUTFLANKING_RU = 12
+const GARRISON_TROOPS = 13
+const EXTREME_WEATHER_RU = 14
+const PRIDE_AND_HESITATION = 15
+const KUTUZOV_APPOINTED = 16
+const THE_FINLAND_CORPS = 17
+const TREATY_OF_BUCHAREST = 18
+const THE_CZAR_LEAVES_THE_ARMY = 19
+const FLYING_COLUMNS = 20
+const OVERSTRETCHED_LOGISTICS = 21
+const CITY_ABLAZE = 22
+const STUBBORN_REARGUARD_RU = 23
+const NEW_POSTING = 24
+const EXHAUSTING_MARCH_1 = 25
+const EXHAUSTING_MARCH_2 = 26
+const UNEXPECTED_RETREAT = 27
+const POOR_COORDINATION_RU = 28
+const CAVALRY_SCREENING = 29
+const DEVASTATED_LANDSCAPE = 30
+const STOIC_INFANTRY = 31
+const THE_ARTILLERY_CORPS = 32
+const FORTIFICATIONS = 33
+const PLATOVS_COSSACKS = 34
+const FICKLE_HABSBURGS = 35
+const INFANTRY_SQUARES_RU = 36
+const ENVELOPING_MOVES = 37
+const KONSTANTINES_CORPS = 38
+const CAVALRY_CHARGE_RU = 39
+const DELAYED_FORCES_RU = 40
+const FIERCE_FIGHTING_RU = 41
+const COMMAND_FRICTION = 42
+const EXHAUSTED_HORSES = 43
+const DISEASE_AND_STARVATION = 44
+const POOR_LOGISTICS = 45
+const DEVASTATED_COUNTRYSIDE = 46
+const TREACHEROUS_ALLIES = 47
+const DISORDERLY_MARCH = 48
+const COSSACK_PATROLS = 49
+const CRUMBLING_COHESION = 50
+const UNRELIABLE_GERMANS = 51
+const BARCLAY_DE_TOLLY_RESIGNS = 52
+const AGGRESSIVE_COSSACKS = 53
+
+//FR cards
+const DUMMY_FR = 54
+const HARD_MARCHING_1 = 55
+const HARD_MARCHING_2 = 56
+const WAR_WEARINESS = 57
+const HOLY_MOTHER_RUSSIA_FR = 58
+const POLISH_SUPPORT = 59
+const OUTFLANKING = 60
+const UNSUCCESSFUL_DISENGAGEMENT = 61
+const INFIGHTING_AND_INTRIGUE = 62
+const FAST_MARCHING_1 = 63
+const FAST_MARCHING_2 = 64
+const GRAND_BATTERY = 65
+const CAVALRY_CHARGE_FR = 66
+const MURATS_CAVALRY = 67
+const SKILLFULL_MANEUVERS = 68
+const PEACE_OFFER = 69
+const INFANTRY_SQUARES_FR = 70
+const DAVOUT_TAKES_COMMAND = 71
+const OUTFLANKING_FR = 72
+const IX_CORPS_ARRIVES = 73
+const XI_CORPS_ARRIVES = 74
+const CONFUSING_ORDERS = 75
+const POOR_COMMUNICATIONS = 76
+const POOR_COORDINATION_FR = 77
+const JEROME_GOES_HOME = 78
+const GOOD_LEADERSHIP = 79
+const COMBINED_ARMS = 80
+const CONFUSIONS_AND_DELAYS = 81
+const SAINT_CYRS_VI_CORPS = 82
+const EBLES_PONTONEERS = 83
+const STUBBORN_REARGUARD_FR = 84
+const THE_IMPERIAL_GUARD = 85
+const DELAYED_FORCES_FR = 86
+const NAPOLEONS_MARSHALS = 87
+const FIERCE_FIGHTING_FR = 88
+const NEYS_III_CORPS = 89
+const EUGENES_IV_CORPS = 90
+const PONIATOWSKIS_V_CORPS = 91
+const INFERIOR_GUNPOWDER = 92
+const CHAOS_IN_THE_REAR_AREAS = 93
+const VULNERABLE_SUPPLY_LINES = 94
+const FREEZING_WEATHER = 95
+const EXTREME_WEATHER_FR = 96
+const LOGISTICS_COLLAPSE = 97
+const CHAOTIC_FOOD_DISTRIIBUTION = 98
+const MUCH_NEEDED_VICTUALS = 99
+const ENERGETIC_LEADERSHIP = 100
+const INFERIOR_MUSKETRY = 101
+const NAPOLEON_RETURNS_TO_PARIS = 102
+const TOUGH_REARGUARD = 103
+const COURAGE_OF_DESPERATION = 104
+const THE_OLD_GUARD = 105
+const NEYS_ESCAPE = 106
+const LETHARGIC_PURSUIT = 107
+
+function get_card_owner(c) {
+	return cards[c].who
+}
+
+function is_card_dummy(c) {
+	return c === DUMMY_RU || c === DUMMY_FR
+}
+
+function is_card_friendly(who, c) {
+	return who === cards[c].who
+}
+
+const SUMMER = 0
+const WINTER = 1
+const BOTH = 2
+
+function get_card_season(c) {
+	return cards[c].season
+}
+
+function is_must_play_event(c) {
+	return cards[c].immediate
+}
 
 /* SPACES */
-const AVAILABLE = 0
+const OUT_OF_PLAY = -1
+const POOL = 0
 const S_PRUSSIA_NORTH = 1 //The northern of the two "Prussia" spaces
 const S_TILSIT = 2
 const S_KALTINENAI = 3
@@ -194,14 +339,14 @@ const S_RYAZAN = 153
 const S_TULA = 154
 const S_UNNAMED_H3 = 155
 const S_UNNAMED_H4 = 155
-
 const FRENCH_CASUALTIES = 156
-const OUT_OF_PLAY = 157
+
+const space_count = 154
 
 /* LEADERS */
-const ALEXANDER = 0
+const ALEXANDER_I = 0
 const KUTUZOV = 1
-const TOLLY = 2 //Eliminated 'de' to make short form more concise
+const DE_TOLLY = 2
 const BAGRATION = 3
 const TORMASOV = 4
 const WITTGENSTEIN = 5
@@ -210,21 +355,22 @@ const PLATOV = 7
 
 const NAPOLEON = 8
 const JEROME = 9
-const BEAUHARNAIS = 10
+const DE_BEAUHARNAIS = 10
 const DAVOUT = 11
 const MURAT = 12
 const SCHWARZENBERG = 13
 
-/* ORDERS */
-const first_ru_order = 0
-const last_ru_order = 28
-const first_fr_order = 29
-const last_fr_order = 53
+const leader_count = 14
 
-/* TROOPS */
-const FRESH = 0
-const EXHAUSTED = 1
+function get_leader_location(leader) {
+	return G.leaders[leader]
+}
 
+function is_leader_on_map(leader) {
+	return (get_leader_location(leader) !== POOL) || (get_leader_location(leader) !== OUT_OF_PLAY)
+}
+
+//Troops
 const FRESH_INFANTRY = 0
 const EXHAUSTED_INFANTRY = 1
 const FRESH_CAVALRY = 2
@@ -234,36 +380,14 @@ const EXHAUSTED_COSSACK = 5
 const FRESH_GUARD = 6
 const EXHAUSTED_GUARD = 7
 
-function get_type_name(type) {
-	switch(type) {
-		case FRESH_INFANTRY: return "fresh inf"
-		case EXHAUSTED_INFANTRY: return "exhausted inf"
-		case FRESH_CAVALRY: return "fresh cav"
-		case EXHAUSTED_CAVALRY: return "exhausted cav"
-		case FRESH_COSSACK: return "fresh cossack"
-		case EXHAUSTED_COSSACK: return "exhausted cossack"
-		case FRESH_GUARD: return "fresh guard"
-		case EXHAUSTED_GUARD: return "exhausted guard"
-	}
-}
+//Turns
+const JUNE = 0
+const JULY = 1
+const AUG = 2
+const SEPT = 3
+const OCT = 4
+const NOV = 5
 
-/* CARDS */
-const first_ru_card = 0
-const last_ru_card = 53
-const first_fr_card = 54
-const last_fr_card = 107
-
-const RUSSIA_DUMMY = 0
-const WELL_DISCIPLINED_RETREAT = 1
-const CONFUSED_RETREAT = 2
-const EVASIVE_MANEUVERS = 4
-
-const FRANCE_DUMMY = 54
-const HARD_MARCHING = first_fr_card + 1
-const FAST_MARCHING = first_fr_card + 9
-const MURATS_CAVALRY = first_fr_card + 13
-
-/* TURN */
 const JUNE_5 = 0
 const JULY_R = 1
 const JULY_1 = 2
@@ -296,850 +420,930 @@ const NOV_3 = 28
 const NOV_4 = 29
 const NOV_5 = 30
 
-function get_turn_number(turn) {
-	return (turn % 6 === 1) ? "R" : (turn % 6 === 0) ? 5 : ((turn % 6) - 1)
+function get_month(turn) {
+	return Math.ceil(turn / 6)
 }
 
-const DUMMY = 0
-
-//=== DATA FUNCTIONS ===
-/* LEADERS */
-function get_leader_nationality(leader) {
-	return leaders[leader].faction
+function is_resource_turn(turn) {
+	return (turn % 6 === 1)
 }
 
-function get_leader_name(leader) {
-	return leaders[leader].name
+function get_turn_name(turn) {
+	if (turn % 6 === 0) { return "5" }
+	if (is_resource_turn(turn)) { return "R" }
+	return `${(turn % 6 - 1)}`
 }
 
-function get_leader_seniority(leader) {
-	return leaders[leader].seniority
+function get_month_name(turn) {
+	switch(get_month(turn)) {
+		case JUNE: return "June"
+		case JULY: return "July"
+		case AUG: return "August"
+		case SEPT: return "September"
+		case OCT: return "October"
+		case NOV: return "November"
+		default: return get_month(turn)
+	}
 }
 
-function get_leader_vp(leader) {
-	return leaders[leader].vp
+/* DEPOTS */
+const NUM_DEPOTS_RU = 14
+const NUM_DEPOTS_FR = 7
+
+//=== VIEW ===
+function on_view() {
+	V.active = G.active
+
+	V.depots = [...G.depots[RU], ...G.depots[FR]]
+	V.devastation = G.devastation
+	V.current_discard = G.discard[R] ?? []
+	V.french_logistic_preparations = G.french_logistic_preparations
+	V.winter = G.winter
+	V.hand_length = [G.hand[RU].length, G.hand[FR].length]
+	V.current_hand = G.hand[R] ?? []
+	V.initiative = G.initiative
+	V.last_turn = G.last_turn
+	V.leaders = G.leaders
+	V.removed = G.removed
+	V.set_aside = G.set_aside
+	V.troops = G.troops
+	V.turn = G.turn
+	V.vp = G.vp
 }
 
-function setup_leader(who, where) {
+//=== SCENARIOS & SETUP ===
+const THE_EAGLES_MARCH_ON_SMOLENSK 			= "The Eagles' March on Smolensk"
+const THE_EAGLES_MARCH_ON_MOSCOW 			= "The Eagles' March on Moscow"
+const THE_GRAND_CAMPAIGN 					= "The Grand Campaign"
+const HOLLOW_VICTORIES 						= "Hollow Victories"
+const BATTLE_OF_SMOLENSK_CAMPAIGN_START 	= "Battle of Smolensk Campaign Start"
+const THE_RETREAT_OF_THE_GRANDE_ARMEE 		= "The Retreat of the Grande Armée"
+
+const SCENARIOS = [
+	THE_EAGLES_MARCH_ON_SMOLENSK,
+	THE_EAGLES_MARCH_ON_MOSCOW,
+	THE_GRAND_CAMPAIGN,
+	HOLLOW_VICTORIES,
+	BATTLE_OF_SMOLENSK_CAMPAIGN_START,
+	THE_RETREAT_OF_THE_GRANDE_ARMEE,
+]
+
+function on_setup(scenario, options) {
+	const scenario_data = data.scenarios.find(sc => sc.name === scenario)
+
+	log_h1(scenario)
+
+	G.turn = scenario_data.start
+	G.last_turn = scenario_data.end
+
+	//Russia is negative, France is positive
+	G.vp = scenario_data.vp
+	G.initiative = scenario_data.initiative
+
+	G.deck = [[], []]
+	G.set_aside = [[], []]
+	G.removed = [[], []]
+	G.discard = [[], []]
+
+	switch(scenario) {
+		case THE_EAGLES_MARCH_ON_SMOLENSK:
+		case THE_EAGLES_MARCH_ON_MOSCOW:
+			for (let who = RU; who <= FR; ++who) {
+				G.deck[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) !== WINTER && !is_card_dummy(c.id)))
+				G.removed[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) === WINTER && !is_card_dummy(c.id)))
+			}
+			break
+		case THE_GRAND_CAMPAIGN:
+			for (let who = RU; who <= FR; ++who) {
+				G.deck[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) !== WINTER && !is_card_dummy(c.id)))
+				G.set_aside[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) === WINTER && !is_card_dummy(c.id)))
+			}
+			break
+		case HOLLOW_VICTORIES:
+			for (let who = RU; who <= FR; ++who) {
+				G.deck[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) !== WINTER && !is_card_dummy(c.id) && !scenario_data.removed_cards[who].includes(c.id)))
+				G.removed[who] = [...scenario_data.removed_cards[who], ...cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) === WINTER) && !is_card_dummy(c.id))]
+			}
+			break
+		case BATTLE_OF_SMOLENSK_CAMPAIGN_START:
+			for (let who = RU; who <= FR; ++who) {
+				G.deck[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) !== WINTER && !scenario_data.removed_cards[who].includes(c.id) && !is_card_dummy(c.id)))
+				G.set_aside[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) === WINTER && !is_card_dummy(c.id)))
+				G.removed[who] = scenario_data.removed_cards[who]
+			}
+			break
+		case THE_RETREAT_OF_THE_GRANDE_ARMEE:
+			for (let who = RU; who <= FR; ++who) {
+				G.deck[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) !== SUMMER && !scenario_data.removed_cards[who].includes(c.id) && !is_card_dummy(c.id)))
+				G.removed[who] = [...scenario_data.removed_cards[who], ...cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) === SUMMER && !is_card_dummy(c.id)))]
+			}
+			break
+		default: throw new Error(`${scenario} not found!`)
+	}
+
+	for (let who = RU; who <= FR; ++who) {
+		G.deck[who] = G.deck[who].map(c => c.id)
+		G.removed[who] = G.removed[who].map(c => c.id)
+		G.set_aside[who] = G.set_aside[who].map(c => c.id)
+	}
+
+	G.hand = [[DUMMY_RU, ...scenario_data.cards_in_hand[RU]], [DUMMY_FR, ...scenario_data.cards_in_hand[FR]]]
+
+	G.french_logistic_preparations = scenario_data.french_logistic_preparations
+	G.winter = scenario_data.winter
+
+	G.troops = {}
+	G.leaders = Array(leader_count).fill(POOL)
+	G.depots = [Array(NUM_DEPOTS_RU).fill(POOL), Array(NUM_DEPOTS_FR).fill(POOL)]
+	G.devastation = Array(space_count).fill(0)
+
+	switch(get_month(G.turn)) {
+		case JUNE: 
+			setup_june()
+			break
+		case JULY: 
+			setup_july()
+			break
+		case AUG: 
+			setup_aug()
+			break
+		case OCT: 
+			setup_oct()
+			break
+	}
+
+	G.active = [RU, FR]
+	call("setup_hand", {scenario, scenario_data})
+}
+
+function setup_june() {
+	log("June Setup.")
+	/* RUSSIA */
+	set_troop(RU, S_RIGA, FRESH_INFANTRY, 2)
+	set_troop(RU, S_DUNABURG, FRESH_INFANTRY, 1)
+	add_depot(RU, S_DUNABURG)
+	set_leader(S_KALTINENAI, WITTGENSTEIN)
+	set_troop(RU, S_KALTINENAI, FRESH_INFANTRY, 3)
+	set_troop(RU, S_VILKOMIR, FRESH_CAVALRY, 2)
+	set_troop(RU, S_VILKOMIR, FRESH_INFANTRY, 2)
+	set_leader(S_VILNA, ALEXANDER_I)
+	set_leader(S_VILNA, DE_TOLLY)
+	set_troop(RU, S_VILNA, FRESH_INFANTRY, 6)
+	add_depot(RU, S_VILNA)
+	set_troop(RU, S_SVENCIONYS, FRESH_INFANTRY, 3)
+	set_troop(RU, S_MOLODECHNO, FRESH_CAVALRY, 1)
+	set_troop(RU, S_MOLODECHNO, FRESH_INFANTRY, 1)
+	add_depot(RU, S_MINSK)
+	set_troop(RU, S_LIDA, FRESH_CAVALRY, 1)
+	set_troop(RU, S_LIDA, FRESH_INFANTRY, 2)
+	set_leader(S_GRODNO, PLATOV)
+	set_troop(RU, S_GRODNO, FRESH_COSSACK, 2)
+	set_troop(RU, S_BIALYSTOK, FRESH_CAVALRY, 1)
+	set_leader(S_VOLKOVYSK, BAGRATION)
+	set_troop(RU, S_VOLKOVYSK, FRESH_INFANTRY, 4)
+	set_troop(RU, S_BREST, FRESH_INFANTRY, 1)
+	add_depot(RU, S_BREST)
+	set_troop(RU, S_KOVEL, FRESH_CAVALRY, 1)
+	set_troop(RU, S_KOVEL, EXHAUSTED_CAVALRY, 1)
+	set_leader(S_LUTSK, TORMASOV)
+	set_troop(RU, S_LUTSK, FRESH_INFANTRY, 1)
+	set_troop(RU, S_LUTSK, EXHAUSTED_INFANTRY, 1)
+	add_depot(RU, S_LUTSK)
+	set_troop(RU, S_ROVNO, FRESH_INFANTRY, 1)
+	set_troop(RU, S_DUBNO, FRESH_INFANTRY, 1)
+
+	set_troop(RU, S_TOROPETS, FRESH_INFANTRY, 2)
+	set_troop(RU, S_POLOTSK, FRESH_INFANTRY, 1)
+	set_troop(RU, S_VITEBSK, FRESH_INFANTRY, 1)
+	add_depot(RU, S_SMOLENSK)
+	set_troop(RU, S_BORISOV, FRESH_INFANTRY, 1)
+	set_troop(RU, S_MOGILEV, FRESH_INFANTRY, 1)
+	add_depot(RU, S_MOGILEV)
+	set_troop(RU, S_BOBRUYSK, FRESH_INFANTRY, 1)
+	set_troop(RU, S_MOZYR, FRESH_INFANTRY, 1)
+	set_troop(RU, S_KIEV, FRESH_INFANTRY, 1)
+	add_depot(RU, S_KIEV)
+	add_depot(RU, S_ZHITOMIR)
+
+	set_troop(RU, S_MOSCOW, FRESH_INFANTRY, 1)
+	add_depot(RU, S_MOSCOW)
+	add_depot(RU, S_VYAZMA)
+	set_troop(RU, S_KALUGA, FRESH_INFANTRY, 1)
+	add_depot(RU, S_KALUGA)
+	set_troop(RU, S_OREL, FRESH_INFANTRY, 1)
+	add_depot(RU, S_OREL)
+	set_troop(RU, S_VORONEZH, FRESH_COSSACK, 1)
+
+	/* FRANCE */
+	set_troop(PR, S_PRUSSIA_NORTH, FRESH_INFANTRY, 3)
+	set_leader(S_KALVARIJA, NAPOLEON)
+	set_leader(S_KALVARIJA, MURAT)
+	set_troop(FR, S_KALVARIJA, FRESH_GUARD, 4)
+	set_troop(FR, S_KALVARIJA, FRESH_CAVALRY, 5)
+	set_troop(FR, S_KALVARIJA, FRESH_INFANTRY, 19)
+	set_leader(S_SUWALKI, DE_BEAUHARNAIS)
+	set_troop(FR, S_SUWALKI, FRESH_CAVALRY, 1)
+	set_troop(FR, S_SUWALKI, FRESH_INFANTRY, 7)
+	set_leader(S_SZCZUCZY, JEROME)
+	set_troop(FR, S_SZCZUCZY, FRESH_CAVALRY, 2)
+	set_troop(FR, S_SZCZUCZY, FRESH_INFANTRY, 6)
+	set_troop(FR, S_SUWALKI, FRESH_CAVALRY, 1)
+	set_troop(FR, S_GRAND_DUCHY_OF_WARSAW_NORTH, FRESH_INFANTRY, 2)
+	set_leader(S_GRAND_DUCHY_OF_WARSAW_SOUTH, SCHWARZENBERG)
+	set_troop(AU, S_GRAND_DUCHY_OF_WARSAW_SOUTH, FRESH_INFANTRY, 3)
+	set_troop(AU, S_GRAND_DUCHY_OF_WARSAW_SOUTH, FRESH_INFANTRY, 1)
+
+	set_devastation(S_KALVARIJA, 1)
+	set_devastation(S_SUWALKI, 1)
+	set_devastation(S_SZCZUCZY, 1)
+}
+
+function setup_july() {
+	log("July Setup.")
+	/* RUSSIA */
+	set_troop(RU, S_RIGA, FRESH_INFANTRY, 2)
+	set_troop(RU, S_DUNABURG, FRESH_INFANTRY, 1)
+	add_depot(RU, S_DUNABURG)
+	set_leader(S_SEVEZH, WITTGENSTEIN)
+	set_troop(RU, S_SEVEZH, FRESH_INFANTRY, 2)
+	set_troop(RU, S_SEVEZH, EXHAUSTED_INFANTRY, 1)
+	set_leader(S_VITEBSK, DE_TOLLY)
+	set_troop(RU, S_VITEBSK, FRESH_INFANTRY, 7)
+	set_troop(RU, S_VITEBSK, FRESH_CAVALRY, 2)
+	set_troop(RU, S_VITEBSK, EXHAUSTED_INFANTRY, 5)
+	set_troop(RU, S_VITEBSK, EXHAUSTED_CAVALRY, 1)
+	add_depot(RU, S_VITEBSK)
+	set_leader(S_BABINOVICHI, PLATOV)
+	set_troop(RU, S_BABINOVICHI, FRESH_COSSACK, 1)
+	set_troop(RU, S_SMOLENSK, FRESH_INFANTRY, 2)
+	add_depot(RU, S_SMOLENSK)
+	set_troop(RU, S_DUKHOVSHCHINA, FRESH_INFANTRY, 2)
+	set_troop(RU, S_RAGOSTOV, FRESH_INFANTRY, 1)
+	set_troop(RU, S_RAGOSTOV, EXHAUSTED_INFANTRY, 1)
+	set_leader(S_UNNAMED_E4, BAGRATION)
+	set_troop(RU, S_UNNAMED_E4, FRESH_INFANTRY, 2)
+	set_troop(RU, S_UNNAMED_E4, FRESH_CAVALRY, 1)
+	set_troop(RU, S_UNNAMED_E4, EXHAUSTED_INFANTRY, 1)
+	set_troop(RU, S_MSTISLAVL, FRESH_COSSACK, 1)
+
+	set_leader(S_BREST, TORMASOV)
+	set_troop(RU, S_BREST, FRESH_INFANTRY, 1)
+	set_troop(RU, S_BREST, EXHAUSTED_INFANTRY, 1)
+	set_troop(RU, S_VLADIMIR_GALICIA, FRESH_INFANTRY, 1)
+	set_troop(RU, S_KOBRYN, FRESH_CAVALRY, 1)
+	set_troop(RU, S_KOBRYN, EXHAUSTED_CAVALRY, 1)
+	add_depot(RU, S_LUTSK)
+	set_troop(RU, S_PINSK, FRESH_INFANTRY, 1)
+	set_troop(RU, S_MOZYR, FRESH_INFANTRY, 1)
+	add_depot(RU, S_MOZYR)
+	add_depot(RU, S_ZHITOMIR)
+	set_troop(RU, S_KIEV, FRESH_INFANTRY, 2)
+	add_depot(RU, S_KIEV)
+
+	set_troop(RU, S_MOSCOW, FRESH_INFANTRY, 2)
+	add_depot(RU, S_MOSCOW)
+	add_depot(RU, S_VYAZMA)
+	set_troop(RU, S_KALUGA, FRESH_INFANTRY, 2)
+	add_depot(RU, S_KALUGA)
+	set_troop(RU, S_OREL, FRESH_INFANTRY, 1)
+	add_depot(RU, S_OREL)
+	set_troop(RU, S_VORONEZH, FRESH_COSSACK, 2)
+
+	/* FRANCE */
+	set_troop(PR, S_MITAU, FRESH_INFANTRY, 1)
+	set_troop(PR, S_UNNAMED_B2, FRESH_INFANTRY, 2)
+	set_troop(FR, S_VIDZY, FRESH_INFANTRY, 1)
+	set_troop(FR, S_DISNA, FRESH_INFANTRY, 1)
+	set_troop(FR, S_POLOTSK, FRESH_INFANTRY, 2)
+	set_troop(FR, S_POLOTSK, EXHAUSTED_INFANTRY, 1)
+	set_leader(S_KAMEN, NAPOLEON)
+	set_leader(S_KAMEN, MURAT)
+	set_leader(S_KAMEN, DE_BEAUHARNAIS)
+	set_troop(FR, S_KAMEN, FRESH_GUARD, 4)
+	set_troop(FR, S_KAMEN, FRESH_CAVALRY, 3)
+	set_troop(FR, S_KAMEN, FRESH_INFANTRY, 5)
+	set_troop(FR, S_KAMEN, EXHAUSTED_INFANTRY, 4)
+	set_troop(FR, S_KAMEN, EXHAUSTED_CAVALRY, 2)
+	set_troop(FR, S_KOVNO, FRESH_INFANTRY, 1)
+	add_depot(FR, S_KOVNO)
+	set_troop(FR, S_VILNA, FRESH_INFANTRY, 1)
+	add_depot(FR, S_VILNA)
+	set_troop(FR, S_MINSK, FRESH_INFANTRY, 1)
+	add_depot(FR, S_MINSK)
+	set_troop(FR, S_BORISOV, FRESH_INFANTRY, 3)
+	set_troop(FR, S_BORISOV, EXHAUSTED_INFANTRY, 1)
+	set_leader(S_MOGILEV, DAVOUT)
+	set_troop(FR, S_MOGILEV, FRESH_INFANTRY, 2)
+	set_troop(FR, S_MOGILEV, EXHAUSTED_INFANTRY, 1)
+	set_troop(FR, S_KOKHANOVO, FRESH_INFANTRY, 3)
+	set_troop(FR, S_KOKHANOVO, EXHAUSTED_INFANTRY, 1)
+	set_troop(FR, S_ORSHA, FRESH_CAVALRY, 1)
+	set_leader(S_NESVICH, SCHWARZENBERG)
+	set_troop(AU, S_NESVICH, FRESH_INFANTRY, 2)
+	set_troop(AU, S_NESVICH, EXHAUSTED_INFANTRY, 1)
+	set_troop(FR, S_SLUTSK, FRESH_CAVALRY, 1)
+	set_troop(FR, S_PRUZHANY, FRESH_INFANTRY, 2)
+	set_troop(AU, S_ZAMOSC, FRESH_INFANTRY, 1)
+	set_troop(FR, FRENCH_CASUALTIES, FRESH_INFANTRY, 6)
+	set_troop(FR, FRENCH_CASUALTIES, FRESH_CAVALRY, 1)
+
+	/* DEVASTATION */
+	set_devastation(S_KALVARIJA, 1)
+	set_devastation(S_SUWALKI, 1)
+	set_devastation(S_GRODNO, 1)
+	set_devastation(S_BIALYSTOK, 1)
+	set_devastation(S_SZCZUCZY, 1)
+	set_devastation(S_MITAU, 1)
+	set_devastation(S_SIAULAI, 1)
+	set_devastation(S_LIDA, 1)
+	set_devastation(S_VOLKOVYSK, 1)
+	set_devastation(S_BIELSK, 1)
+	set_devastation(S_SLONIM, 1)
+	set_devastation(S_BREST, 1)
+	set_devastation(S_SALAKAS, 1)
+	set_devastation(S_DOKSHITSY, 1)
+	set_devastation(S_PLESHCHENITSY, 1)
+	set_devastation(S_NOVGRUDOK, 1)
+	set_devastation(S_SEVEZH, 1)
+	set_devastation(S_KAMEN, 1)
+	set_devastation(S_BORISOV, 1)
+	set_devastation(S_KOKHANOVO, 1)
+	set_devastation(S_BOBRUYSK, 1)
+	set_devastation(S_UNNAMED_E4, 1)
+
+	set_devastation(S_VILKOMIR, 2)
+	set_devastation(S_VILNA, 2)
+	set_devastation(S_VIDZY, 2)
+	set_devastation(S_DRISSA, 2)
+	set_devastation(S_MOLODECHNO, 2)
+	set_devastation(S_NESVICH, 2)
+	set_devastation(S_POLOTSK, 2)
+	set_devastation(S_MOGILEV, 2)
+
+	set_devastation(S_SVENCIONYS, 3)
+}
+
+function setup_aug() {
+	log("August Setup.")
+	/* RUSSIA */
+	set_troop(RU, S_RIGA, FRESH_INFANTRY, 1)
+	set_troop(RU, S_MITAU, FRESH_INFANTRY, 1)
+	set_leader(S_SEVEZH, WITTGENSTEIN)
+	set_troop(RU, S_SEVEZH, FRESH_INFANTRY, 2)
+	set_troop(RU, S_SEVEZH, EXHAUSTED_INFANTRY, 1)
+	set_leader(S_SMOLENSK, DE_TOLLY)
+	set_troop(RU, S_SMOLENSK, FRESH_INFANTRY, 8)
+	set_troop(RU, S_SMOLENSK, FRESH_CAVALRY, 2)
+	set_troop(RU, S_SMOLENSK, EXHAUSTED_INFANTRY, 5)
+	set_troop(RU, S_SMOLENSK, EXHAUSTED_CAVALRY, 1)
+	add_depot(RU, S_SMOLENSK)
+	set_leader(S_SVERSKOVO, BAGRATION)
+	set_troop(RU, S_SVERSKOVO, FRESH_INFANTRY, 3)
+	set_troop(RU, S_SVERSKOVO, FRESH_CAVALRY, 1)
+	set_troop(RU, S_SVERSKOVO, EXHAUSTED_INFANTRY, 2)
+	set_troop(RU, S_ROSLAVL, FRESH_COSSACK, 1)
+	set_leader(S_DUKHOVSHCHINA, PLATOV)
+	set_troop(RU, S_DUKHOVSHCHINA, FRESH_COSSACK, 2)
+
+	set_troop(RU, S_MOSCOW, FRESH_INFANTRY, 3)
+	add_depot(RU, S_MOSCOW)
+	add_depot(RU, S_VYAZMA)
+	set_troop(RU, S_KALUGA, FRESH_INFANTRY, 3)
+	add_depot(RU, S_KALUGA)
+	set_troop(RU, S_OREL, FRESH_INFANTRY, 1)
+	add_depot(RU, S_OREL)
+	set_troop(RU, S_VORONEZH, FRESH_COSSACK, 2)
+
+	set_leader(S_KOBRYN, TORMASOV)
+	set_troop(RU, S_KOBRYN, FRESH_INFANTRY, 2)
+	set_troop(RU, S_KOBRYN, FRESH_CAVALRY, 2)
+	set_troop(RU, S_KOBRYN, EXHAUSTED_INFANTRY, 1)
+	set_troop(RU, S_PINSK, FRESH_INFANTRY, 1)
+	set_troop(RU, S_LUTSK, FRESH_INFANTRY, 1)
+	add_depot(RU, S_LUTSK)
+	set_troop(RU, S_MOZYR, FRESH_INFANTRY, 1)
+	add_depot(RU, S_MOZYR)
+	add_depot(RU, S_ZHITOMIR)
+	set_troop(RU, S_KIEV, FRESH_INFANTRY, 3)
+	add_depot(RU, S_KIEV)
+
+	/* FRANCE */
+	set_troop(PR, S_ECKAU, FRESH_INFANTRY, 1)
+	set_troop(PR, S_JAKOBSTADT, FRESH_INFANTRY, 1)
+	set_troop(PR, S_JAKOBSTADT, EXHAUSTED_INFANTRY, 1)
+	set_troop(FR, S_DUNABURG, FRESH_INFANTRY, 1)
+	set_troop(FR, S_DRISSA, FRESH_INFANTRY, 1)
+	set_troop(FR, S_POLOTSK, FRESH_INFANTRY, 1)
+	set_troop(FR, S_POLOTSK, EXHAUSTED_INFANTRY, 1)
+	add_depot(FR, S_POLOTSK)
+	set_leader(S_VITEBSK, NAPOLEON)
+	set_troop(FR, S_VITEBSK, FRESH_GUARD, 3)
+	set_troop(FR, S_VITEBSK, FRESH_INFANTRY, 3)
+	set_troop(FR, S_VITEBSK, FRESH_CAVALRY, 1)
+	set_troop(FR, S_VITEBSK, EXHAUSTED_INFANTRY, 2)
+	set_troop(FR, S_VITEBSK, EXHAUSTED_GUARD, 1)
+	set_leader(S_PORECZIE, DE_BEAUHARNAIS)
+	set_troop(FR, S_PORECZIE, FRESH_INFANTRY, 3)
+	set_leader(S_BABINOVICHI, MURAT)
+	set_leader(S_BABINOVICHI, DAVOUT)
+	set_troop(FR, S_BABINOVICHI, FRESH_INFANTRY, 7)
+	set_troop(FR, S_BABINOVICHI, FRESH_CAVALRY, 2)
+	set_troop(FR, S_BABINOVICHI, EXHAUSTED_INFANTRY, 3)
+	set_troop(FR, S_BABINOVICHI, EXHAUSTED_CAVALRY, 2)
+	set_troop(FR, S_KOKHANOVO, FRESH_CAVALRY, 1)
+	set_troop(FR, S_MOGILEV, FRESH_INFANTRY, 2)
+	set_troop(FR, S_RAGOSTOV, FRESH_CAVALRY, 1)
+	set_troop(FR, S_BOBRUYSK, FRESH_INFANTRY, 1)
+	set_troop(FR, S_MINSK, FRESH_INFANTRY, 1)
+	add_depot(FR, S_MINSK)
+	set_troop(FR, S_VILNA, FRESH_INFANTRY, 1)
+	add_depot(FR, S_VILNA)
+	set_troop(FR, S_KOVNO, FRESH_INFANTRY, 2)
+	add_depot(FR, S_KOVNO)
+	set_troop(FR, S_MOLODECHNO, FRESH_INFANTRY, 1)
+	set_leader(S_PRUZHANY, SCHWARZENBERG)
+	set_troop(AU, S_PRUZHANY, FRESH_INFANTRY, 2)
+	set_troop(FR, S_PRUZHANY, FRESH_INFANTRY, 2)
+	set_troop(AU, S_PRUZHANY, EXHAUSTED_INFANTRY, 1)
+	set_troop(AU, S_ZAMOSC, FRESH_INFANTRY, 1)
+	set_troop(FR, FRENCH_CASUALTIES, FRESH_INFANTRY, 7)
+	set_troop(FR, FRENCH_CASUALTIES, FRESH_CAVALRY, 1)
+
+	/* DEVASTATION */
+	set_devastation(S_SUWALKI, 1)
+	set_devastation(S_KALVARIJA, 1)
+	set_devastation(S_GRODNO, 1)
+	set_devastation(S_SZCZUCZY, 1)
+	set_devastation(S_BIALYSTOK, 1)
+	set_devastation(S_MITAU, 1)
+	set_devastation(S_SIAULAI, 1)
+	set_devastation(S_LIDA, 1)
+	set_devastation(S_VOLKOVYSK, 1)
+	set_devastation(S_BIELSK, 1)
+	set_devastation(S_PRUZHANY, 1)
+	set_devastation(S_KOBRYN, 1)
+	set_devastation(S_SALAKAS, 1)
+	set_devastation(S_DOKSHITSY, 1)
+	set_devastation(S_PLESHCHENITSY, 1)
+	set_devastation(S_NOVGRUDOK, 1)
+	set_devastation(S_KAMEN, 1)
+	set_devastation(S_BORISOV, 1)
+	set_devastation(S_KOKHANOVO, 1)
+	set_devastation(S_BOBRUYSK, 1)
+	set_devastation(S_ORSHA, 1)
+	set_devastation(S_RAGOSTOV, 1)
+
+	set_devastation(S_VILKOMIR, 2)
+	set_devastation(S_VILNA, 2)
+	set_devastation(S_SLONIM, 2)
+	set_devastation(S_BREST, 2)
+	set_devastation(S_VIDZY, 2)
+	set_devastation(S_DRISSA, 2)
+	set_devastation(S_MOLODECHNO, 2)
+	set_devastation(S_NESVICH, 2)
+	set_devastation(S_SEVEZH, 2)
+	set_devastation(S_POLOTSK, 2)
+	set_devastation(S_MOGILEV, 2)
+	set_devastation(S_PORECZIE, 2)
+	set_devastation(S_VITEBSK, 2)
+	set_devastation(S_BABINOVICHI, 2)
+	set_devastation(S_UNNAMED_E4, 2)
+
+	set_devastation(S_SVENCIONYS, 3)
+}
+
+function setup_oct() {
+	log("October Setup.")
+	/* RUSSIA */
+	set_troop(RU, S_RIGA, FRESH_INFANTRY, 2)
+	set_troop(RU, S_DRISSA, FRESH_INFANTRY, 1)
+	set_leader(S_SEVEZH, WITTGENSTEIN)
+	set_troop(RU, S_SEVEZH, FRESH_INFANTRY, 3)
+	set_troop(RU, S_SEVEZH, EXHAUSTED_INFANTRY, 1)
+	set_troop(RU, S_OSTROV, FRESH_INFANTRY, 1)
+
+	set_troop(RU, S_BRYANSK, FRESH_COSSACK, 1)
+	set_leader(S_KOSELYSK, PLATOV)
+	set_troop(RU, S_KOSELYSK, FRESH_COSSACK, 2)
+	set_troop(RU, S_OREL, FRESH_INFANTRY, 1)
+	add_depot(RU, S_OREL)
+	set_troop(RU, S_MALOYAROSLAVET, FRESH_INFANTRY, 1)
+	set_troop(RU, S_MALOYAROSLAVET, FRESH_CAVALRY, 2)
+	set_troop(RU, S_MALOYAROSLAVET, FRESH_COSSACK, 1)
+	set_troop(RU, S_MALOYAROSLAVET, EXHAUSTED_INFANTRY, 1)
+	set_leader(S_KALUGA, KUTUZOV)
+	set_leader(S_KALUGA, TORMASOV)
+	set_troop(RU, S_KALUGA, FRESH_INFANTRY, 7)
+	set_troop(RU, S_KALUGA, FRESH_CAVALRY, 1)
+	set_troop(RU, S_KALUGA, FRESH_COSSACK, 1)
+	set_troop(RU, S_KALUGA, EXHAUSTED_INFANTRY, 3)
+	set_troop(RU, S_KALUGA, EXHAUSTED_CAVALRY, 1)
+	add_depot(RU, S_KALUGA)
+	set_troop(RU, S_VLADIMIR_RUSSIA, FRESH_COSSACK, 1)
+	set_troop(RU, S_VORONEZH, FRESH_COSSACK, 1)
+
+	set_troop(RU, S_BREST, FRESH_INFANTRY, 2)
+	add_depot(RU, S_BREST)
+	set_leader(S_PRUZHANY, CHICHAGOV)
+	set_troop(RU, S_PRUZHANY, FRESH_INFANTRY, 3)
+	set_troop(RU, S_PRUZHANY, FRESH_CAVALRY, 1)
+	set_troop(RU,S_PRUZHANY, EXHAUSTED_INFANTRY, 2)
+	set_troop(RU, S_PRUZHANY, EXHAUSTED_CAVALRY, 1)
+	set_troop(RU, S_KOVEL, FRESH_INFANTRY, 1)
+	set_troop(RU, S_LUTSK, FRESH_INFANTRY, 1)
+	add_depot(RU, S_LUTSK)
+	set_troop(RU, S_MOZYR, FRESH_INFANTRY, 1)
+	add_depot(RU, S_MOZYR)
+	set_troop(RU, S_KIEV, FRESH_INFANTRY, 1)
+	add_depot(RU, S_KIEV)
+
+	/* FRANCE */
+	set_troop(FR, S_PRUSSIA_SOUTH, FRESH_INFANTRY, 1)
+	set_troop(PR, S_MITAU, FRESH_INFANTRY, 1)
+	set_troop(FR, S_KOVNO, FRESH_INFANTRY, 1)
+	add_depot(FR, S_KOVNO)
+	set_leader(S_BIALYSTOK, SCHWARZENBERG)
+	set_troop(AU, S_BIALYSTOK, FRESH_INFANTRY, 1)
+	set_troop(FR, S_BIALYSTOK, FRESH_INFANTRY, 1)
+	set_troop(AU, S_BIALYSTOK, EXHAUSTED_INFANTRY, 1)
+	set_troop(AU, S_ZAMOSC, FRESH_INFANTRY, 1)
+	set_troop(FR, S_VILNA, FRESH_INFANTRY, 5)
+	add_depot(FR, S_VILNA)
+	set_troop(FR, S_SVENCIONYS, FRESH_INFANTRY, 1)
+	set_troop(PR, S_DUNABURG, FRESH_INFANTRY, 1)
+	set_troop(PR, S_DUNABURG, EXHAUSTED_INFANTRY, 1)
+	set_troop(FR, S_DOKSHITSY, FRESH_INFANTRY, 1)
+	set_troop(FR, S_MINSK, FRESH_INFANTRY, 1)
+	set_troop(FR, S_POLOTSK, FRESH_INFANTRY, 2)
+	set_troop(FR, S_POLOTSK, EXHAUSTED_INFANTRY, 1)
+	add_depot(FR, S_POLOTSK)
+	set_troop(FR, S_KAMEN, FRESH_INFANTRY, 1)
+	set_troop(FR, S_VITEBSK, EXHAUSTED_INFANTRY, 1)
+	set_troop(FR, S_ORSHA, FRESH_INFANTRY, 1)
+	set_troop(FR, S_MOGILEV, EXHAUSTED_INFANTRY, 1)
+	set_troop(FR, S_RAGOSTOV, FRESH_INFANTRY, 1)
+	set_troop(FR, S_SMOLENSK, FRESH_INFANTRY, 4)
+	add_depot(FR, S_SMOLENSK)
+	add_depot(FR, S_DOROGOBUZH)
+	set_troop(FR, S_VYAZMA, FRESH_INFANTRY, 1)
+	set_troop(FR, S_MOZHAYSK, FRESH_INFANTRY, 1)
+	set_leader(S_TARUTINO, MURAT)
+	set_troop(FR, S_TARUTINO, FRESH_INFANTRY, 2)
+	set_troop(FR, S_TARUTINO, FRESH_CAVALRY, 1)
+	set_troop(FR, S_TARUTINO, EXHAUSTED_INFANTRY, 1)
+	set_troop(FR, S_TARUTINO, EXHAUSTED_CAVALRY, 1)
+	set_leader(S_MOSCOW, NAPOLEON)
+	set_leader(S_MOSCOW, DAVOUT)
+	set_leader(S_MOSCOW, DE_BEAUHARNAIS)
+	set_troop(FR, S_MOSCOW, FRESH_GUARD, 3)
+	set_troop(FR, S_MOSCOW, FRESH_INFANTRY, 4)
+	set_troop(FR, S_MOSCOW, EXHAUSTED_GUARD, 1)
+	set_troop(FR, S_MOSCOW, EXHAUSTED_INFANTRY, 2)
+	add_depot(FR, S_MOSCOW)
+	set_troop(FR, FRENCH_CASUALTIES, FRESH_INFANTRY, 16)
+	set_troop(FR, FRENCH_CASUALTIES, FRESH_CAVALRY, 6)
+
+	/* DEVASTATION */
+	set_devastation(S_SUWALKI, 1)
+	set_devastation(S_KALVARIJA, 1)
+	set_devastation(S_GRODNO, 1)
+	set_devastation(S_SZCZUCZY, 1)
+	set_devastation(S_BIALYSTOK, 1)
+	set_devastation(S_MITAU, 1)
+	set_devastation(S_SIAULAI, 1)
+	set_devastation(S_LIDA, 1)
+	set_devastation(S_BIELSK, 1)
+	set_devastation(S_JAKOBSTADT, 1)
+	set_devastation(S_SALAKAS, 1)
+	set_devastation(S_DOKSHITSY, 1)
+	set_devastation(S_PLESHCHENITSY, 1)
+	set_devastation(S_KAMEN, 1)
+	set_devastation(S_BORISOV, 1)
+	set_devastation(S_KOKHANOVO, 1)
+	set_devastation(S_BOBRUYSK, 1)
+	set_devastation(S_ORSHA, 1)
+	set_devastation(S_RAGOSTOV, 1)
+	set_devastation(S_VYAZMA, 1)
+	set_devastation(S_MALOYAROSLAVET, 1)
+
+	set_devastation(S_VILKOMIR, 2)
+	set_devastation(S_VILNA, 2)
+	set_devastation(S_SLONIM, 2)
+	set_devastation(S_RATNO, 2)
+	set_devastation(S_KOVEL, 2)
+	set_devastation(S_DUNABURG, 2)
+	set_devastation(S_DRISSA, 2)
+	set_devastation(S_VIDZY, 2)
+	set_devastation(S_MOLODECHNO, 2)
+	set_devastation(S_NESVICH, 2)
+	set_devastation(S_UNNAMED_E4, 2)
+	set_devastation(S_VITEBSK, 2)
+	set_devastation(S_PORECZIE, 2)
+	set_devastation(S_BABINOVICHI, 2)
+	set_devastation(S_MOGILEV, 2)
+	set_devastation(S_DOROGOBUZH, 2)
+	set_devastation(S_GZHATSK, 2)
+	set_devastation(S_KALUGA, 2)
+
+	set_devastation(S_PRUZHANY, 3)
+	set_devastation(S_BREST, 3)
+	set_devastation(S_KOBRYN, 3)
+	set_devastation(S_SVENCIONYS, 3)
+	set_devastation(S_SEVEZH, 3)
+	set_devastation(S_POLOTSK, 3)
+	set_devastation(S_SMOLENSK, 3)
+	set_devastation(S_MOZHAYSK, 3)
+	set_devastation(S_TARUTINO, 3)
+	set_devastation(S_MOSCOW, 3)
+}
+
+function set_troop(who, space, type, num) {
+	if (!G.troops[space]) G.troops[space] = {}
+	if (!G.troops[space][who]) G.troops[space][who] = {}
+	if (!G.troops[space][who][type]) G.troops[space][who][type] = 0
+
+	G.troops[space][who][type] = num
+}
+
+function add_troop(who, space, type, num) {
+	if (!G.troops[space]) G.troops[space] = {}
+	if (!G.troops[space][who]) G.troops[space][who] = {}
+	if (!G.troops[space][who][type]) G.troops[space][who][type] = 0
+
+	G.troops[space][who][type] += num
+}
+
+function add_depot(who, where) {
+	G.depots[who][G.depots[who].indexOf(POOL)] = where
+}
+
+function set_leader(where, who) {
 	G.leaders[who] = where
 }
-
-/* DEPOT/DEVASTATION */
 
 function set_devastation(where, level) {
 	G.devastation[where] = level
 }
 
-function setup_depot(who, where) {
-	let depot = (who === RUSSIA) ? G.russian.depots : G.french.depots
-	depot[depot.indexOf(AVAILABLE)] = where
-}
-
-/* TROOPS */
-function is_fresh_or_exhausted(type) {
-	return (type % 2 === 0) ? FRESH : EXHAUSTED
-}
-
-function get_map_from_type(type) {
-	switch(type) {
-		case FRESH_INFANTRY:
-		case EXHAUSTED_INFANTRY:
-			return G.infantry
-		case FRESH_CAVALRY:
-		case EXHAUSTED_CAVALRY:
-			return G.cavalry
-		case FRESH_COSSACK:
-		case EXHAUSTED_COSSACK:
-			return G.cossack
-		case FRESH_GUARD:
-		case EXHAUSTED_GUARD:
-			return G.guard
-	}
-}
-
-function init_troop_entry(type, where) {
-	map_set(get_map_from_type(type), where, 0)
-}
-
-function setup_troop(owner, where, type, number) {
-	if (!Object.hasOwn(G.troops, where))
-		G.troops[where] = {}
-	if (!Object.hasOwn(G.troops[where], owner)) {
-        G.troops[where][owner] = {}
-    }
-	G.troops[where][owner][type] = (G.troops[where][owner][type] ?? 0) + number
-}
-
-function setup_russian_troop(where, type, number) {
-	setup_troop(RUSSIA, where, type, number)
-}
-
-function setup_french_troop(where, type, number) {
-	setup_troop(FRANCE, where, type, number)
-}
-
-/* HAND */
-function get_card(side, number) {
-	return (side === RUSSIA) ? number : (first_fr_card + number)
-}
-
-function is_must_play_event(card) {
-	return cards[card].immediate === "true" || cards[card].immediate === true
-}
-
-function get_france_hand() {
-	return G.hand[FRANCE]
-}
-
-function push_to_hand(who, cards) {
-	if (Array.isArray(cards)) {
-		for (let c of cards) {
-			G.hand[who].push(c)
+P.setup_hand = {
+	_begin() {
+		//L.scenario_data
+		L.scenario_hand_size = L.scenario_data.hand_size //The number of non-dummy cards in hand specified by the scenario
+		L.has_drawn_cards = [false, false]
+		L.discarded = [[], []]
+	},
+	prompt() {
+		if (!L.has_drawn_cards[R]) {
+			if ((G.hand[R].length - 1) > L.scenario_hand_size[R]) {
+				V.prompt = `Discard cards (${(G.hand[R].length - 1) - L.scenario_hand_size[R]} remaining).`
+			} else if ((G.hand[R].length - 1) === L.scenario_hand_size[R]) {
+				V.prompt = `You may discard more cards, or pass.`
+				button("pass")
+			} else if (G.hand[R].length > 1) {
+				V.prompt = `You may discard more cards before drawing ${L.scenario_hand_size[R] - (G.hand[R].length - 1)} cards.`
+				button("draw")
+			} else {
+				V.prompt = `Draw ${L.scenario_hand_size[R]} cards.`
+				button("draw")
+			}
+			if (G.hand[R].length > 1) {
+				for (let c of G.hand[R]) {
+					if (!is_card_dummy(c)) {
+						action("card", c)
+					}
+				}
+			}
+			if (L.discarded[R].length > 0) {
+				button("undo")
+			}
+		} else {
+			V.prompt = "Review drawn cards."
+			button("done")
 		}
-	} else {
-		G.hand[who].push(cards)
+	},
+	card(c) {
+		discard_card(R, c)
+		L.discarded[R].push(c)
+	},
+	pass() {
+		L.has_drawn_cards[R] = true
+	},
+	draw() {
+		while ((G.hand[R].length - 1) < L.scenario_hand_size[R]) {
+			let drawn_card = draw_card(R)
+			if (is_must_play_event(drawn_card)) {
+				discard_card(R, drawn_card)
+				L.discarded[R].push(drawn_card)
+			}
+		}
+		L.has_drawn_cards[R] = true
+	},
+	undo() {
+		G.hand[R].push(L.discarded[R].pop())
+	},
+	done() {
+		set_delete(G.active, R)
+		if (Array.isArray(G.active) && G.active.length === 0) { //Scenario 5 special rule
+			if (L.scenario === BATTLE_OF_SMOLENSK_CAMPAIGN_START) {
+				if (G.discard[RU].includes(HOLY_MOTHER_RUSSIA_RU)) {
+					set_delete(G.discard[RU], HOLY_MOTHER_RUSSIA_RU)
+				} else if (G.deck[RU].includes(HOLY_MOTHER_RUSSIA_RU)) {
+					array_delete_item(G.deck[RU], HOLY_MOTHER_RUSSIA_RU)
+				}
+				G.deck[RU].push(HOLY_MOTHER_RUSSIA_RU)
+			}
+			G.deck[RU].push(EXTREME_WEATHER_RU) //DEBUG
+			call("begin_turn")
+		}
 	}
-}
-
-function get_russia_hand() {
-	return G.hand[RUSSIA]
-}
-
-function discard_card(card) {
-	if (card >= first_ru_card && card <= last_ru_card) {
-		array_delete_item(get_russia_hand(), card)
-		G.discard[RUSSIA].push(card)
-	} else {
-		array_delete_item(get_france_hand(), card)
-		G.discard[FRANCE].push(card)
-	}
-}
-
-function get_hand(who) {
-	return (who === RUSSIA) ? G.hand[RUSSIA] : G.hand[FRANCE]
-}
-
-function is_dummy(card) {
-	return card === FRANCE_DUMMY || card === RUSSIA_DUMMY
-}
-
-function get_card_name(card) {
-	return cards[card].name
 }
 
 function draw_card(who) {
 	G.hand[who].push(G.deck[who].pop())
+	//log(`${ROLES[who]} drew a card.`)
+	return G.hand[who][G.hand[who].length - 1]
 }
 
-P.setup_hand = {
-	_begin() {
-		log_h2("Setup")
-		G.state = "setup_hand"
+function discard_card(who, c) {
+	G.discard[who].push(c)
+	array_delete_item(G.hand[who], c)
+	//log(`${ROLES[who]} discarded a card.`)
+}
 
-		L.has_discarded = [false, false]
-		L.cards_discarded = [[], []]
-	},
-	prompt() {
-		if (L.has_discarded[R]) {
-			V.prompt = "Review drawn cards."
-			button("done")
-		} else {
-			V.prompt = "You may discard any cards in your hand before drawing new cards."
-			for (let card of get_hand(R)) {
-				if (!is_dummy(card)) {
-					action("card", card)
-				}
-			}
-			if (L.cards_discarded[R].length == 0) {
-				button("pass")
-			}
-			if (L.cards_discarded[R].length > 0) {
-				button("undo")
-				button("draw")
-			}
-		}
- 	},
-	card(card) {
-		push_undo()
-		console.log(L.cards_discarded[R])
-		discard_card(card)
-		L.cards_discarded[R].push(card)
-	},
-	undo() {
-		let c = G.discard[R].pop()
-		G.hand[R].push(c)
-		array_delete_item(L.cards_discarded[R], c)
-	},
-	draw() {
-		L.has_discarded[R] = true
-
-		while (get_hand(R).length < 4) {
-			draw_card(R)
-			let card = G.hand[R][G.hand[R].length - 1]
-			while (is_must_play_event(card)) {
-				discard_card(G.hand[R][G.hand[R].length - 1])
-				draw_card(R)
-				card = G.hand[R][G.hand[R].length - 1]
-			}
-		}
-	},
-	pass() {
-		log(`${ROLES[R]} did not discard cards.`)
-		this.done()
-	},
-	done() {
-		set_delete(G.active, R)
-
-		if (G.active.length === 0) {
-			for (let who = RUSSIA; who <= FRANCE; ++who) {
-				for (let c of L.cards_discarded[who]) {
-					log(`${ROLES[who]} discarded C${c}.`)
-				}
-			}
-
-			call("june")
-		}
+//=== TURN STRUCTURE ===
+P.begin_turn = function() {
+	if (is_resource_turn(G.turn)) {
+		call("resource_phase")
+	} else {
+		call("turn")
 	}
 }
 
-function who_has_initiative() {
-	return (G.initiative > 0 ? FRANCE : RUSSIA)
-}
-
-P.june = script(`
-	log "=June"
-
-	set G.active [RUSSIA, FRANCE]
-	call turn	
-`)
+// P.resource_phase = {}
 
 P.turn = script(`
-	eval {
-		log_h1("Turn " + get_turn_number(G.turn))
-	}
-	
-	set G.active (1 - G.who_has_initiative)
-	call draw_card
-	set G.active G.who_has_initiative
-	call draw_card
-
-	set G.active [RUSSIA, FRANCE]
-	call play_card_for_orders
-
-	set G.active [RUSSIA, FRANCE]
-	call choose_orders
-
-	set G.active [RUSSIA, FRANCE]
-	call place_orders
-
-
+	call draw_card_to_hand	
 `)
 
-P.draw_card = {
+P.draw_card_to_hand = {
 	_begin() {
-		G.state = "draw_card"
-		L.has_drawn_card = false
-		L.executed_event = false
+		G.active = [RU, FR]
+		L.has_drawn_card = [false, false]
+		L.drawn_card = [-1, -1]
+		L.state = ["draw_card", "draw_card"] //Handling mandatory events which need to be resolved as they are drawn
+		L.events = []
+		//Flag to track actions on "Holy Mother Russia" (Russian)
+		//-1: not executed yet; RU (0): Russia has confirmed event play; FR (1): France has selected the relevant space.
+		L.holy_mother_russia_executed = -1
+
+		log("#Draw Cards")
 	},
 	prompt() {
-		if (L.executed_event) {
-			V.prompt = "Draw a card: done."
-			button("done")
-		} else if (L.has_drawn_card) {
-			V.prompt = `You drew C${L.drawn_card}.`
-			button("confirm")
-		} else {
-			V.prompt = "Draw a card."
-			button("draw")
+		//A mini state machine to handle must-play events without switching to separate event states
+		//draw a card -> review drawn card OR draw a card -> resolve appropriate event -> confirm
+		switch(L.state[R]) { 
+			case "draw_card":
+				V.prompt = "Draw a card to your hand."
+				button("draw")
+				break
+			case "review_drawn_card":
+				V.prompt = `You drew C${L.drawn_card[R]}.`
+				button("confirm")
+				break
+			case `event_${HOLY_MOTHER_RUSSIA_RU}`:
+				if (G.active.includes(FR)) {
+					V.prompt = `C${HOLY_MOTHER_RUSSIA_RU}: Receive 2 additional orders. France will select a space after resolving their actions.`
+				} else {
+					V.prompt = `C${HOLY_MOTHER_RUSSIA_RU}: Receive 2 additional orders. France will designate a RU-controlled Key City.`
+				}
+				button("confirm")
+				break
+			case `event_${EXTREME_WEATHER_RU}`:
+				V.prompt = `C${EXTREME_WEATHER_RU}: Draw a card, FR has -2 orders this turn, 1 fresh SP in each force that uses 'March' or 'Forced March' becomes exhausted.`
+				button("draw")
+				break
+			case `event_${COMMAND_FRICTION}`:
+				V.prompt = `C${COMMAND_FRICTION}: At the beginning of the 'Place Orders' phase, FR may designate an area with more than one 1 RU leader. RU must discard a card to place orders there.`
+				button("confirm")
+				break
+			case `event_${POOR_LOGISTICS}`:
+				V.prompt = `C${POOR_LOGISTICS}: RU may not use 'Place Depot' orders this turn.`
+				button("confirm")
+				break
+			case `event_${DEVASTATED_COUNTRYSIDE}`:
+				V.prompt = `C${DEVASTATED_COUNTRYSIDE}: The effect of Devastation markers is doubled for both sides this turn.`
+				button("confirm")
+				break
+			case `event_${BARCLAY_DE_TOLLY_RESIGNS}`:
+				if (!is_leader_on_map(DE_TOLLY)) {
+					V.prompt = `C${BARCLAY_DE_TOLLY_RESIGNS}: Barclay de Tolly is not on map - no effect.`
+					button("confirm")
+				} else if (is_leader_on_map(KUTUZOV)) {
+					V.prompt = `C${BARCLAY_DE_TOLLY_RESIGNS}: Kutuzov is on map - remove Barclay de Tolly from play.`
+					action("leader", DE_TOLLY)
+				} else {
+					V.prompt = `C${BARCLAY_DE_TOLLY_RESIGNS}: Kutuzov is not on map - no effect.`
+					button("confirm")
+				}
+				break
+			case `event_${POOR_COMMUNICATIONS}`:
+				V.prompt = `C${POOR_COMMUNICATIONS}: At the end of the 'Place Orders' phase, RU may designate 1 placed FR order to remove.`
+				button("confirm")
+				break
+			case `event_${JEROME_GOES_HOME}`:
+				if (!is_leader_on_map(JEROME)) {
+					V.prompt = `C${JEROME_GOES_HOME}: Jérôme is not on map - no effect.`
+					button("confirm")
+				} else {
+					V.prompt = `C${JEROME_GOES_HOME}: Remove Jérôme from play.`
+					action("leader", JEROME)
+				}
+				break
+			case `event${CHAOS_IN_THE_REAR_AREAS}`:
+				V.prompt = `C${CHAOS_IN_THE_REAR_AREAS}: Not implemented yet.`
+				button("confirm")
+			//french winter must-play events not implemented yet (will do after creating relevant functions)
 		}
 	},
 	draw() {
-		draw_card(G.active)
-		L.drawn_card = G.hand[G.active][G.hand[G.active].length - 1]
-		L.has_drawn_card = true
-		log(`${ROLES[G.active]} drew a card.`)
-		if (is_must_play_event(L.drawn_card)) {
-			call("event", { card: L.drawn_card })
+		if (L.state[R] === `event_${EXTREME_WEATHER_RU}`) { //Since another must-play could be drawn, log here
+			log_must_play_event(EXTREME_WEATHER_RU)
+			discard_card(RU, EXTREME_WEATHER_RU)
 		}
-	},
-	done() {
-		end()
-	},
-	confirm() {
-		end()
-	},
-	_resume() {
-		L.executed_event = true
-	}
-}
-
-function get_card_ops(card) {
-	return Number(cards[card].ops)
-}
-
-function place_card_on_table(c) {
-	if (c < 54) {
-		G.russian.played_cards.push(c)
-	} else {
-		G.french.played_cards.push(c)
-	}
-}
-
-function discard_cards_from_table() {
-	for (let who = RUSSIA; who <= FRANCE; ++who) {
-		for (let card of get_played_cards(who)) {
-			if (is_dummy(card)) {
-				array_insert(G.hand[who], 0, card)
-			} else {
-				G.discard[who].push(card)
-			}
-		}
-	}
-
-	G.russian.played_cards = []
-	G.french.played_cards = []
-}
-
-function get_played_cards(who) {
-	return (who === RUSSIA) ? G.russian.played_cards : G.french.played_cards
-}
-
-P.play_card_for_orders = {
-	_begin() {
-		log_h2("Play Cards")
-		G.state = "play_card_for_orders"
-
-		L.played_card = [-1, -1]
-		L.ops_played = [-1, -1]
-	},
-	prompt() {
-		if (L.played_card[R] === -1) {
-			V.prompt = "Play a card to gain additional orders, or play a Dummy."
-			for (let c of G.hand[R]) {
-				action("card", c)
-			}
+		L.drawn_card[R] = draw_card(R)
+		log(`${ROLES[R]} drew a card.`)
+		if (is_must_play_event(L.drawn_card[R])) {
+			L.state[R] = `event_${L.drawn_card[R]}`
+			L.events.push(L.drawn_card[R])
 		} else {
-			V.prompt = `You played C${L.played_card[R]} for ${L.ops_played[R]} additional Orders.`
-			button("confirm")
-			button("undo")
+			L.state[R] = "review_drawn_card"
 		}
-	},
-	card(c) {
-		push_undo()
-		L.played_card[R] = c
-		L.ops_played[R] = get_card_ops(c)
-		array_delete_item(G.hand[R], c)
-		place_card_on_table(c)
-	},
-	undo() {
-		L.played_card[R] = -1
-		L.ops_played[R] = -1
-		G.hand[R].push(get_played_cards(R).pop())
-	},
-	confirm() {
-		set_delete(G.active, R)
-
-		if (G.active.length === 0) {
-			for (let who = RUSSIA; who <= FRANCE; ++who) {
-				log(`${ROLES[who]} played C${L.played_card[who]} (${L.ops_played[who]}).`)
-				for (let c of get_played_cards(who)) {
-					G.discard[who].push(c)
-				}
-			}
-			discard_cards_from_table()
-			G.additional_orders = L.ops_played.slice()
-			end()	
-		}
-	}
-}
-
-function get_first_order(who) {
-	return (who === RUSSIA) ? first_ru_order : first_fr_order
-}
-
-function get_last_order(who) {
-	return (who === RUSSIA) ? last_ru_order : last_fr_order
-}
-
-function get_object_who(who) {
-	return (who === RUSSIA) ? G.russian : G.french
-}
-
-function find_first_available_order(who, type, where) {
-	return get_object_who(who).orders[where]?.find(order => (order.type === type)) ?? -1
-}
-
-function toggle_selected(who, type) {
-	if (find_first_available_order(who, type, AVAILABLE) === -1) {
-		console.log("Order not found!")
-		return
-	}
-	find_first_available_order(who, type, AVAILABLE).selected = !find_first_available_order(who, type, AVAILABLE).selected
-}
-
-function get_order_type(ix) {
-	return data.orders.find(order => (ix === order.id)).type
-}
-
-function get_selected_orders(who) {
-	return (who === RUSSIA) ? G.russian.selected_orders : G.french.selected_orders
-}
-
-P.choose_orders = {
-	_begin() {
-		log_h2("Choose Orders")
-		G.state = "choose_orders"
-
-		G.russian.selected_orders = []
-		G.french.selected_orders = []
-
-		L.num_orders = [0, 0]
-		for (let who = RUSSIA; who <= FRANCE; ++who) {
-			L.num_orders[who] = 2 + G.additional_orders[who]
-		}
-
-		L.is_finished = [false, false]
-	},
-	prompt() {
-		if (L.num_orders[R] > 0) {
-			V.prompt = `Select up to ${L.num_orders[R]} orders.`
-			for (let order = get_first_order(R); order <= get_last_order(R); ++order) {
-				if (!get_selected_orders(R).includes(order)) {
-					action("order", order)
-				}
-			}
-		} else {
-			V.prompt = `Select orders: Done.`
-			button("done")
-		}
-		if (get_selected_orders(R).length > 0) {
-			button("undo")
-		}
-	},
-	order(order) {
-		toggle_selected(R, get_order_type(order))
-		get_selected_orders(R).push(order)
-		L.num_orders[R]--
-	},
-	undo() {
-		toggle_selected(R, get_order_type(get_selected_orders(R)[get_selected_orders(R).length - 1]))
-		array_delete(get_selected_orders(R), get_selected_orders(R).length - 1)
-		L.num_orders[R]++
-	},
-	done() {
-		L.is_finished[R] = true
-		set_delete(G.active, R)
-
-		for (let order of get_selected_orders(R)) {
-			toggle_selected(R, get_order_type(order))
-		}
-
-		if (L.is_finished[RUSSIA] && L.is_finished[FRANCE]) {
-			for (let who = RUSSIA; who <= FRANCE; ++who) {
-				log(`${ROLES[who]} chose ${get_selected_orders(who).length} orders.`)
-			}
-			end()
-		}
-	}
-}
-
-function has_friendly_sp(who, where) {
-	if (!G.troops[where]) { return false }
-	if (who === RUSSIA) {
-		return (RUSSIA in G.troops[where])
-	} else {
-		return (FRANCE in G.troops[where]) || (PRUSSIA in G.troops[where]) || (AUSTRIA in G.troops[where])
-	}
-}
-
-function is_russian_order(order) {
-	return (first_ru_order <= order) && (order <= last_ru_order)
-}
-
-function is_french_order(order) {
-	return (first_fr_order <= order) && (order <= last_fr_order)
-}
-
-function get_order_owner(order) {
-	return is_russian_order(order) ? RUSSIA : FRANCE
-}
-
-function get_player_orders(who) {
-	return (who === RUSSIA) ? G.russian.orders : G.french.orders
-}
-
-function move_order_from_pool(order, where) {
-	let player_orders = get_player_orders(get_order_owner(order))
-
-	if (!player_orders[where]) {
-		player_orders[where] = []
-	}
-
-	let order_ix = player_orders[AVAILABLE].findIndex(o => (o.id == order)) ?? null
-
-	if (order_ix !== null) {
-		player_orders[where].push(object_copy(player_orders[AVAILABLE][order_ix]))
-		array_delete(player_orders[AVAILABLE], order_ix)
-	} else {     
-		console.log(`Order ${order} not found in Available.`)
-	}
-}
-
-P.place_orders = {
-	_begin() {
-		log_h2("Place Orders")
-		G.state = "place_orders"
-
-		L.selected_orders = [G.russian.selected_orders, G.french.selected_orders]
-
-		L.selected_order = [-1, -1]
-		L.is_order_selected = [false, false]
-
-		L.is_finished = [false, false]
-	},
-	prompt() {
-		if (L.selected_orders[R].length === 0) {
-			V.prompt = `Place orders: Done.`
-			button("done")
-		} else if (L.selected_order[R] !== -1) {
-			V.prompt = `Select a space with friendly SPs to place ${get_order_type(L.selected_order[R])}.`
-			for (let space = 1; space < spaces.length; ++space) {
-				if (has_friendly_sp(R, space)) {
-					action("space", space)
-				}   
-			}
-			if (G.french_logistic_preparations && (R === FRANCE) && (get_order_type(L.selected_order[R]) === PLACE_DEPOT)) { //French Logistic Preparations special rule
-				action("space", S_KOVNO)
-			}
-		} else {
-			V.prompt = `Select an order to place (${L.selected_orders[R].length} remaining).`
-			for (let order of L.selected_orders[R]) {
-				action("order", order)
-			}
-		}
-	},
-	order(order) {
-		L.selected_order[R] = order
-	},
-	space(space) {
-		move_order_from_pool(L.selected_order[R], space)
-		array_delete_item(L.selected_orders[R], L.selected_order[R])
-		L.selected_order[R] = -1
-	},
-	done() {
-		L.is_finished[R] = true
-
-		if (L.is_finished[RUSSIA] && L.is_finished[FRANCE]) {
-			end()
-		}
-	}
-}
-
-//=== EVENTS ===
-
-P.event = script(`
-	eval {card_box_begin(L.card)}
-	call ("event_" + L.card)
-	eval {
-		discard_card(L.card)
-		card_box_end()
-	}
-`)
-
-
-P.event_76 = {
-	_begin() {
-	},
-	prompt() {
-		V.prompt = `C76: Russia may designate one order to remove after placing orders.`
-		button("confirm")
-	},
-	confirm() {
-		log("Russia may designate one order to remove after placing orders.")
-		end()
-	}
-}
-
-function set_out_of_play(leader) {
-	G.leaders[leader] = OUT_OF_PLAY
-}
-
-P.event_78 = {
-	prompt() {
-		V.prompt = `C78: Remove Jérôme from play.`
-		action("leader", JEROME)
 	},
 	leader(leader) {
-		push_undo()
-		set_out_of_play(JEROME)
-		log("Jérôme removed from play.")
-		end()
-	}
-}
-
-P.event_93 = {
-	prompt() {
-		V.prompt = "C93: todo-not implemented yet."
-		button("done")
+		if (L.state[R] === `event_${BARCLAY_DE_TOLLY_RESIGNS}`) {
+			G.leaders[DE_TOLLY] = POOL
+		} else if (L.state[R] === `event_${JEROME_GOES_HOME}`) {
+			G.leaders[JEROME] = POOL
+		}
+		this.confirm()
 	},
-	done() {
-		end()
-	}
-}
-
-//=== SETUP ===
-function on_setup(scenario, options) {
-	G.state = ""
-
-	G.leaders = Array(leaders.length).fill(AVAILABLE)
-	G.troops = {}
-	G.devastation = {}
-
-	G.french = {}
-	G.french.played_cards = []
-	G.russian = {}
-	G.russian.played_cards = []
-
-	G.russian.depots = Array(14).fill(AVAILABLE)
-	G.french.depots = Array(7).fill(AVAILABLE)
-
-	G.russian.orders = {}
-	G.french.orders = {}
-
-	G.deck = [[], []]
-	G.discard = [[], []]
-
-	setup_orders()
-	switch(scenario) {
-		default:
-			setup_grand_campaign()
-	}
-}
-
-function setup_grand_campaign() {
-	log_h1("The Grand Campaign", false)
-	log("French Logistic Preparations.")
-	log("Winter.")
-	G.turn = JUNE_5
-	G.last_turn = NOV_5
-
-	G.french_logistic_preparations = true
-
-	G.vp = -14
-	G.initiative = 1
-	G.who_has_initiative = FRANCE
-	//1-45, 1-39 
-	
-	for (let card = 1; card <= 45; ++card) {
-		if (card <= 39) {
-			G.deck[FRANCE].push(get_card(FRANCE, card))
+	confirm() {
+		if (L.state[R] !== "review_drawn_card") { //i.e. is a must-play event
+			log_must_play_event(L.drawn_card[R])
+			discard_card(get_card_owner(L.drawn_card[R]), L.drawn_card[R])
 		}
-		G.deck[RUSSIA].push(card)
-	}
-	shuffle(G.deck[RUSSIA])
-	shuffle(G.deck[FRANCE])
-
-	let cards = [[WELL_DISCIPLINED_RETREAT, CONFUSED_RETREAT, EVASIVE_MANEUVERS], [HARD_MARCHING, FAST_MARCHING, MURATS_CAVALRY]]
-	for (let who = RUSSIA; who <= FRANCE; ++who) {
-		for (let c = 0; c < cards[who].length; ++c) {
-			array_delete_item(G.deck[who], cards[who][c])
+		set_delete(G.active, R)
+		G.events = L.events.slice()
+		if (Array.isArray(G.active) && G.active.length === 0) {
+			end()
 		}
 	}
-
-	G.hand = [[], []]
-	setup_june_5()
-
-	G.active = [RUSSIA, FRANCE]
-	call("setup_hand")
 }
 
-function setup_june_5() {
-	setup_russian_troop(S_RIGA, FRESH_INFANTRY, 2)
-	setup_russian_troop(S_DUNABURG, FRESH_INFANTRY, 1)
-	setup_depot(RUSSIA, S_DUNABURG)
-	setup_leader(WITTGENSTEIN, S_KALTINENAI)
-	setup_russian_troop(S_KALTINENAI, FRESH_INFANTRY, 2)
-	setup_russian_troop(S_VILKOMIR, FRESH_CAVALRY, 2)
-	setup_russian_troop(S_VILKOMIR, FRESH_INFANTRY, 2)
-	setup_leader(ALEXANDER, S_VILNA)
-	setup_leader(TOLLY, S_VILNA)
-	setup_russian_troop(S_VILNA, FRESH_INFANTRY, 6)
-	setup_depot(RUSSIA, S_VILNA)
-	setup_russian_troop(S_SVENCIONYS, FRESH_INFANTRY, 3)
-	setup_russian_troop(S_MOLODECHNO, FRESH_CAVALRY, 1)
-	setup_russian_troop(S_MOLODECHNO, FRESH_INFANTRY, 1)
-	setup_depot(RUSSIA, S_MINSK)
-	setup_russian_troop(S_LIDA, FRESH_CAVALRY, 1)
-	setup_russian_troop(S_LIDA, FRESH_CAVALRY, 2)
-	setup_leader(PLATOV, S_GRODNO)
-	setup_russian_troop(S_GRODNO, FRESH_COSSACK, 2)
-	setup_russian_troop(S_BIALYSTOK, FRESH_CAVALRY, 1)
-	setup_leader(BAGRATION, S_VOLKOVYSK)
-	setup_russian_troop(S_VOLKOVYSK, FRESH_INFANTRY, 4)
-	setup_russian_troop(S_BREST, FRESH_INFANTRY, 1)
-	setup_depot(RUSSIA, S_BREST)
-	setup_russian_troop(S_KOVEL, FRESH_CAVALRY, 1)
-	setup_russian_troop(S_KOVEL, EXHAUSTED_CAVALRY, 1)
-	setup_leader(TORMASOV, S_LUTSK)
-	setup_russian_troop(S_LUTSK, FRESH_INFANTRY, 1)
-	setup_russian_troop(S_LUTSK, EXHAUSTED_INFANTRY, 1)
-	setup_depot(RUSSIA, S_LUTSK)
-	setup_russian_troop(S_ROVNO, FRESH_INFANTRY, 1)
-	setup_russian_troop(S_DUBNO, FRESH_INFANTRY, 1)
-	setup_russian_troop(S_TOROPETS, FRESH_INFANTRY, 2)
-	setup_russian_troop(S_POLOTSK, FRESH_INFANTRY, 1)
-	setup_russian_troop(S_VITEBSK, FRESH_INFANTRY, 1)
-	setup_depot(RUSSIA, S_VITEBSK)
-	setup_russian_troop(S_SMOLENSK, FRESH_INFANTRY, 1)
-	setup_depot(RUSSIA, S_SMOLENSK)
-	setup_russian_troop(S_BORISOV, FRESH_INFANTRY, 1)
-	setup_russian_troop(S_MOGILEV, FRESH_INFANTRY, 1)
-	setup_depot(RUSSIA, S_MOGILEV)
-	setup_russian_troop(S_BOBRUYSK, FRESH_INFANTRY, 1)
-	setup_russian_troop(S_MOZYR, FRESH_INFANTRY, 1)
-	setup_russian_troop(S_KIEV, FRESH_INFANTRY, 1)
-	setup_depot(RUSSIA, S_KIEV)
-	setup_depot(RUSSIA, S_ZHITOMIR)
-	setup_russian_troop(S_MOSCOW, FRESH_INFANTRY, 1)
-	setup_depot(RUSSIA, S_MOSCOW)
-	setup_depot(RUSSIA, S_VYAZMA)
-	setup_russian_troop(S_KALUGA, FRESH_INFANTRY, 1)
-	setup_depot(RUSSIA, S_KALUGA)
-	setup_russian_troop(S_OREL, FRESH_INFANTRY, 1)
-	setup_depot(RUSSIA, S_OREL)
-	setup_russian_troop(S_VORONEZH, FRESH_COSSACK, 1)
-
-	setup_troop(PRUSSIA, S_PRUSSIA_NORTH, FRESH_INFANTRY, 3)
-
-	setup_leader(NAPOLEON, S_KALVARIJA)
-	setup_leader(MURAT, S_KALVARIJA)
-	setup_french_troop(S_KALVARIJA, FRESH_INFANTRY, 19)
-	setup_french_troop(S_KALVARIJA, FRESH_CAVALRY, 5)
-	setup_french_troop(S_KALVARIJA, FRESH_GUARD, 4)
-
-	setup_leader(BEAUHARNAIS, S_SUWALKI)
-	setup_french_troop(S_SUWALKI, FRESH_INFANTRY, 7)
-	setup_french_troop(S_SUWALKI, FRESH_CAVALRY, 1)
-
-	setup_leader(JEROME, S_SZCZUCZY)
-	setup_french_troop(S_SZCZUCZY, FRESH_INFANTRY, 6)
-	setup_french_troop(S_SZCZUCZY, FRESH_CAVALRY, 2)
-
-	setup_french_troop(S_GRAND_DUCHY_OF_WARSAW_NORTH, FRESH_INFANTRY, 2)
-
-	setup_leader(SCHWARZENBERG, S_GRAND_DUCHY_OF_WARSAW_SOUTH)
-	setup_troop(AUSTRIA, S_GRAND_DUCHY_OF_WARSAW_SOUTH, FRESH_INFANTRY, 3)
-
-	setup_troop(AUSTRIA, S_AUSTRIA, FRESH_INFANTRY, 1)
-
-	set_devastation(S_KALVARIJA, 1)
-	set_devastation(S_SUWALKI, 1)
-	set_devastation(S_SZCZUCZY, 1)
-
-	push_to_hand(FRANCE, [FRANCE_DUMMY, HARD_MARCHING, FAST_MARCHING, MURATS_CAVALRY])
-	push_to_hand(RUSSIA, [RUSSIA_DUMMY, WELL_DISCIPLINED_RETREAT, CONFUSED_RETREAT, EVASIVE_MANEUVERS])
+function log_must_play_event(c) {
+	card_box_begin(c)
+	switch(c) {
+		case HOLY_MOTHER_RUSSIA_RU:
+			log("Russia +2 orders this turn.")
+			break
+		case EXTREME_WEATHER_RU:
+			log("Russia drew a card.")
+			log("France has -2 orders this turn.")
+			log("1 fresh SP in each force that uses 'March' or 'Forced March' becomes exhausted.")
+			break
+		case COMMAND_FRICTION:
+			log("France may designate an area with more than 1 RU leader at the beginning of the 'Place Orders' phase.")
+			break
+		case POOR_LOGISTICS:
+			log("Russia may not use 'Place Depot' orders this turn.")
+			break
+		case DEVASTATED_COUNTRYSIDE:
+			log("The effect of Devastation markers is doubled this turn.")
+			break
+		case BARCLAY_DE_TOLLY_RESIGNS:
+			log("Barclay de Tolly removed.")
+			break
+		case POOR_COMMUNICATIONS:
+			log("At the end of the 'Place Orders' phase, RU may designate 1 placed FR order to remove.")
+			break
+		case JEROME_GOES_HOME:
+			log("Jérôme Bonaparte removed.")
+			break
+		case CHAOS_IN_THE_REAR_AREAS:
+			log("Not implemented yet.")
+			break
+		
+	}
+	card_box_end()
 }
 
-const FORCED_MARCH = "forced_march"
-const CAVALRY_PATROLS = "cavalry_patrols"
-const MARCH = "march"
-const EVADE = "evade"
-const DEFEND = "defend"
-const RALLY = "rally"
-const COSSACK_RAID = "cossack_raid"
-const PLACE_DEPOT = "place_depot"
-const FORAGE = "forage"
-const DUMMY_ORDER = "dummy_order"
-
-let num = 1
-
-function define_order(who, what, where, num_orders) {
-    for (let i = 0; i < num_orders; ++i) {
-        if (who === RUSSIA) {
-            if (!G.russian.orders[where]) {
-                G.russian.orders[where] = []
-            }
-            G.russian.orders[where].push({ type: what, id: num, selected: false })
-        } else {
-            if (!G.french.orders[where]) {
-                G.french.orders[where] = []
-            }
-            G.french.orders[where].push({ type: what, id: num, selected: false })
-        }
-        num++
-    }
-}
-
-function setup_order_list(who, what, num) {
-    define_order(who, what, AVAILABLE, num);
-}
-
-function setup_orders() {
-	setup_order_list(RUSSIA, FORCED_MARCH, 4)
-	setup_order_list(RUSSIA, CAVALRY_PATROLS, 2)
-	setup_order_list(RUSSIA, MARCH, 5)
-	setup_order_list(RUSSIA, EVADE, 4)
-	setup_order_list(RUSSIA, DEFEND, 2)
-	setup_order_list(RUSSIA, RALLY, 2)
-	setup_order_list(RUSSIA, COSSACK_RAID, 2)
-	setup_order_list(RUSSIA, PLACE_DEPOT, 1)
-	setup_order_list(RUSSIA, FORAGE, 2)
-	setup_order_list(RUSSIA, DUMMY_ORDER, 4)
-
-	setup_order_list(FRANCE, FORCED_MARCH, 5)
-	setup_order_list(FRANCE, CAVALRY_PATROLS, 1)
-	setup_order_list(FRANCE, MARCH, 5)
-	setup_order_list(FRANCE, EVADE, 3)
-	setup_order_list(FRANCE, DEFEND, 1)
-	setup_order_list(FRANCE, RALLY, 2)
-	setup_order_list(FRANCE, PLACE_DEPOT, 1)
-	setup_order_list(FRANCE, FORAGE, 3)
-	setup_order_list(FRANCE, DUMMY_ORDER, 4)
-}
-
-//=== VIEW ===
-function on_view() {
-	V.state = G.state
-
-	V.turn = G.turn
-	V.last_turn = G.last_turn
-	V.french_logistic_preparations = G.french_logistic_preparations
-	V.vp = G.vp
-	V.initiative = G.initiative
-	V.leaders = G.leaders
-	V.current_hand = (R === RUSSIA) ? G.hand[RUSSIA] : G.hand[FRANCE]
-	V.active = G.active
-	V.troops = G.troops
-	V.hand_length = [G.hand[RUSSIA].length, G.hand[FRANCE].length]
-	V.devastation = G.devastation
-	V.depot = [...G.russian.depots, ...G.french.depots]
-
-	V.french = G.french
-	V.russian = G.russian
-
-}
-function on_query(q) {}
-function on_assert() {}
-
-//=== LOG ===
-function log_h1(msg, br = true) {
-	if (br) log_br()
-	log(`=${msg}`)
-	log_br()
-}
-
-function log_h2(msg) {
-	log_br()
-	log(`#${msg}`)
-	log_br()
-}
-
-function log_br() {
-	log("")
+//=== LOG HELPERS ===
+function log_h1(text) {
+	log(`=${text}`)
 }
 
 function card_box_begin(card) {
-	log_br()
+	log()
 	log(`{C${card}`)
 }
 
@@ -1148,6 +1352,10 @@ function card_box_end() {
 }
 
 //=== FRAMEWORK ===
+function on_query(q) {}
+function on_assert() {}
+//function on_static_view() {}
+
 function log(s) {
 	if (s === undefined) {
 		if (G.log.length > 0 && G.log[G.log.length - 1] !== "")

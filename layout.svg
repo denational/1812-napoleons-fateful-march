@@ -22,13 +22,13 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="0.7627035"
-     inkscape:cx="2025.0333"
-     inkscape:cy="1617.2733"
-     inkscape:window-width="1920"
-     inkscape:window-height="991"
-     inkscape:window-x="2391"
-     inkscape:window-y="-9"
+     inkscape:zoom="2.1572513"
+     inkscape:cx="293.66074"
+     inkscape:cy="178.23608"
+     inkscape:window-width="2400"
+     inkscape:window-height="1261"
+     inkscape:window-x="-9"
+     inkscape:window-y="64"
      inkscape:window-maximized="1"
      inkscape:current-layer="svg157" />
   <image
@@ -1313,21 +1313,21 @@
      r="11"
      id="circle157" />
   <rect
-     style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.597"
+     style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.50075"
      id="rect1"
-     width="245.17999"
-     height="266.81403"
-     x="50.478333"
-     y="1693.9741"
-     inkscape:label="France Force Pool" />
+     width="245.27625"
+     height="187.64273"
+     x="50.430206"
+     y="1693.926"
+     inkscape:label="France Pool Depots" />
   <rect
-     style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.597"
+     style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.504056"
      id="rect2"
-     width="244.52499"
-     height="264.19177"
-     x="53.100582"
-     y="59.656208"
-     inkscape:label="Russia Force Pool" />
+     width="244.61794"
+     height="188.26204"
+     x="53.054111"
+     y="135.6324"
+     inkscape:label="Russia Pool Depots" />
   <rect
      style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.597"
      id="rect3"
@@ -1400,4 +1400,20 @@
      x="1984.0607"
      y="1656.9348"
      inkscape:label="NOV" />
+  <rect
+     style="fill:#1579c5;stroke:#ffffff;stroke-width:0.597"
+     id="rect12"
+     width="244.756"
+     height="76.949776"
+     x="50.527264"
+     y="1882.4882"
+     inkscape:label="France Pool Leaders" />
+  <rect
+     style="fill:#1579c5;stroke:#ffffff;stroke-width:0.597"
+     id="rect12-9"
+     width="244.756"
+     height="76.949776"
+     x="53.281498"
+     y="58.60841"
+     inkscape:label="Russia Pool Leaders" />
 </svg>

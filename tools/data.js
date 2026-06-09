@@ -895,7 +895,7 @@ const data = {
     },
     {
       "id": 51,
-      "name": "Dünaburg",
+      "name": "D�naburg",
       "type": "fortress",
       "nation": null,
       "supply": false,

@@ -1,15 +1,12 @@
 "use strict"
 
-
-const RUSSIA = 0
-const FRANCE = 1
-const PRUSSIA = 2
-const AUSTRIA = 3
-
+const RU = 0
+const FR = 1
+const PR = 2
+const AU = 3
 
 const ROLES = ["Russia", "France"]
 const abbreviations = ["ru", "fr", "pr", "au"]
-
 
 function get_abbreviation(who) {
     return abbreviations[who]
@@ -25,7 +22,7 @@ const space_length = spaces.length
 
 const AVAILABLE = 0
 const FRENCH_CASUALTIES = 156
-const OUT_OF_PLAY = 157
+const OUT_OF_PLAY = -1
 
 function get_space_name(space) {
     return spaces[space].name
@@ -55,11 +52,11 @@ function get_leader_faction(leader) {
 }
 
 function get_first_leader(faction) {
-    return (faction === RUSSIA) ? first_ru_leader : first_fr_leader
+    return (faction === RU) ? first_ru_leader : first_fr_leader
 }
 
 function get_last_leader(faction) {
-    return (faction === RUSSIA) ? last_ru_leader : last_fr_leader
+    return (faction === RU) ? last_ru_leader : last_fr_leader
 }
 
 function has_friendly_leader(who, s) {
@@ -92,7 +89,7 @@ const first_fr_order = 29
 const last_fr_order = 53
 
 function get_player_orders(who) {
-    return (who === RUSSIA) ? G.russian.orders : (who === FRANCE) ? G.french.orders : null
+    return (who === RU) ? G.russian.orders : (who === FR) ? G.french.orders : null
 }
 
 /* TROOPS */
@@ -197,10 +194,10 @@ function get_used(who, type) {
             return used_troops[CAVALRY][who]
         case FRESH_COSSACK:
         case EXHAUSTED_COSSACK:
-            return used_troops[SPECIAL][RUSSIA]
+            return used_troops[SPECIAL][RU]
         case FRESH_GUARD:
         case EXHAUSTED_GUARD:
-            return used_troops[SPECIAL][FRANCE]
+            return used_troops[SPECIAL][FR]
     }
 }
 
@@ -214,10 +211,10 @@ function incr_used(who, type) {
             return used_troops[CAVALRY][who]++; break
         case FRESH_COSSACK:
         case EXHAUSTED_COSSACK:
-            return used_troops[SPECIAL][RUSSIA]++; break
+            return used_troops[SPECIAL][RU]++; break
         case FRESH_GUARD:
         case EXHAUSTED_GUARD:
-            return used_troops[SPECIAL][FRANCE]++; break
+            return used_troops[SPECIAL][FR]++; break
     }
 }
 
@@ -245,12 +242,8 @@ const NOV_5 = 30
 var num_devastated = 0
 
 /* MISC FUNCTIONS */
-function get_pool(side) {
-    return (side === RUSSIA) ? "ru_pool" : "fr_pool"
-}
-
-function get_played_cards(side) {
-    return (side === RUSSIA) ? V.russian.played_cards : V.french.played_cards
+function get_pool_depots(side) {
+    return (side === RU) ? "ru_pool_depots" : "fr_pool_depots"
 }
 
 //=== INITIALIZE VIEW ===
@@ -259,16 +252,19 @@ function on_init() {
     define_panel("#plan_orders", "plan_orders", 0)
     define_panel("#played", "played", 0)
     define_panel("#hand", "hand", 0)
-    define_panel("#ru_leaders", "leaders", RUSSIA)
-    define_panel("#fr_leaders", "leaders", FRANCE)
+    define_panel("#ru_leaders", "leaders", RU)
+    define_panel("#fr_leaders", "leaders", FR)
    
     /* SPACES */
     for (let s = 1; s < space_length; ++s) {
         define_space("space", s, layout[get_space_name(s)])
+            .tooltip(get_space_name(s))
         define_stack("space_stack", s, layout[get_space_name(s)])
     }
-    define_layout("ru_pool", 0, layout["Russia Force Pool"], "square")
-    define_layout("fr_pool", 0, layout["France Force Pool"], "square")
+    define_layout("ru_pool_depots", 0, layout["Russia Pool Depots"], "square")
+    define_layout("fr_pool_depots", 0, layout["France Pool Depots"], "square")
+    define_layout("ru_pool_leaders", 0, layout["Russia Pool Leaders"], "square")
+    define_layout("fr_pool_leaders", 0, layout["France Pool Leaders"], "square")
     define_layout("fr_casualties", 0, layout["France Casualties"], "square")
 
     /* ORDERS */
@@ -329,8 +325,8 @@ function on_init() {
 
     /* TRACKS */
     define_layout_track_v("track-vp", 0, 20, layout["VP Track"])
-    define_marker("vp", FRANCE, "fr")
-    define_marker("vp", RUSSIA, "ru")
+    define_marker("vp", FR, "fr")
+    define_marker("vp", RU, "ru")
 
     define_layout("track-time", JUNE_5, layout["June 5"])
     define_layout_track_h("track-time", JULY_5, JULY_R, layout["July"])
@@ -342,16 +338,16 @@ function on_init() {
     define_marker("time", 1, "end")
 
     define_layout_track_v("track-initiative", 1, 4, layout["Initiative Track"])
-    define_marker("initiative", FRANCE, "fr")
-    define_marker("initiative", RUSSIA, "ru")
+    define_marker("initiative", FR, "fr")
+    define_marker("initiative", RU, "ru")
 }
 
 //=== UPDATE VIEW ===
 function on_update() {
     begin_update()
 
-    roles[RUSSIA].stat.innerHTML = `${V.hand_length[RUSSIA]} cards`
-    roles[FRANCE].stat.innerHTML = `${V.hand_length[FRANCE]} cards`
+    roles[RU].stat.innerHTML = `${V.hand_length[RU]} cards`
+    roles[FR].stat.innerHTML = `${V.hand_length[FR]} cards`
 
     //Reset counters
     reset_used()
@@ -367,16 +363,7 @@ function on_update() {
         populate("hand", 0, "card", c)
     }
 
-    if (get_played_cards(R).length === 0) {
-        update_panel_show("played", 0, false)
-    } else {
-        update_panel_show("played", 0, true)
-        for (let c of get_played_cards(R)) {
-            populate("played", 0, "card", c)
-        }
-    }
-
-    update_orders()    
+    //update_orders()    
 
     action_button("done", "Done")
     action_button("draw", "Draw")
@@ -394,16 +381,16 @@ function update_tracks() {
 
     //VP
     if (V.vp >= 0) {
-        populate("track-vp", V.vp, "vp", FRANCE)
+        populate("track-vp", V.vp, "vp", FR)
     } else {
-        populate("track-vp", Math.abs(V.vp), "vp", RUSSIA)
+        populate("track-vp", Math.abs(V.vp), "vp", RU)
     }
 
     //Initiative
     if (V.initiative >= 0) {
-        populate("track-initiative", V.initiative, "initiative", FRANCE)
+        populate("track-initiative", V.initiative, "initiative", FR)
     } else {
-        populate("track-initiative", Math.abs(V.initiative), "initiative", RUSSIA)
+        populate("track-initiative", Math.abs(V.initiative), "initiative", RU)
     }
 }
 
@@ -412,12 +399,12 @@ function update_leaders() {
         switch(get_leader_location(leader)) {
             case OUT_OF_PLAY: continue;
             case AVAILABLE:
-                populate(get_pool(get_leader_faction(leader)), 0, "leader", leader); break
+                populate((get_leader_faction(leader) === RU) ? "ru_pool_leaders" : "fr_pool_leaders", 0, "leader", leader); break
             case FRENCH_CASUALTIES:
                 populate("fr_casualties", 0, "leader", leader); break
             default:
                 if (is_seniormost_leader(leader, get_leader_location(leader))) {
-                    populate("space", get_leader_location(leader), "leader", leader)
+                    populate("space_stack", get_leader_location(leader), "leader", leader)
                     populate("leaders", get_leader_faction(leader), "leader_board", leader)
                 } else {
                     populate("subordinate_leaders", get_seniormost_leader(get_leader_faction(leader), get_leader_location(leader)), "leader", leader)
@@ -439,11 +426,16 @@ function update_troops() {
                 else
                     update_keyword(get_troop_name(troop_type), get_used(owner, troop_type), "exhausted")
 
-                if (has_friendly_leader(owner, s)) {
-                    populate(`subordinate_${get_troop_bucket(troop_type)}`, get_seniormost_leader(owner, s), get_troop_name(troop_type), get_used(owner, troop_type))
+                if (Number(space) === FRENCH_CASUALTIES) {
+                    populate("fr_casualties", 0, get_troop_name(troop_type), get_used(owner, troop_type))
                 } else {
-                    populate("space_stack", s, get_troop_name(troop_type), get_used(owner, troop_type))
+                    if (has_friendly_leader(owner, s)) { //If there's a friendly leader in the space, put the troops on his mat
+                        populate(`subordinate_${get_troop_bucket(troop_type)}`, get_seniormost_leader(owner, s), get_troop_name(troop_type), get_used(owner, troop_type))
+                    } else { //Or else stack them on the map
+                        populate("space_stack", s, get_troop_name(troop_type), get_used(owner, troop_type))
+                    }
                 }
+                
                 const cntr = document.querySelector(`.piece.${get_troop_name(troop_type)}.${get_abbreviation(owner)}.n${get_used(owner, troop_type)}`)
 
                 if (!cntr) {
@@ -459,22 +451,24 @@ function update_troops() {
 }
 
 function update_depots() {
-    for (let depot = 0; depot < V.depot.length; ++depot) {
-        if (V.depot[depot] === AVAILABLE) {
-            populate(get_pool((depot < 14 ? RUSSIA : FRANCE)), 0, "depot", depot)
+    for (let depot = 0; depot < V.depots.length; ++depot) {
+        if (V.depots[depot] === AVAILABLE) {
+            populate(get_pool_depots((depot < 14 ? RU : FR)), 0, "depot", depot)
         } else {
-            populate("space", V.depot[depot], "depot", depot)
+            populate("space", V.depots[depot], "depot", depot)
         }
     }
 }
 
 function update_devastation() {
-    for (let dev in V.devastation) {
-        update_keyword("devastation", num_devastated, `lvl${V.devastation[dev]}`)
-        
-        populate("space", Number(dev), "devastation", num_devastated)
+    let num_devastated = 0
+    for (let dev = 1; dev < V.devastation.length; ++dev) {
+        if (Number(V.devastation[Number(dev)]) > 0) {
+            populate("space", Number(dev), "devastation", num_devastated)
+            update_keyword("devastation", num_devastated, `lvl${V.devastation[dev]}`)
 
-        num_devastated++
+            num_devastated++
+        }
     }
 }
 

@@ -108,6 +108,10 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	z-index: 20;
 }
 
+.space_stack {
+	z-index: 5;
+}
+
 /* PANELS */
 #panels {
 	margin: 20px auto;
@@ -156,12 +160,6 @@ body.Russia header.your_turn {background-color: var(--russia);}
 		drop-shadow(0 2px 0 yellow)
 		drop-shadow(-2px 0 0 yellow)
 		drop-shadow(2px 0 0 yellow)
-}
-
-.space > .piece.leader {
-	position: absolute;
-	left: -20px;
-	top: -20px;
 }
 
 .piece.leader.Alexander {background-image: url(pieces/leader_Alexander.png);}
@@ -374,6 +372,11 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	z-index: -2;
 }
 
+.space > .marker.devastation { /* top left */
+	top: -35px;
+	left: -35px;
+}
+
 .marker.devastation.lvl1 { background-image: url(pieces/devastation-l1.png);}
 .marker.devastation.lvl2 { background-image: url(pieces/devastation-l2.png);}
 .marker.devastation.lvl3 { background-image: url(pieces/devastation-l3.png);}
@@ -384,6 +387,11 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	height: 40px;
 	left: -30px;
 	bottom: -20px;
+}
+
+.space > .marker.depot {
+	bottom: -25px;
+	left: -40px;
 }
 
 .marker.depot.ru { background-image: url(pieces/green_cube.svg);}
