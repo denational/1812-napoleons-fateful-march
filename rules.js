@@ -180,7 +180,13 @@ function is_must_play_event(c) {
 	return cards[c].immediate
 }
 
+function get_card_ops(card) {
+	return cards[card].ops
+}
+
 /* SPACES */
+const spaces = data.spaces
+
 const OUT_OF_PLAY = -1
 const POOL = 0
 const S_PRUSSIA_NORTH = 1 //The northern of the two "Prussia" spaces
@@ -343,6 +349,29 @@ const FRENCH_CASUALTIES = 156
 
 const space_count = 154
 
+function is_key_city(s) {
+	return spaces[s].type === "key_city" || spaces[s].type === "key_fortress" || spaces[s].type === "moscow"
+}
+
+function is_fr_controlled(s) {
+	if (!G.troops[s]) return false
+	if (!G.troops[s][FR] && !G.troops[s][AU] && !G.troops[s][PR]) return false
+	if (G.troops[s][RU]) return false
+	return true
+}
+
+function is_ru_controlled(s) {
+	return !is_fr_controlled(s)
+}
+
+function get_space_name(s) {
+	return data.spaces[s].name
+}
+
+function get_space_control(s) {
+	return is_fr_controlled(s) ? FR : RU
+}
+
 /* LEADERS */
 const ALEXANDER_I = 0
 const KUTUZOV = 1
@@ -360,6 +389,11 @@ const DAVOUT = 11
 const MURAT = 12
 const SCHWARZENBERG = 13
 
+const first_ru_leader = ALEXANDER_I
+const last_ru_leader = PLATOV
+const first_fr_leader = NAPOLEON
+const last_fr_leader = SCHWARZENBERG
+
 const leader_count = 14
 
 function get_leader_location(leader) {
@@ -367,8 +401,22 @@ function get_leader_location(leader) {
 }
 
 function is_leader_on_map(leader) {
-	return (get_leader_location(leader) !== POOL) || (get_leader_location(leader) !== OUT_OF_PLAY)
+	return (get_leader_location(leader) !== POOL) && (get_leader_location(leader) !== OUT_OF_PLAY)
 }
+
+function get_first_leader(who) {
+	return (who === RU) ? first_ru_leader : first_fr_leader
+}
+
+function get_last_leader(who) {
+	return (who === RU) ? last_ru_leader : last_fr_leader
+}
+
+function count_num_eliminated_leaders(who) {
+	return G.leaders.slice(get_first_leader(who), get_last_leader(who)).filter(loc => loc === OUT_OF_PLAY).length
+}
+
+
 
 //Troops
 const FRESH_INFANTRY = 0
@@ -446,9 +494,23 @@ function get_month_name(turn) {
 	}
 }
 
+function get_season(turn) {
+	return (get_month(turn) >= OCT) ? WINTER : SUMMER
+}
+
 /* DEPOTS */
 const NUM_DEPOTS_RU = 14
 const NUM_DEPOTS_FR = 7
+
+function shift_initiative_in_favor_of_russia() {
+	if (G.initiative > -4) {G.initiative--}
+	if (G.initiative === 0) {G.initiative--} //No 0
+}
+
+function shift_initiative_in_favor_of_france() {
+	if (G.initiative < 4) {G.initiative++}
+	if (G.initiative === 0) {G.initiative++} //No 0
+}
 
 //=== VIEW ===
 function on_view() {
@@ -469,6 +531,7 @@ function on_view() {
 	V.troops = G.troops
 	V.turn = G.turn
 	V.vp = G.vp
+	V.played_cards = G.played_cards
 }
 
 //=== SCENARIOS & SETUP ===
@@ -542,7 +605,7 @@ function on_setup(scenario, options) {
 	}
 
 	for (let who = RU; who <= FR; ++who) {
-		G.deck[who] = G.deck[who].map(c => c.id)
+		G.deck[who] = G.deck[who].filter(c => !scenario_data.cards_in_hand[who].includes(c.id)).map(c => c.id)
 		G.removed[who] = G.removed[who].map(c => c.id)
 		G.set_aside[who] = G.set_aside[who].map(c => c.id)
 	}
@@ -557,6 +620,9 @@ function on_setup(scenario, options) {
 	G.depots = [Array(NUM_DEPOTS_RU).fill(POOL), Array(NUM_DEPOTS_FR).fill(POOL)]
 	G.devastation = Array(space_count).fill(0)
 
+	G.played_cards = [[], []]
+	G.persistent_events = []
+
 	switch(get_month(G.turn)) {
 		case JUNE: 
 			setup_june()
@@ -570,6 +636,10 @@ function on_setup(scenario, options) {
 		case OCT: 
 			setup_oct()
 			break
+	}
+
+	for (let deck = RU; deck <= FR; ++deck) {
+		shuffle(G.deck[deck])
 	}
 
 	G.active = [RU, FR]
@@ -651,7 +721,7 @@ function setup_june() {
 	set_troop(FR, S_GRAND_DUCHY_OF_WARSAW_NORTH, FRESH_INFANTRY, 2)
 	set_leader(S_GRAND_DUCHY_OF_WARSAW_SOUTH, SCHWARZENBERG)
 	set_troop(AU, S_GRAND_DUCHY_OF_WARSAW_SOUTH, FRESH_INFANTRY, 3)
-	set_troop(AU, S_GRAND_DUCHY_OF_WARSAW_SOUTH, FRESH_INFANTRY, 1)
+	set_troop(AU, S_AUSTRIA, FRESH_INFANTRY, 1)
 
 	set_devastation(S_KALVARIJA, 1)
 	set_devastation(S_SUWALKI, 1)
@@ -957,6 +1027,10 @@ function setup_oct() {
 	set_troop(RU, S_KIEV, FRESH_INFANTRY, 1)
 	add_depot(RU, S_KIEV)
 
+	set_leader(OUT_OF_PLAY, ALEXANDER_I)
+	set_leader(OUT_OF_PLAY, DE_TOLLY)
+	set_leader(OUT_OF_PLAY, BAGRATION)
+
 	/* FRANCE */
 	set_troop(FR, S_PRUSSIA_SOUTH, FRESH_INFANTRY, 1)
 	set_troop(PR, S_MITAU, FRESH_INFANTRY, 1)
@@ -1152,7 +1226,6 @@ P.setup_hand = {
 				}
 				G.deck[RU].push(HOLY_MOTHER_RUSSIA_RU)
 			}
-			G.deck[RU].push(EXTREME_WEATHER_RU) //DEBUG
 			call("begin_turn")
 		}
 	}
@@ -1164,10 +1237,19 @@ function draw_card(who) {
 	return G.hand[who][G.hand[who].length - 1]
 }
 
+function is_permanent_removal_card(card) {
+	return cards[card].permanently_remove
+}
+
 function discard_card(who, c) {
 	G.discard[who].push(c)
 	array_delete_item(G.hand[who], c)
 	//log(`${ROLES[who]} discarded a card.`)
+}
+
+function remove_card(who, c) {
+	G.removed[who].push(c)
+	array_delete_item(G.hand[who], c)
 }
 
 //=== TURN STRUCTURE ===
@@ -1182,7 +1264,16 @@ P.begin_turn = function() {
 // P.resource_phase = {}
 
 P.turn = script(`
-	call draw_card_to_hand	
+	log ("=" + get_month_name(G.turn) + " " + get_turn_name(G.turn))
+
+	call draw_card_to_hand
+	call play_card_for_orders
+
+	log "#Play Events"
+	set G.active (G.initiative > 0 ? FR : RU)
+	call play_events
+	set G.active (1 - G.active)
+	call play_events
 `)
 
 P.draw_card_to_hand = {
@@ -1190,7 +1281,7 @@ P.draw_card_to_hand = {
 		G.active = [RU, FR]
 		L.has_drawn_card = [false, false]
 		L.drawn_card = [-1, -1]
-		L.state = ["draw_card", "draw_card"] //Handling mandatory events which need to be resolved as they are drawn
+		L.state = ["draw_card", "draw_card"] //Each player's state is tracked separately
 		L.events = []
 		//Flag to track actions on "Holy Mother Russia" (Russian)
 		//-1: not executed yet; RU (0): Russia has confirmed event play; FR (1): France has selected the relevant space.
@@ -1200,6 +1291,7 @@ P.draw_card_to_hand = {
 	},
 	prompt() {
 		//A mini state machine to handle must-play events without switching to separate event states
+		//Most events are just 'confirm now, play later,' so logging is done from the confirm() method
 		//draw a card -> review drawn card OR draw a card -> resolve appropriate event -> confirm
 		switch(L.state[R]) { 
 			case "draw_card":
@@ -1217,6 +1309,20 @@ P.draw_card_to_hand = {
 					V.prompt = `C${HOLY_MOTHER_RUSSIA_RU}: Receive 2 additional orders. France will designate a RU-controlled Key City.`
 				}
 				button("confirm")
+				break
+			case "holy_mother_russia_ru_fr":
+				if (L.holy_mother_russia_executed === RU) {
+					V.prompt = `C${HOLY_MOTHER_RUSSIA_RU}: Designate a RU-controlled Key City. The side controlling the designated Key City at the end of the turn shift the VP Marker 1 in their favor.`
+					for (let s = 1; s <= space_count; ++s) {
+						if (is_key_city(s) && is_ru_controlled(s)) {
+							action("space", s)
+						}
+					}
+				} else if (L.holy_mother_russia_executed === FR) {
+					V.prompt = `C${HOLY_MOTHER_RUSSIA_RU}: You selected ${get_space_name(L.selected_key)}.`
+					button("confirm")
+					button("undo")
+				}
 				break
 			case `event_${EXTREME_WEATHER_RU}`:
 				V.prompt = `C${EXTREME_WEATHER_RU}: Draw a card, FR has -2 orders this turn, 1 fresh SP in each force that uses 'March' or 'Forced March' becomes exhausted.`
@@ -1281,30 +1387,494 @@ P.draw_card_to_hand = {
 	},
 	leader(leader) {
 		if (L.state[R] === `event_${BARCLAY_DE_TOLLY_RESIGNS}`) {
-			G.leaders[DE_TOLLY] = POOL
+			G.leaders[DE_TOLLY] = OUT_OF_PLAY
 		} else if (L.state[R] === `event_${JEROME_GOES_HOME}`) {
-			G.leaders[JEROME] = POOL
+			G.leaders[JEROME] = OUT_OF_PLAY
 		}
 		this.confirm()
 	},
+	space(s) {
+		L.selected_key = s
+		L.holy_mother_russia_executed = FR
+	},
+	undo() {
+		switch(L.state[R]) {
+			case "holy_mother_russia_ru_fr":
+				L.selected_key = -1
+				L.holy_mother_russia_executed = RU
+				break
+		}
+	},
 	confirm() {
 		if (L.state[R] !== "review_drawn_card") { //i.e. is a must-play event
-			log_must_play_event(L.drawn_card[R])
-			discard_card(get_card_owner(L.drawn_card[R]), L.drawn_card[R])
+			if (L.state[R] !== "holy_mother_russia_ru_fr") {
+				log_must_play_event(L.drawn_card[R]) //Do all logging in one go to prevent unintended nesting between both players' events
+
+				if (is_permanent_removal_card(L.drawn_card[R])) { //Discard or remove, as appropriate
+					remove_card(R, L.drawn_card[R])
+				} else {
+					discard_card(get_card_owner(L.drawn_card[R]), L.drawn_card[R])
+				}
+				
+				if (L.drawn_card[R] === HOLY_MOTHER_RUSSIA_RU) { L.holy_mother_russia_executed = RU } //Update 'Holy Mother Russia' status
+			} else {
+				log_must_play_event(L.drawn_card[RU], L.selected_key)
+			}
 		}
 		set_delete(G.active, R)
-		G.events = L.events.slice()
+
+		if (L.holy_mother_russia_executed === RU) { //i.e. waiting for France to pick a space
+			if (R === FR || (R === RU && !G.active.includes(FR))) {
+				G.active.push(FR)
+				L.state[FR] = "holy_mother_russia_ru_fr"
+				return
+			}
+		}
+
+		for (let evt of L.events) {
+			add_persistent_event(evt)
+		}
+
+		if (L.selected_key) G.holy_mother_russia_key = L.selected_key
 		if (Array.isArray(G.active) && G.active.length === 0) {
 			end()
 		}
 	}
 }
 
-function log_must_play_event(c) {
+P.play_card_for_orders = {
+	_begin() {
+		G.active = [RU, FR]
+		L.played_card = [-1, -1]
+		L.ops_played = [-1, -1]
+		log("#Play Cards")
+	},
+	prompt() {
+		if (L.played_card[R] === -1) {
+			V.prompt = "Play a card for additional orders, or play a Dummy."
+			for (let c of G.hand[R]) {
+				action("card", c)
+			}
+		} else {
+			V.prompt = `You played C${L.played_card[R]} for ${L.ops_played[R]} additional orders.`
+			button("confirm")
+			button("undo")
+		}
+	},
+	card(c) {
+		L.played_card[R] = c
+		L.ops_played[R] = get_card_ops(c)
+		array_delete_item(G.hand[R], c)
+	},
+	undo() {
+		if (is_card_dummy(L.played_card[R])) {
+			array_insert(G.hand[R], 0, L.played_card[R])
+		} else {
+			G.hand[R].push(L.played_card[R])
+		}
+		L.played_card[R] = -1
+		L.ops_played[R] = -1
+	},
+	confirm() {
+		set_delete(G.active, R)
+		if (is_card_dummy(L.played_card[R])) { //Dummy returns straight back to hand
+			array_insert(G.hand[R], 0, L.played_card[R]) //Keeping a consistent position since it is almost always in hand
+		} else {
+			discard_card(R, L.played_card[R]) //Cards played for OPs may not be removed
+		}
+		if (Array.isArray(G.active) && G.active.length === 0) {
+			for (let who = RU; who <= FR; ++who) {
+				log(`${ROLES[who]} played C${L.played_card[who]} for ${L.ops_played[who]} additional orders.`)
+			}
+			end()
+		}
+	}
+}
+
+/* Events that can be played now
+	1  Well-Disciplined Retreat
+	3  Opolchenie
+	10 Scorched Earth
+	13 Garrison Troops
+	15 Pride and Hesitation
+	16 Kutuzov Appointed
+	17 The Finland Corps
+	18 Treaty of Bucharest
+	19 The Czar Leaves the Army
+
+	1  Hard Marching
+	2  Hard Marching
+	3  War Weariness
+	4  Holy Mother Russia
+	5  Polish Support
+	15 Peace Offer
+	17 Davout Takes Command
+	19 IX Corps Arrives
+	20 XI Corps Arrives
+
+*/
+
+P.play_events = {
+	_begin() {
+		L.events = [[WELL_DISCIPLINED_RETREAT, OPOLCHENIE, SCORCHED_EARTH, GARRISON_TROOPS,
+						PRIDE_AND_HESITATION, KUTUZOV_APPOINTED, THE_FINLAND_CORPS, TREATY_OF_BUCHAREST, THE_CZAR_LEAVES_THE_ARMY],
+					[HARD_MARCHING_1, HARD_MARCHING_2, WAR_WEARINESS, HOLY_MOTHER_RUSSIA_FR, POLISH_SUPPORT, 
+						PEACE_OFFER, DAVOUT_TAKES_COMMAND, IX_CORPS_ARRIVES, XI_CORPS_ARRIVES]]
+		L.could_play_events = G.hand[G.active].filter(c => L.events[G.active].includes(c))	
+
+	},
+	prompt() {
+		if (L.could_play_events.length > 0) {
+			V.prompt = "Declare any events to be played with your OPs card."
+			for (let c of L.could_play_events) {
+				if (can_play_event(c)) {
+					action("card", c)
+				}
+			}
+		} else {
+			V.prompt = "No eligible events can be played with your OPs card."
+		}
+		button("pass")
+	},
+	card(c) {
+		push_undo()
+		L.active_card = c
+		card_box_begin(c)
+		G.played_cards[G.active].push(c)
+		call(`event_${c}`)
+	},
+	_resume() {
+		if (is_permanent_removal_card(L.active_card)) {
+			remove_card(G.active, L.active_card)
+		} else {
+			discard_card(G.active, L.active_card)
+		}
+		array_delete_item(L.could_play_events, L.active_card)
+		card_box_end(L.active_card)
+	},
+	pass() {
+		end()
+	}
+}
+
+/* 
+	Events:
+
+*/
+
+P.choose_orders = {
+
+}
+
+//=== EVENTS ===
+function can_play_event(card) {
+	if (get_card_season(card) !== get_season(G.turn)) return false
+	let could_play_event = E[`event_${card}`]
+	return (could_play_event === undefined) ? true : could_play_event()
+}
+
+function add_persistent_event(evt, params) {
+	let removal_turn = (evt === WELL_DISCIPLINED_RETREAT) ? G.turn + 1 : G.turn
+	let key = evt
+	let value = Object.assign({remove: removal_turn}, params)
+	map_set(G.persistent_events, key, value)
+	console.log(G.persistent_events)
+}
+
+// RU #1: Well-Disciplined Retreat
+P.event_1 = function() {end()}
+
+//Opolchenie
+
+// 	RU #15: Pride and Hesitation
+E.event_15 = function() {return get_space_control(S_MOSCOW) === FR}
+
+P.event_15 = {
+	_begin() {
+		L.has_shifted_initiative = false
+	},
+	prompt() {
+		if (!L.has_shifted_initiative) {
+			V.prompt = `C${PRIDE_AND_HESITATION}: Shift Initiative 1 in Russia's favor.`
+			action("initiative", 0)
+		} else {
+			V.prompt = `C${PRIDE_AND_HESITATION}: This turn, the VP marker is shifted 1 in Russia's favor if any French leaders leave Moscow.`
+			button("confirm")
+		}
+	},
+	initiative() {
+		push_undo()
+		shift_initiative_in_favor_of_russia()
+		L.has_shifted_initiative = true
+	},
+	confirm() {
+		push_undo()
+		add_persistent_event(PRIDE_AND_HESITATION)
+		end()
+	}
+}
+
+//Kutuzov Appointed
+E.event_16 = function() {return get_month(G.turn) >= AUG}
+
+//The Finland Corps
+E.event_17 = function() {return get_month(G.turn) >= AUG}
+
+//Treaty of Bucharest
+E.event_18 = function() {return get_month(G.turn) >= AUG}
+
+//	FR #1, #2: Hard Marching
+P.event_55 = function() { goto("hard_marching", {card: HARD_MARCHING_1}) }
+P.event_56 = function() { goto("hard_marching", {card: HARD_MARCHING_2}) }
+
+P.hard_marching = {
+	_begin() {
+		//L.card
+		L.step = -1
+	},
+	prompt() {
+		switch(L.step) {
+			case -1:
+				V.prompt = `C${L.card}: Shift the Initiative 1 in France's favor.`
+				action("initiative", 0)
+				break
+			case 0:
+				V.prompt = `C${L.card}: Receive 1 free Forced March order, but 1 SP in each forced marching force is exhausted.`
+				button("confirm")
+				break
+			case 1:
+				V.prompt = `C${L.card}: This turn all French forces using 'Forced March' orders fight at X1 instead of X0,5.`
+				button("confirm")
+		}
+	},
+	initiative(id) {
+		push_undo()
+		shift_initiative_in_favor_of_france()
+		log(`Shifted Initiative 1 in favor of France.`)
+		L.step++
+	},
+	confirm() {
+		push_undo()
+		if (L.step === 0) {
+			L.step++
+			log("France receives 1 free Forced March order, but 1 SP in each forced marching force is exhausted.")
+		} else {
+			add_persistent_event(L.card)
+			log("This turn all French forces using 'Forced March' orders fight at X1 instead of X0,5.")
+			end()
+		}
+	}
+}
+
+function get_leader_short_name(leader) {
+	return data.leaders[leader].short_name
+}
+
+// FR #3: War Weariness
+P.event_57 = {
+	_begin() {
+		L.spaces_controlled = [S_MOSCOW, S_TORZHOK, S_BEZHANITZY, S_OSTROV, S_VENDEN].filter(s => is_fr_controlled(s))
+		L.russian_eliminated_leaders = 	[]
+		for (let i = first_ru_leader; i <= last_ru_leader; ++i) {
+			if (G.leaders[i] === OUT_OF_PLAY) L.russian_eliminated_leaders.push(i)
+		}
+		L.french_vp = L.spaces_controlled.length + L.russian_eliminated_leaders.length
+		L.vp_shifted = false
+	},
+	prompt() {
+		if (!L.vp_shifted) {
+			V.prompt = `C${WAR_WEARINESS}: Shift the VP marker ${L.french_vp} in France's favor.`
+			action("vp", 0)
+		} else {
+			V.prompt = `C${WAR_WEARINESS}: All done.`
+			button("confirm")
+		}
+		
+	},
+	vp(id) {
+		push_undo()
+		G.vp += L.french_vp
+		log(`France +${L.french_vp} VP.`)
+		for (let s of L.spaces_controlled) {
+			log(`>${get_space_name(s)}`)
+		}
+		for (let leader of L.russian_eliminated_leaders) {
+			log(`>${get_leader_short_name(leader)}`)
+		}
+		L.vp_shifted = true
+	},
+	confirm() {
+		push_undo()
+		end()
+	}
+}
+
+// FR #4: Holy Mother Russia
+P.event_58 = {
+	_begin() {
+		L.key_city = -1
+	},
+	prompt() {
+		if (L.key_city === -1) {
+			V.prompt = `C${HOLY_MOTHER_RUSSIA_FR}: Designate a Key City. France will gain 1 VP for each RU force that leaves the area via 'Force March', 'March' or 'Evade'.`
+			for (let s = 1; s < space_count; ++s) {
+				if (is_key_city(s)) {
+					action("space", s)
+				}
+			}
+		} else {
+			V.prompt = `C${HOLY_MOTHER_RUSSIA_FR}: All done.`
+			button("confirm")
+		}
+	},
+	space(s) {
+		L.key_city = s
+		log(`This turn, France will gain 1 VP for each RU force that leaves ${get_space_name(L.key_city)} via 'Force March', 'March' or 'Evade'.`)
+	},
+	confirm() {
+		add_persistent_event(HOLY_MOTHER_RUSSIA_FR, {space: L.key_city})
+		end()
+	}
+}
+
+// FR #5: Polish Support
+E.event_59 = function() { 
+	return [S_KOVNO, S_VILNA, S_VITEBSK].includes(get_leader_location(NAPOLEON))
+}
+
+P.event_59 = {
+	_begin() {
+		L.has_placed_troops = false
+		L.space = get_space_name(get_leader_location(NAPOLEON))
+		L.drawn_card = -1
+	},
+	prompt() {
+		if (!L.has_placed_troops) {
+			V.prompt = `C${POLISH_SUPPORT}: Place 2 Infantry SPs at ${L.space}.`
+			action("space", get_leader_location(NAPOLEON))
+		} else if (L.drawn_card === -1) {
+			V.prompt = `C${POLISH_SUPPORT}: Draw a card.`
+			button("draw")
+		} else {
+			V.prompt = `C${POLISH_SUPPORT}: You drew C${L.drawn_card}.`
+			button("confirm")
+		}
+	},
+	space(s) {
+		push_undo()
+		add_troop(FR, s, FRESH_INFANTRY, 2)
+		log(`Placed 2 French Infantry at ${L.space}.`)
+		L.has_placed_troops = true
+	},
+	draw() {
+		clear_undo()
+		L.drawn_card = draw_card(G.active)
+		log("France drew a card.")
+	},
+	confirm() {
+		goto("event_done", {card: POLISH_SUPPORT})
+	}
+}
+
+// FR #15: Peace Offer
+E.event_69 = function() {
+	return is_fr_controlled(S_MOSCOW)
+}
+
+P.event_69 = {
+	_begin() {
+		L.spaces_controlled = [S_KIEV, S_TVER, S_RIGA, S_OSTROV, S_BEZHANITZY].filter(s => is_fr_controlled(s))
+		L.step = -1
+	},
+	prompt() {
+		if (L.step === -1) {
+			V.prompt = `C${PEACE_OFFER}: Shift the VP Marker 1 in France's favor.`
+			action("vp", 0)
+		} else if (L.step === 0) {
+			V.prompt = `C${PEACE_OFFER}: Shift the Initiative Marker 2 in France's favor.`
+			action("initiative", 0)
+		} else {
+			V.prompt = `C${PEACE_OFFER}: Gain ${2 * L.spaces_controlled.length} VP.`
+			button("confirm")
+		}
+	},
+	vp(id) {
+		push_undo()
+		G.vp++
+		log("France +1 VP.")
+		L.step++
+	},
+	initiative(id) {
+		push_undo()
+		shift_initiative_in_favor_of_russia()
+		shift_initiative_in_favor_of_russia()
+		log("Initiative Marker shifted 2 in favor of Russia.")
+	},
+	confirm() {
+		push_undo()
+		log(`France +${2 * L.spaces_controlled.length} VP.`)
+		for (let s of L.spaces_controlled) {
+			log(`>${get_space_name(s)}`)
+		}
+		goto("event_done", {card: PEACE_OFFER})
+	}
+}
+
+// FR #17: Davout Takes Command
+P.event_71 = {
+	_begin() {
+		L.placed_leader = false
+	},
+	prompt() {
+		if (!L.placed_leader) {
+			V.prompt = `C${DAVOUT_TAKES_COMMAND}: Place Davout and 1 French Infantry SP in any French-occupied area.`
+			for (let s = 1; s < space_count; ++s) {
+				if (is_fr_controlled(s)) {
+					action("space", s)
+				}
+			}
+		} else {
+			V.prompt = `C${DAVOUT_TAKES_COMMAND}: All done.`
+			button("confirm")
+		}
+		
+	},
+	space(s) {
+		push_undo()
+		set_leader(s, DAVOUT)
+		add_troop(FR, s, FRESH_INFANTRY, 1)
+		L.placed_leader = true
+		log(`Davout placed at ${get_space_name(s)}.`)
+		log(`1 French Infantry SP placed at ${get_space_name(s)}.`)
+	},
+	confirm() {
+		push_undo()
+		end()
+	}
+}
+
+P.event_done = {
+	prompt() {
+		V.prompt = `C${L.card}: All done.`
+		button("confirm")
+	},
+	confirm() {
+		push_undo()
+		end()
+	}
+}
+
+//=== LOGGING ===
+function log_must_play_event(c, space = -1 /*For 'Holy Mother Russia' (Russian version)*/) {
 	card_box_begin(c)
 	switch(c) {
 		case HOLY_MOTHER_RUSSIA_RU:
-			log("Russia +2 orders this turn.")
+			if (space === -1) {
+				log("Russia +2 orders this turn.")
+			} else {
+				log(`France selected ${get_space_name(space)}.`)
+				log(`The side controlling ${get_space_name(space)} at the end of the turn gain +1 VP.`)
+			}
 			break
 		case EXTREME_WEATHER_RU:
 			log("Russia drew a card.")
@@ -1332,14 +1902,14 @@ function log_must_play_event(c) {
 		case CHAOS_IN_THE_REAR_AREAS:
 			log("Not implemented yet.")
 			break
-		
 	}
 	card_box_end()
 }
 
-//=== LOG HELPERS ===
 function log_h1(text) {
+	log()
 	log(`=${text}`)
+	log()
 }
 
 function card_box_begin(card) {

@@ -325,8 +325,7 @@ function on_init() {
 
     /* TRACKS */
     define_layout_track_v("track-vp", 0, 20, layout["VP Track"])
-    define_marker("vp", FR, "fr")
-    define_marker("vp", RU, "ru")
+    define_marker("vp", 0)
 
     define_layout("track-time", JUNE_5, layout["June 5"])
     define_layout_track_h("track-time", JULY_5, JULY_R, layout["July"])
@@ -338,8 +337,7 @@ function on_init() {
     define_marker("time", 1, "end")
 
     define_layout_track_v("track-initiative", 1, 4, layout["Initiative Track"])
-    define_marker("initiative", FR, "fr")
-    define_marker("initiative", RU, "ru")
+    define_marker("initiative", 0)
 }
 
 //=== UPDATE VIEW ===
@@ -363,6 +361,10 @@ function on_update() {
         populate("hand", 0, "card", c)
     }
 
+    for (let c of V.played_cards[R]) {
+        populate("played", 0, "card", c)
+    }
+
     //update_orders()    
 
     action_button("done", "Done")
@@ -381,17 +383,19 @@ function update_tracks() {
 
     //VP
     if (V.vp >= 0) {
-        populate("track-vp", V.vp, "vp", FR)
+        update_keyword("vp", 0, "fr")
     } else {
-        populate("track-vp", Math.abs(V.vp), "vp", RU)
+        update_keyword("vp", 0, "ru")
     }
+    populate("track-vp", Math.abs(V.vp), "vp", 0)
 
     //Initiative
     if (V.initiative >= 0) {
-        populate("track-initiative", V.initiative, "initiative", FR)
+        update_keyword("initiative", 0, "fr")
     } else {
-        populate("track-initiative", Math.abs(V.initiative), "initiative", RU)
+        update_keyword("initiative", 0, "ru")
     }
+    populate("track-initiative", Math.abs(V.initiative), "initiative", 0)
 }
 
 function update_leaders() {
@@ -511,7 +515,7 @@ function escape_text(text) {
     escape_html(text)
     escape_typography(text)
 
-    text = escape_tip_class_sub(text, /C(\d+)/g, "tip", "card card_$1", data.cards.map(card => card.name))
+    text = escape_tip_class_sub(text, /C(\d+)/g, "tip", "card card_$0", data.cards.map(card => card.name))
     return text
 }
 

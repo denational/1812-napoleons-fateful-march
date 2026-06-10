@@ -83,6 +83,11 @@ body.Russia header.your_turn {background-color: var(--russia);}
     font-style: italic; 
 }
 
+#log .tip:hover {
+    cursor: pointer; 
+    text-decoration: underline;
+}
+
 /* ORDER PLANNING MINIBOARD */
 #plan_orders {
 	width: 750px;
@@ -356,6 +361,14 @@ body.Russia header.your_turn {background-color: var(--russia);}
 .marker.vp, .marker.time, .marker.initiative {
     width: 50px;
     height: 50px;
+}
+
+.marker.vp.action, .marker.time.action, .marker.initiative.action {
+	filter:
+		drop-shadow(0 -2px 0 skyblue)
+		drop-shadow(0 2px 0 skyblue)
+		drop-shadow(-2px 0 0 skyblue)
+		drop-shadow(2px 0 0 skyblue)
 }
 
 .marker.vp.fr {background-image: url(pieces/vp_fr.png);}
