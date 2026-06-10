@@ -328,22 +328,22 @@ def_piece(FRANCE,   AUSTRIA,    INFANTRY,   1,  6)
 def_piece(FRANCE,   FRANCE,     DEPOT_MARKER, -1, 7)
 
 //=== ORDERS ===
-const FORCED_MARCH = "forced_march"
-const CAVALRY_PATROLS = "cavalry_patrols"
-const MARCH = "march"
-const EVADE = "evade"
-const DEFEND = "defend"
-const RALLY = "rally"
-const COSSACK_RAID = "cossack_raid"
-const PLACE_DEPOT = "place_depot"
-const FORAGE = "forage"
-const DUMMY_ORDER = "dummy_order"
+const FORCED_MARCH = 0
+const CAVALRY_PATROLS = 1
+const MARCH = 2
+const EVADE = 3
+const DEFEND = 4
+const RALLY = 5
+const COSSACK_RAID = 6
+const PLACE_DEPOT = 7
+const FORAGE = 8
+const DUMMY_ORDER = 9
 
-data.orders = []
+data.orders = [ null ]
 let num = 1
 function define_order(who, type, num_of_type) {
     for (i = 0; i < num_of_type; ++i) {
-        data.orders.push({owner: who, type, id: num})
+        data.orders.push({id: num, owner: who, type})
         num++
     }
 }

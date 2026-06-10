@@ -354,6 +354,7 @@ function is_key_city(s) {
 }
 
 function is_fr_controlled(s) {
+	if (is_french_off_map_area(s)) return true
 	if (!G.troops[s]) return false
 	if (!G.troops[s][FR] && !G.troops[s][AU] && !G.troops[s][PR]) return false
 	if (G.troops[s][RU]) return false
@@ -370,6 +371,14 @@ function get_space_name(s) {
 
 function get_space_control(s) {
 	return is_fr_controlled(s) ? FR : RU
+}
+
+function is_off_map_area(s) {
+	return spaces[s].type === "off_map"
+}
+
+function is_french_off_map_area(s) {
+	return is_off_map_area(s) && spaces[s].nation === FR
 }
 
 /* LEADERS */
@@ -416,7 +425,62 @@ function count_num_eliminated_leaders(who) {
 	return G.leaders.slice(get_first_leader(who), get_last_leader(who)).filter(loc => loc === OUT_OF_PLAY).length
 }
 
+/* ORDERS */
+const first_ru_order = 1
+const last_ru_order = 28
+const first_fr_order = 29
+const last_fr_order = 53
 
+//A dictionary of each order to look up its properties
+const orders = [ null ]
+for (let id = first_ru_order; id <= last_fr_order; ++id) {
+	orders[id] = {owner: data.orders[id].owner, type: data.orders[id].type}
+}
+
+const FORCED_MARCH = 0
+const CAVALRY_PATROLS = 1
+const MARCH = 2
+const EVADE = 3
+const DEFEND = 4
+const RALLY = 5
+const COSSACK_RAID = 6
+const PLACE_DEPOT = 7
+const FORAGE = 8
+const DUMMY_ORDER = 9
+
+function get_first_order(who) {
+	return (who === RU) ? first_ru_order : first_fr_order
+}
+
+function get_last_order(who) {
+	return (who === RU) ? last_ru_order : last_fr_order
+}
+
+function get_order_owner(order) {
+	return orders[order].owner
+}
+
+function get_order_type(order) {
+	return orders[order].type
+}
+
+function get_order_name(type) {
+    switch(type) {
+        case FORCED_MARCH: return "Forced March"
+        case CAVALRY_PATROLS: return "Cavalry Patrols"
+        case MARCH: return "March"
+        case EVADE: return "Evade"
+        case DEFEND: return "Defend"
+        case RALLY: return "Rally"
+        case COSSACK_RAID: return "Cossack Raid"
+        case PLACE_DEPOT: return "Place Depot"
+        case FORAGE: return "Forage"
+        case DUMMY_ORDER: return "Dummy"
+        default: return type
+    }
+}
+
+const orders_count = 53
 
 //Troops
 const FRESH_INFANTRY = 0
@@ -515,6 +579,7 @@ function shift_initiative_in_favor_of_france() {
 //=== VIEW ===
 function on_view() {
 	V.active = G.active
+	V.state = G.state
 
 	V.depots = [...G.depots[RU], ...G.depots[FR]]
 	V.devastation = G.devastation
@@ -532,6 +597,8 @@ function on_view() {
 	V.turn = G.turn
 	V.vp = G.vp
 	V.played_cards = G.played_cards
+	V.orders = G.orders.slice(get_first_order(R), get_last_order(R) + 1) ?? []
+	V.selected_orders = G.selected_orders[R]
 }
 
 //=== SCENARIOS & SETUP ===
@@ -622,6 +689,10 @@ function on_setup(scenario, options) {
 
 	G.played_cards = [[], []]
 	G.persistent_events = []
+
+	G.orders = [null, ...Array(orders_count).fill(POOL)]
+	G.state = "setup"
+	G.selected_orders = [[], []]
 
 	switch(get_month(G.turn)) {
 		case JUNE: 
@@ -1162,6 +1233,7 @@ function set_devastation(where, level) {
 P.setup_hand = {
 	_begin() {
 		//L.scenario_data
+		G.state = "setup_hand"
 		L.scenario_hand_size = L.scenario_data.hand_size //The number of non-dummy cards in hand specified by the scenario
 		L.has_drawn_cards = [false, false]
 		L.discarded = [[], []]
@@ -1274,11 +1346,14 @@ P.turn = script(`
 	call play_events
 	set G.active (1 - G.active)
 	call play_events
+
+	call choose_orders { additional_orders: L.additional_orders }
 `)
 
 P.draw_card_to_hand = {
 	_begin() {
 		G.active = [RU, FR]
+		G.state = "draw_card_to_hand"
 		L.has_drawn_card = [false, false]
 		L.drawn_card = [-1, -1]
 		L.state = ["draw_card", "draw_card"] //Each player's state is tracked separately
@@ -1445,6 +1520,7 @@ P.draw_card_to_hand = {
 P.play_card_for_orders = {
 	_begin() {
 		G.active = [RU, FR]
+		G.state = "play_card_for_orders"
 		L.played_card = [-1, -1]
 		L.ops_played = [-1, -1]
 		log("#Play Cards")
@@ -1486,6 +1562,7 @@ P.play_card_for_orders = {
 			for (let who = RU; who <= FR; ++who) {
 				log(`${ROLES[who]} played C${L.played_card[who]} for ${L.ops_played[who]} additional orders.`)
 			}
+			L.L.additional_orders = L.ops_played
 			end()
 		}
 	}
@@ -1516,6 +1593,7 @@ P.play_card_for_orders = {
 
 P.play_events = {
 	_begin() {
+		G.state = "play_events"
 		L.events = [[WELL_DISCIPLINED_RETREAT, OPOLCHENIE, SCORCHED_EARTH, GARRISON_TROOPS,
 						PRIDE_AND_HESITATION, KUTUZOV_APPOINTED, THE_FINLAND_CORPS, TREATY_OF_BUCHAREST, THE_CZAR_LEAVES_THE_ARMY],
 					[HARD_MARCHING_1, HARD_MARCHING_2, WAR_WEARINESS, HOLY_MOTHER_RUSSIA_FR, POLISH_SUPPORT, 
@@ -1553,17 +1631,221 @@ P.play_events = {
 		card_box_end(L.active_card)
 	},
 	pass() {
+		clear_undo()
 		end()
 	}
 }
 
 /* 
-	Events:
+	CHOOSE ORDERS
+	Basic rules:
+	Each player gets to pick any 2 for default + 4 Dummy orders.
+	In addition, France gets a free 'Forage' order and Russia gets a 'Cavalry Patrols' order.
 
+	French Logistic Preparations:
+	In the first turn of the game (June 5), France gets a free 'March' and 'Place Depot' order.
+
+	Events:
+	RU
+	10 Scorched Earth (Russia gets free Evade)
+	11 Holy Mother Russia (Russia gets 2 additional orders)
+	14 Extreme Weather (France -2 orders)
+	16 Kutuzov Appointed (Russia gets free Rally)
+	45 Poor Logistics (RU may not use 'Place Depots')
+
+	FR
+	1 Hard Marching (France gets free Forced March)
+	2 Hard Marching (France gets free Forced March)
+	41 Freezing Weather (France may not use 'Place Depot' or 'Forage')
+	42 Extreme Weather (both sides -2 orders; neither can place 'Forced March')
+	
 */
+function log_event_effect(event, text) {
+	card_box_begin(event)
+	log(text)
+	card_box_end()
+}
+
+function calculate_num_orders(additional_orders) {
+	var orders = [2, 2] //Each player has two free orders
+	
+	for (let who = RU; who <= FR; ++who) { //And some additional orders based on the committed card in play_card_for_ops
+		orders[who] += additional_orders[who]
+	}
+
+	if (is_event_active(HOLY_MOTHER_RUSSIA_RU)) { //RU +2 orders
+		orders[RU] += 2
+		log_event_effect(HOLY_MOTHER_RUSSIA_RU, "Russia +2 orders.")
+	}
+	if (is_event_active(EXTREME_WEATHER_RU)) { //FR -2 orders
+		orders[FR] = Math.max(0, orders[FR] - 2)
+		log_event_effect(EXTREME_WEATHER_RU, "France -2 orders.")
+	}
+	if (is_event_active(EXTREME_WEATHER_FR)) {
+		orders[RU] = Math.max(0, orders[RU] - 2)
+		orders[FR] = Math.max(0, orders[FR] - 2)
+	}
+
+	return orders
+}
+
+function calculate_free_orders() {
+	var free_orders = [[], []]
+	map_set(free_orders[RU], CAVALRY_PATROLS, 1) //Each player's basic free order
+	map_set(free_orders[FR], FORAGE, 1)
+
+	//Each player also gets 4 Dummy Orders
+	map_set(free_orders[RU], DUMMY_ORDER, 4)
+	map_set(free_orders[FR], DUMMY_ORDER, 4)
+
+	if (G.turn === JUNE_5) { //French Logistic Preparations
+		log("French Logistic Preparations.")
+		log("France received a free 'Place Depot' and 'March' order.")
+		map_set(free_orders[FR], PLACE_DEPOT, 1)
+		map_set(free_orders[FR], MARCH, 1)
+	}
+
+	if (is_event_active(SCORCHED_EARTH)) {
+		log_event_effect(SCORCHED_EARTH, "Russia received a free 'Evade' order.")
+		map_set(free_orders[RU], EVADE, 1)
+	}
+	if (is_event_active(KUTUZOV_APPOINTED)) {
+		log_event_effect(KUTUZOV_APPOINTED, "Russia received a free 'Rally' order.")
+		map_set(free_orders[RU], RALLY, 1)
+	}
+	if (is_event_active(HARD_MARCHING_1) && is_event_active(HARD_MARCHING_2)) {
+		map_set(free_orders[FR], FORCED_MARCH, 2)
+		log_event_effect(HARD_MARCHING_1, "France received a free 'Forced March' order.")
+		log_event_effect(HARD_MARCHING_2, "France received a free 'Forced March' order.")
+	} else if (is_event_active(HARD_MARCHING_1)) {
+		map_set(free_orders[FR], FORCED_MARCH, 1)
+		log_event_effect(HARD_MARCHING_1, "France received a free 'Forced March' order.")
+	} else if (is_event_active(HARD_MARCHING_2)) {
+		map_set(free_orders[FR], FORCED_MARCH, 1)
+		log_event_effect(HARD_MARCHING_2, "France received a free 'Forced March' order.")
+	}
+	console.log(free_orders)
+	return free_orders
+}
+
+function get_free_order_list(arr) {
+    const parts = []
+    for (let i = 0; i < arr.length; i += 2) {
+        const type = arr[i]
+        const count = arr[i + 1]
+        parts.push(`${count} ${get_order_name(type)}`)
+    }
+    return parts.join(", ")
+}
 
 P.choose_orders = {
+	_begin() {
+		G.active = [RU, FR]
+		G.state = "choose_orders"
+		log("#Choose Orders")
+		L.num_orders = calculate_num_orders(L.additional_orders)
+		L.free_orders = calculate_free_orders()
+		L.forbidden_orders = [[], []]
 
+		if (is_event_active(POOR_LOGISTICS)) {
+			log_event_effect(POOR_LOGISTICS, "Russia may not use 'Place Depot' orders this turn.")
+			L.forbidden_orders[RU].push(PLACE_DEPOT)
+		}
+		if (is_event_active(FREEZING_WEATHER)) {
+			log_event_effect(FREEZING_WEATHER, "France may not use 'Place Depot' or 'Forage' orders.")
+			L.forbidden_orders[FR].push(PLACE_DEPOT, FORAGE)
+		}
+		if (is_event_active(EXTREME_WEATHER_FR)) { //Logging this in one go for clarity
+			log_event_effect(EXTREME_WEATHER_FR, "Russia -2 orders. \nFrance -2 orders. \nNeither player may use 'Forced March' orders.")
+			L.forbidden_orders[RU].push(FORCED_MARCH)
+			L.forbidden_orders[FR].push(FORCED_MARCH)
+		}
+
+		for (let who = RU; who <= FR; ++who) {
+			for (let type of L.forbidden_orders[who]) {
+				if (map_has(L.free_orders[who], type)) {
+					map_delete(L.free_orders[who], type)
+				}
+			}
+		}
+
+		L.free_order_types = [null, null]
+		
+		G.selected_orders = [[], []]
+		L.has_selected_free_orders = [false, false]
+		L.has_finished = [false, false]
+	},
+	prompt() {
+		L.free_order_types[R] = L.free_orders[R].filter((_, ix) => ix % 2 === 0)
+
+		if (!L.has_selected_free_orders[R]) {
+			V.prompt = `Pick free orders: ${get_free_order_list(L.free_orders[R])}.`
+			for (let order = get_first_order(R); order <= get_last_order(R); ++order) {
+				if (!G.selected_orders[R].includes(order) && L.free_order_types[R].includes(get_order_type(order))) {
+					action("order", order)
+				}
+			}
+		} else if (!L.has_finished[R]) {
+			V.prompt = `Select ${L.num_orders[R]} more orders.`
+			for (let order = get_first_order(R); order <= get_last_order(R); ++order) {
+				if (!G.selected_orders[R].includes(order)) {
+					switch(true) {
+						case (is_event_active(POOR_LOGISTICS) && (R === RU) && (get_order_type(order) === PLACE_DEPOT)):
+						case (is_event_active(FREEZING_WEATHER) && (R === FR) && ((get_order_type(order) === PLACE_DEPOT) || (get_order_type(order) === FORAGE))):
+						case (is_event_active(EXTREME_WEATHER_FR) && (get_order_type(order) === FORCED_MARCH)):
+							continue
+					}
+					action("order", order)
+				}
+			}
+		} else {
+			V.prompt = "Choose Orders: All done."
+			button("confirm")
+		}
+		if (G.selected_orders[R].length > 0) {
+			button("undo")
+		}
+	},
+	order(id) {
+		G.selected_orders[R].push(id)
+		if (!L.has_selected_free_orders[R]) {
+			if (map_get(L.free_orders[R], get_order_type(id), -1) === 1) {
+				map_delete(L.free_orders[R], get_order_type(id))
+			} else {
+				map_set(L.free_orders[R], get_order_type(id), map_get(L.free_orders[R], get_order_type(id), -1) - 1)
+			}
+			if ((L.free_orders[R].length) === 0) {L.has_selected_free_orders[R] = true}
+		} else {
+			L.num_orders[R]--
+			if (L.num_orders[R] === 0) {
+				L.has_finished[R] = true
+			}
+		}
+		
+	},
+	undo() {
+		let id = G.selected_orders[R].pop()
+		if (!L.has_selected_free_orders[R] || L.num_orders[R] === calculate_num_orders(L.additional_orders)[R]) {
+			if (!map_has(L.free_orders[R], get_order_type(id))) {
+				map_set(L.free_orders[R], get_order_type(id), 1)
+			} else {
+				map_set(L.free_orders[R], get_order_type(id), map_get(L.free_orders[R], get_order_type(id), -1) + 1)
+			}
+			if (L.has_selected_free_orders[R]) {L.has_selected_free_orders[R] = false}
+		} else {
+			L.num_orders[R]++
+			if (L.num_orders[R] === 1) {
+				L.has_finished[R] = false
+			}
+		}
+	},
+	confirm() {
+		set_delete(G.active, R)
+		log(`${ROLES[R]} chose ${G.selected_orders[R].length} orders.`)
+		if (Array.isArray(G.active) && G.active.length === 0) {
+			end()
+		}
+	}
 }
 
 //=== EVENTS ===
@@ -1574,17 +1856,64 @@ function can_play_event(card) {
 }
 
 function add_persistent_event(evt, params) {
-	let removal_turn = (evt === WELL_DISCIPLINED_RETREAT) ? G.turn + 1 : G.turn
+	let removal_turn = (evt === WELL_DISCIPLINED_RETREAT || evt === EXTREME_WEATHER_FR) ? G.turn + 1 : G.turn
 	let key = evt
 	let value = Object.assign({remove: removal_turn}, params)
 	map_set(G.persistent_events, key, value)
 	console.log(G.persistent_events)
 }
 
-// RU #1: Well-Disciplined Retreat
-P.event_1 = function() {end()}
+function is_event_active(evt) {
+	return map_has(G.persistent_events, evt)
+}
 
-//Opolchenie
+function goto_event_done(card) {
+	goto("event_done", { card: card })
+}
+
+function prompt_event(evt, text) {
+	return `C${evt}: ${text}`
+}
+
+// RU #1: Well-Disciplined Retreat
+P.event_1 = {
+	prompt() {
+		V.prompt = prompt_event(WELL_DISCIPLINED_RETREAT, "For this, and the next, turn, RU suffers no exhaustion when using 'Evade' orders.")
+		button("confirm")
+	},
+	confirm() {
+		push_undo()
+		log("For this, and the next, turn, RU suffers no exhaustion when using 'Evade' orders.")
+		add_persistent_event(WELL_DISCIPLINED_RETREAT)
+		goto_event_done(WELL_DISCIPLINED_RETREAT)
+	}
+}
+
+// RU #3: Opolchenie
+P.event_3 = {
+	_begin() {
+		L.spaces = [S_PSKOV, S_KIEV, S_SMOLENSK, S_KALUGA, S_MOSCOW].filter(s => is_ru_controlled(s))
+	},
+	prompt() {
+		V.prompt = prompt_event(OPOLCHENIE, "Place 2 exhausted RU Infantry in each of the eligible spaces.")
+		for (let s of L.spaces) {
+			action("space", s)
+		}
+	},
+	space(s) {
+		push_undo()
+		add_troop(RU, s, EXHAUSTED_INFANTRY, 2)
+		log(`Placed 2 exhausted RU Infantry SPs at ${get_space_name(s)}.`)
+		set_delete(L.spaces, s)
+		if (L.spaces.length === 0) {
+			goto_event_done(OPOLCHENIE)
+		}
+	}
+}
+
+// RU #10: Scorched Earth
+// RU #13: Garrison Troops
+
 
 // 	RU #15: Pride and Hesitation
 E.event_15 = function() {return get_space_control(S_MOSCOW) === FR}
@@ -1614,7 +1943,7 @@ P.event_15 = {
 	}
 }
 
-//Kutuzov Appointed
+//RU #16: Kutuzov Appointed
 E.event_16 = function() {return get_month(G.turn) >= AUG}
 
 //The Finland Corps
@@ -1850,6 +2179,50 @@ P.event_71 = {
 	confirm() {
 		push_undo()
 		end()
+	}
+}
+
+// FR #19: IX Corps Arrives
+E.event_73 = function() {
+	return get_month(G.turn) >= AUG
+}
+
+P.event_73 = {
+	prompt() {
+		V.prompt = `C${IX_CORPS_ARRIVES}: Place 4 FR Infatry SP in one FR-controlled key city or off-map area.`
+		for (let s = 1; s < space_count; ++s) {
+			if ((is_key_city(s) || is_french_off_map_area(s)) && is_fr_controlled(s)) {
+				action("space", s)
+			}
+		}
+	},
+	space(s) {
+		push_undo()
+		add_troop(FR, s, FRESH_INFANTRY, 4)
+		log(`Placed 4 FR Infantry in ${get_space_name(s)}.`)
+		goto("event_done", {card: IX_CORPS_ARRIVES})
+	}
+}
+
+// FR #20: XI Corps Arrives
+E.event_74 = function() {
+	return get_month(G.turn) >= SEPT
+}
+
+P.event_74 = {
+	prompt() {
+		V.prompt = `C${XI_CORPS_ARRIVES}: Place 5 FR Infatry SP in one FR-controlled key city or off-map area.`
+		for (let s = 1; s < space_count; ++s) {
+			if ((is_key_city(s) || is_french_off_map_area(s)) && is_fr_controlled(s)) {
+				action("space", s)
+			}
+		}
+	},
+	space(s) {
+		push_undo()
+		add_troop(FR, s, FRESH_INFANTRY, 5)
+		log(`Placed 5 FR Infantry in ${get_space_name(s)}.`)
+		goto("event_done", {card: XI_CORPS_ARRIVES})
 	}
 }
 

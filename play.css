@@ -142,7 +142,6 @@ body.Russia header.your_turn {background-color: var(--russia);}
 
 .piece {
 		position: absolute;
-		pointer-events: none;
 		background-size: cover;
 		background-repeat: no-repeat;
 		filter: drop-shadow(0px 2px 3px #0008);

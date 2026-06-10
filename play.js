@@ -20,7 +20,7 @@ function enemy(who) {
 const spaces = data.spaces
 const space_length = spaces.length
 
-const AVAILABLE = 0
+const POOL = 0
 const FRENCH_CASUALTIES = 156
 const OUT_OF_PLAY = -1
 
@@ -83,13 +83,48 @@ function get_seniormost_leader(faction, space) {
 }
 
 /* ORDERS */
-const first_ru_order = 0
+const first_ru_order = 1
 const last_ru_order = 28
 const first_fr_order = 29
 const last_fr_order = 53
 
+const FORCED_MARCH = 0
+const CAVALRY_PATROLS = 1
+const MARCH = 2
+const EVADE = 3
+const DEFEND = 4
+const RALLY = 5
+const COSSACK_RAID = 6
+const PLACE_DEPOT = 7
+const FORAGE = 8
+const DUMMY_ORDER = 9
+
+function get_first_order(who) {
+	return (who === RU) ? first_ru_order : first_fr_order
+}
+
+function get_last_order(who) {
+	return (who === RU) ? last_ru_order : last_fr_order
+}
+
 function get_player_orders(who) {
     return (who === RU) ? G.russian.orders : (who === FR) ? G.french.orders : null
+}
+
+function get_order_type_name(type) {
+    switch(type) {
+        case FORCED_MARCH: return "forced_march"
+        case CAVALRY_PATROLS: return "cavalry_patrols"
+        case MARCH: return "march"
+        case EVADE: return "evade"
+        case DEFEND: return "defend"
+        case RALLY: return "rally"
+        case COSSACK_RAID: return "cossack_raid"
+        case PLACE_DEPOT: return "place_depot"
+        case FORAGE: return "forage"
+        case DUMMY_ORDER: return "dummy_order"
+        default: return type
+    }
 }
 
 /* TROOPS */
@@ -256,10 +291,9 @@ function on_init() {
     define_panel("#fr_leaders", "leaders", FR)
    
     /* SPACES */
-    for (let s = 1; s < space_length; ++s) {
-        define_space("space", s, layout[get_space_name(s)])
-            .tooltip(get_space_name(s))
-        define_stack("space_stack", s, layout[get_space_name(s)])
+    for (let s = 1; s < space_length; s++) {
+        define_space("space", s, layout[get_space_name(s)]).tooltip(get_space_name(s))
+        define_stack("space_stack", s, layout[get_space_name(s)], -20, -20, 0, -58, 0, 36, 1, 4, 0.5, 0.5)
     }
     define_layout("ru_pool_depots", 0, layout["Russia Pool Depots"], "square")
     define_layout("fr_pool_depots", 0, layout["France Pool Depots"], "square")
@@ -268,9 +302,9 @@ function on_init() {
     define_layout("fr_casualties", 0, layout["France Casualties"], "square")
 
     /* ORDERS */
-    data.orders.forEach(({ owner, type, id }) => {
-        define_piece("order", id, `${type} ${get_abbreviation(owner)}`)
-    })
+    for (let id = first_ru_order; id <= last_fr_order; ++id) {
+        define_piece("order", id, `${get_order_type_name(data.orders[id].type)} ${get_abbreviation(data.orders[id].owner)}`)
+    }
 
     /* LEADERS */
     function define_leader_board(leader) {
@@ -292,22 +326,25 @@ function on_init() {
 
     for (let leader = 0; leader < leaders.length; ++leader) {
         define_piece("leader", leader, get_leader_short_name(leader))
+            .stackable()
         define_leader_board(leader)
     }
 
     /* TROOPS */
     //Modified define_piece_list() adding a number keyword (to update values on counters)
     function define_troop_list(action, a, b, keywords) {
-        for (var i = a; i <= b; ++i)
-            define_piece(action, i, keywords)
-                .keyword(`n${i}`)
-                .stackable()
+        for (var i = a; i <= b; ++i) {
+            let trp = define_piece(action, i, keywords)
+                    .keyword(`n${i}`)
+                    .stackable()
+            console.log(trp)
+        }
     }
 
     define_troop_list("infantry", first_ru_inf, first_fr_inf - 1, "ru")
     define_troop_list("infantry", first_fr_inf, first_pr_inf - 1, "fr")
     define_troop_list("infantry", first_pr_inf, first_au_inf - 1, "pr")
-    define_troop_list("infantry", first_au_inf, (8 * space_length) - 1, "au")
+    define_troop_list("infantry", first_au_inf, 160, "au")
 
     define_troop_list("cavalry", first_ru_cav, last_ru_cav, "ru")
     define_troop_list("cavalry", first_fr_cav, last_fr_cav, "fr")
@@ -326,7 +363,6 @@ function on_init() {
     /* TRACKS */
     define_layout_track_v("track-vp", 0, 20, layout["VP Track"])
     define_marker("vp", 0)
-
     define_layout("track-time", JUNE_5, layout["June 5"])
     define_layout_track_h("track-time", JULY_5, JULY_R, layout["July"])
     define_layout_track_h("track-time", AUG_5, AUG_R, layout["AUG"])
@@ -356,6 +392,7 @@ function on_update() {
     update_troops()
     update_depots()
     update_devastation()
+    update_orders()
 
     for (let c of V.current_hand) {
         populate("hand", 0, "card", c)
@@ -402,7 +439,7 @@ function update_leaders() {
     for (let leader = 0; leader < V.leaders.length; ++leader) {
         switch(get_leader_location(leader)) {
             case OUT_OF_PLAY: continue;
-            case AVAILABLE:
+            case POOL:
                 populate((get_leader_faction(leader) === RU) ? "ru_pool_leaders" : "fr_pool_leaders", 0, "leader", leader); break
             case FRENCH_CASUALTIES:
                 populate("fr_casualties", 0, "leader", leader); break
@@ -456,7 +493,7 @@ function update_troops() {
 
 function update_depots() {
     for (let depot = 0; depot < V.depots.length; ++depot) {
-        if (V.depots[depot] === AVAILABLE) {
+        if (V.depots[depot] === POOL) {
             populate(get_pool_depots((depot < 14 ? RU : FR)), 0, "depot", depot)
         } else {
             populate("space", V.depots[depot], "depot", depot)
@@ -477,37 +514,20 @@ function update_devastation() {
 }
 
 function update_orders() {
-    //Show/hide the orders panel depending on current state
-    if (V.state === "choose_orders" || V.state === "place_orders") {
-        update_panel_show("plan_orders", 0, true)
-    } else {
-        update_panel_show("plan_orders", 0, false)
-    }
-
-    //Show the green outline for selected orders
-    if (V.state === "choose_orders") {
-        if (V.russian.selected_orders) {
-            for (let order of V.russian.selected_orders) {
-                update_keyword("order", order, "selected")
-            }
-        }
-        if (V.french.selected_orders) {
-            for (let order of V.french.selected_orders) {
-                update_keyword("order", order, "selected")
-            }
+    for (let order = 0; order < V.orders.length; ++order) {
+        if (V.orders[order] === POOL) {
+            populate("plan_orders", 0, "order", order + get_first_order(R))
+        } else {
+            populate("space", V.orders[order], "order", order + get_first_order(R))
         }
     }
 
-    //Populate orders
-    for (const [space, orders] of Object.entries(get_player_orders(R))) {
-        for (let order of orders) {
-            if (Number(space) === AVAILABLE && (V.state === "choose_orders" || V.state === "place_orders")) {
-                populate("plan_orders", 0, "order", Number(order.id))
-            } else if (Number(space) !== AVAILABLE) {
-                populate("space", Number(space), "order", Number(order.id))
-            }
+    if (V.selected_orders) {
+        for (let o of V.selected_orders) {
+            update_keyword("order", o, "selected")
         }
     }
+
 }
 
 //=== LOG/PROMPT (WIP) ===
