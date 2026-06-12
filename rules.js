@@ -447,6 +447,7 @@ const COSSACK_RAID = 6
 const PLACE_DEPOT = 7
 const FORAGE = 8
 const DUMMY_ORDER = 9
+const NUM_ORDER_TYPES = 10
 
 function get_first_order(who) {
 	return (who === RU) ? first_ru_order : first_fr_order
@@ -1872,7 +1873,8 @@ P.do_place_orders = {
 		L.space = -1
 		L.selected_order = -1
 		L.has_placed_order = false
-		G.selected_orders = [[], []]
+		G.orders_by_type = Array(NUM_ORDER_TYPES).fill([]) //To make subsequent states easier
+		G.selected_orders = [[], []] //Reusing existing client logic
 	},
 	prompt() {
 		if (L.selected_order === -1) {
@@ -1904,6 +1906,8 @@ P.do_place_orders = {
 	space(s) {
 		push_undo()
 		G.selected_orders[G.active] = []
+		map_set(G.orders_by_type[get_order_type(L.selected_order)], L.selected_order, s)
+
 		L.space = s
 		G.orders[L.selected_order] = s
 		log(`${ROLES[G.active]} placed an order at ${get_space_name(s)}.`)
@@ -1920,6 +1924,7 @@ P.do_place_orders = {
 			G.active = enemy(G.active)
 			this.reset()
 		}
+		console.log(G.orders_by_type)
 	},
 	reset() {
 		L.space = -1
