@@ -464,7 +464,11 @@ function get_order_type(order) {
 	return orders[order].type
 }
 
-function get_order_name(type) {
+function get_order_name(order) {
+	return get_order_type_name(get_order_type(order))
+}
+
+function get_order_type_name(type) {
     switch(type) {
         case FORCED_MARCH: return "Forced March"
         case CAVALRY_PATROLS: return "Cavalry Patrols"
@@ -598,7 +602,8 @@ function on_view() {
 	V.vp = G.vp
 	V.played_cards = G.played_cards
 	V.orders = G.orders.slice(get_first_order(R), get_last_order(R) + 1) ?? []
-	V.selected_orders = G.selected_orders[R]
+	V.enemy_orders = G.orders.slice(get_first_order(enemy(R)), get_last_order(enemy(R)) + 1)?.filter(loc => loc !== POOL) ?? [] 
+	V.selected_orders = (G.selected_orders) ? G.selected_orders[R] : []
 }
 
 //=== SCENARIOS & SETUP ===
@@ -691,6 +696,7 @@ function on_setup(scenario, options) {
 	G.persistent_events = []
 
 	G.orders = [null, ...Array(orders_count).fill(POOL)]
+	G.enemy_orders = []
 	G.state = "setup"
 	G.selected_orders = [[], []]
 
@@ -1342,12 +1348,13 @@ P.turn = script(`
 	call play_card_for_orders
 
 	log "#Play Events"
-	set G.active (G.initiative > 0 ? FR : RU)
+	set G.active (G.initiative > 0 ? RU : FR)
 	call play_events
 	set G.active (1 - G.active)
 	call play_events
 
 	call choose_orders { additional_orders: L.additional_orders }
+	call place_orders
 `)
 
 P.draw_card_to_hand = {
@@ -1361,89 +1368,23 @@ P.draw_card_to_hand = {
 		//Flag to track actions on "Holy Mother Russia" (Russian)
 		//-1: not executed yet; RU (0): Russia has confirmed event play; FR (1): France has selected the relevant space.
 		L.holy_mother_russia_executed = -1
-
 		log("#Draw Cards")
 	},
 	prompt() {
 		//A mini state machine to handle must-play events without switching to separate event states
 		//Most events are just 'confirm now, play later,' so logging is done from the confirm() method
 		//draw a card -> review drawn card OR draw a card -> resolve appropriate event -> confirm
-		switch(L.state[R]) { 
-			case "draw_card":
-				V.prompt = "Draw a card to your hand."
-				button("draw")
-				break
-			case "review_drawn_card":
-				V.prompt = `You drew C${L.drawn_card[R]}.`
-				button("confirm")
-				break
-			case `event_${HOLY_MOTHER_RUSSIA_RU}`:
-				if (G.active.includes(FR)) {
-					V.prompt = `C${HOLY_MOTHER_RUSSIA_RU}: Receive 2 additional orders. France will select a space after resolving their actions.`
-				} else {
-					V.prompt = `C${HOLY_MOTHER_RUSSIA_RU}: Receive 2 additional orders. France will designate a RU-controlled Key City.`
-				}
-				button("confirm")
-				break
-			case "holy_mother_russia_ru_fr":
-				if (L.holy_mother_russia_executed === RU) {
-					V.prompt = `C${HOLY_MOTHER_RUSSIA_RU}: Designate a RU-controlled Key City. The side controlling the designated Key City at the end of the turn shift the VP Marker 1 in their favor.`
-					for (let s = 1; s <= space_count; ++s) {
-						if (is_key_city(s) && is_ru_controlled(s)) {
-							action("space", s)
-						}
-					}
-				} else if (L.holy_mother_russia_executed === FR) {
-					V.prompt = `C${HOLY_MOTHER_RUSSIA_RU}: You selected ${get_space_name(L.selected_key)}.`
-					button("confirm")
-					button("undo")
-				}
-				break
-			case `event_${EXTREME_WEATHER_RU}`:
-				V.prompt = `C${EXTREME_WEATHER_RU}: Draw a card, FR has -2 orders this turn, 1 fresh SP in each force that uses 'March' or 'Forced March' becomes exhausted.`
-				button("draw")
-				break
-			case `event_${COMMAND_FRICTION}`:
-				V.prompt = `C${COMMAND_FRICTION}: At the beginning of the 'Place Orders' phase, FR may designate an area with more than one 1 RU leader. RU must discard a card to place orders there.`
-				button("confirm")
-				break
-			case `event_${POOR_LOGISTICS}`:
-				V.prompt = `C${POOR_LOGISTICS}: RU may not use 'Place Depot' orders this turn.`
-				button("confirm")
-				break
-			case `event_${DEVASTATED_COUNTRYSIDE}`:
-				V.prompt = `C${DEVASTATED_COUNTRYSIDE}: The effect of Devastation markers is doubled for both sides this turn.`
-				button("confirm")
-				break
-			case `event_${BARCLAY_DE_TOLLY_RESIGNS}`:
-				if (!is_leader_on_map(DE_TOLLY)) {
-					V.prompt = `C${BARCLAY_DE_TOLLY_RESIGNS}: Barclay de Tolly is not on map - no effect.`
-					button("confirm")
-				} else if (is_leader_on_map(KUTUZOV)) {
-					V.prompt = `C${BARCLAY_DE_TOLLY_RESIGNS}: Kutuzov is on map - remove Barclay de Tolly from play.`
-					action("leader", DE_TOLLY)
-				} else {
-					V.prompt = `C${BARCLAY_DE_TOLLY_RESIGNS}: Kutuzov is not on map - no effect.`
-					button("confirm")
-				}
-				break
-			case `event_${POOR_COMMUNICATIONS}`:
-				V.prompt = `C${POOR_COMMUNICATIONS}: At the end of the 'Place Orders' phase, RU may designate 1 placed FR order to remove.`
-				button("confirm")
-				break
-			case `event_${JEROME_GOES_HOME}`:
-				if (!is_leader_on_map(JEROME)) {
-					V.prompt = `C${JEROME_GOES_HOME}: Jérôme is not on map - no effect.`
-					button("confirm")
-				} else {
-					V.prompt = `C${JEROME_GOES_HOME}: Remove Jérôme from play.`
-					action("leader", JEROME)
-				}
-				break
-			case `event${CHAOS_IN_THE_REAR_AREAS}`:
-				V.prompt = `C${CHAOS_IN_THE_REAR_AREAS}: Not implemented yet.`
-				button("confirm")
-			//french winter must-play events not implemented yet (will do after creating relevant functions)
+		if (L.state[R] === "draw_card") {
+			V.prompt = "Draw a card to your hand."
+			button("draw")
+		} else if (L.state[R] === "review_drawn_card") {
+			V.prompt = `You drew C${L.drawn_card[R]}.`
+			button("confirm")
+		} else if (L.state[R] === "holy_mother_russia_ru_fr") {
+			E[`event_${HOLY_MOTHER_RUSSIA_RU}`].execute_prompt(L.holy_mother_russia_executed)
+		} else {
+			console.log(L.state[R])
+			E[L.state[R]].confirm_prompt()
 		}
 	},
 	draw() {
@@ -1724,7 +1665,7 @@ function calculate_free_orders() {
 		map_set(free_orders[FR], FORCED_MARCH, 1)
 		log_event_effect(HARD_MARCHING_2, "France received a free 'Forced March' order.")
 	}
-	console.log(free_orders)
+	//console.log(free_orders)
 	return free_orders
 }
 
@@ -1733,7 +1674,7 @@ function get_free_order_list(arr) {
     for (let i = 0; i < arr.length; i += 2) {
         const type = arr[i]
         const count = arr[i + 1]
-        parts.push(`${count} ${get_order_name(type)}`)
+        parts.push(`${count} ${get_order_type_name(type)}`)
     }
     return parts.join(", ")
 }
@@ -1848,19 +1789,210 @@ P.choose_orders = {
 	}
 }
 
+/* 	PLACE ORDERS
+	Basic Rules:
+	Players alternate placing orders in spaces where they have troops, with the player without initiative going first.
+	Any remaining orders after one player finishes are just placed together.
+
+	Special Rules:
+	French Logistic Preparations:
+	In turn 1 (June 5), France may place a 'Place Depot' order in Kovno, even though it is not French-controlled.
+
+	Events:
+	RU
+	24 New Posting (END of order placement)
+	42 Command Friction (BEGINNING of order placement)
+	43 Exhausted Horses (END)
+	48 Disorderly March (END)
+
+	FR
+	8 Infighting & Intrigue (BEGINNING)
+	22 Poor Communications (END)
+	53 Lethargic Pursuit (BEGINNING)
+
+*/
+
+function enemy(who) {
+	return 1 - who
+}
+
+P.place_orders = script(`
+	log "#Place Orders"
+	set G.active FR
+	call start_place_orders_events
+	call do_place_orders
+	set G.active RU
+	call end_place_orders_events
+`)
+
+P.start_place_orders_events = {
+	_begin() {
+		L.state = is_event_active(COMMAND_FRICTION) ? `event_${COMMAND_FRICTION}` : `french_events`
+	},
+	prompt() {
+		if (L.state === "french_events") {
+			if (G.hand[FR].includes(INFIGHTING_AND_INTRIGUE) || G.hand[FR].includes(LETHARGIC_PURSUIT)) {
+				V.prompt = "You may play events, or pass."
+				for (let c of G.hand[FR]) {
+					if (c === INFIGHTING_AND_INTRIGUE || c === LETHARGIC_PURSUIT) {
+						action("card", c)
+					}
+					button("pass")
+				}
+			} else {
+				V.prompt = "No eligible 'Place Orders' events could be played."
+				button("confirm")
+			}
+		} else {
+			E[L.state].execute_prompt()
+		}
+	},
+	card(c) {
+		push_undo()
+		L.state = `event_${c}`
+	},
+	space(s) {
+		push_undo()
+		E[L.state].on_space(s)
+		L.state = "french_events"
+	},
+	pass() {
+		end()
+	},
+	confirm() {
+		end()
+	}
+}
+
+P.do_place_orders = {
+	_begin() {
+		G.active = (G.initiative > 0 ? RU : FR) //Player without the initiative
+		L.orders_to_place = G.selected_orders.slice()
+		G.executable_orders = [[], []]
+		L.space = -1
+		L.selected_order = -1
+		L.has_placed_order = false
+		G.selected_orders = [[], []]
+	},
+	prompt() {
+		if (L.selected_order === -1) {
+			V.prompt = `Select an order to place (${L.orders_to_place[G.active].length} remaining).`
+			for (let order of L.orders_to_place[G.active]) {
+				action("order", order)
+			}
+		} else if (!L.has_placed_order) {
+			V.prompt = `Place ${get_order_name(L.selected_order)} in any space with friendly SPs.`
+			for (let s = 1; s < space_count; ++s) {
+				if (has_troop_in_space(G.active, s)) {
+					action("space", s)
+				}
+				if ((G.turn === JUNE_5) && (G.active === FR) && (get_order_type(L.selected_order) === PLACE_DEPOT)) {
+					action("space", S_KOVNO)
+				}
+			}
+		} else {
+			V.prompt = `You placed ${get_order_name(L.selected_order)} at ${get_space_name(L.space)}.`
+			button("confirm")
+		}
+		
+	},
+	order(order) {
+		push_undo()
+		L.selected_order = order
+		G.selected_orders[G.active].push(order)
+	},
+	space(s) {
+		push_undo()
+		G.selected_orders[G.active] = []
+		L.space = s
+		G.orders[L.selected_order] = s
+		log(`${ROLES[G.active]} placed an order at ${get_space_name(s)}.`)
+		L.has_placed_order = true
+		array_delete_item(L.orders_to_place[G.active], L.selected_order)
+	},
+	confirm() {
+		push_undo()
+		if (L.orders_to_place[G.active].length === 0 && L.orders_to_place[enemy(G.active)].length === 0) {
+			end()
+		} else if (L.orders_to_place[G.active].length > 0 && L.orders_to_place[enemy(G.active)].length === 0) {
+			this.reset()
+		} else {
+			G.active = enemy(G.active)
+			this.reset()
+		}
+	},
+	reset() {
+		L.space = -1
+		L.selected_order = -1
+		L.has_placed_order = false
+	}
+}
+
+P.end_place_orders_events = {
+	_begin() {
+		L.may_play_events = [NEW_POSTING, EXHAUSTED_HORSES, DISORDERLY_MARCH].filter(c => G.hand[RU].includes(c))
+
+		L.state = is_event_active(POOR_COMMUNICATIONS) ? `event_${POOR_COMMUNICATIONS}` : "russian_events"
+	},
+	prompt() {
+		if (L.state = "russian_events") {
+			if (L.may_play_events.length > 0) {
+				V.prompt = `You may play 'end of Place Orders' events.`
+				for (let c of L.may_play_events) {
+					action("card", c)
+				}
+				button("pass")
+			} else {
+				V.prompt = "No more events to play."
+				button("confirm")
+			}
+		} else {
+			E[L.state].execute_prompt()
+		}
+	},
+	card(c) {
+		push_undo()
+		L.state = `event_${c}`
+	},
+	space(s) {
+		E[L.state].on_space(s)
+		L.state = "russian_events"
+	},
+	pass() {
+		end()
+	},
+	confirm() {
+		end()
+	}
+}
+
 //=== EVENTS ===
+//Season checks are done here; any additional checks (if present) are outsourced to the E.event_$.could_play() method
 function can_play_event(card) {
-	if (get_card_season(card) !== get_season(G.turn)) return false
-	let could_play_event = E[`event_${card}`]
+	if ((get_card_season(card) !== BOTH) && (get_card_season(card) !== get_season(G.turn))) return false
+
+	let evt = E[`event_${card}`]
+    if (!evt || typeof evt.could_play !== "function") {
+		return true
+	}
+
+	let could_play_event = E[`event_${card}`].could_play()
 	return (could_play_event === undefined) ? true : could_play_event()
 }
 
-function add_persistent_event(evt, params) {
+function add_persistent_event(evt, keywords) {
 	let removal_turn = (evt === WELL_DISCIPLINED_RETREAT || evt === EXTREME_WEATHER_FR) ? G.turn + 1 : G.turn
 	let key = evt
-	let value = Object.assign({remove: removal_turn}, params)
+	let value = Object.assign({remove: removal_turn}, keywords)
 	map_set(G.persistent_events, key, value)
-	console.log(G.persistent_events)
+	//console.log(G.persistent_events)
+}
+
+function add_event_keyword(evt, keywords) {
+	let evt_data = map_get(G.events, evt, null)
+	if (evt_data !== null) {
+		evt_data = Object.assign(evt_data, keywords)
+	}
 }
 
 function is_event_active(evt) {
@@ -1889,6 +2021,8 @@ P.event_1 = {
 	}
 }
 
+// RU #2: Confused Retreat
+
 // RU #3: Opolchenie
 P.event_3 = {
 	_begin() {
@@ -1912,11 +2046,50 @@ P.event_3 = {
 }
 
 // RU #10: Scorched Earth
+
+// RU #11: Holy Mother Russia
+E.event_11 = {
+	confirm_prompt() {
+		if (G.active.includes(FR)) {
+			V.prompt = `C${HOLY_MOTHER_RUSSIA_RU}: Receive 2 additional orders. France will select a space after resolving their actions.`
+		} else {
+			V.prompt = `C${HOLY_MOTHER_RUSSIA_RU}: Receive 2 additional orders. France will designate a RU-controlled Key City.`
+		}
+		button("confirm")
+	},
+	confirm_log() {},
+	execute_prompt(who) { //This is an exception
+		if (who === RU) {
+			V.prompt = `C${HOLY_MOTHER_RUSSIA_RU}: Designate a RU-controlled Key City. The side controlling the designated Key City at the end of the turn shift the VP Marker 1 in their favor.`
+			for (let s = 1; s <= space_count; ++s) {
+				if (is_key_city(s) && is_ru_controlled(s)) {
+					action("space", s)
+				}
+			}
+		} else if (who === FR) {
+			V.prompt = `C${HOLY_MOTHER_RUSSIA_RU}: You selected ${get_space_name(L.selected_key)}.`
+			button("confirm")
+			button("undo")
+		}
+	}
+}
+
 // RU #13: Garrison Troops
 
+// RU #14: Extreme Weather
+E.event_14 = {
+	confirm_prompt() {
+		V.prompt = `C${EXTREME_WEATHER_RU}: Draw a card, FR has -2 orders this turn, 1 fresh SP in each force that uses 'March' or 'Forced March' becomes exhausted.`
+		button("draw")
+	}
+}
 
 // 	RU #15: Pride and Hesitation
-E.event_15 = function() {return get_space_control(S_MOSCOW) === FR}
+E.event_15 = {
+	could_play() {
+		return get_space_control(S_MOSCOW) === FR
+	}
+}
 
 P.event_15 = {
 	_begin() {
@@ -1944,13 +2117,93 @@ P.event_15 = {
 }
 
 //RU #16: Kutuzov Appointed
-E.event_16 = function() {return get_month(G.turn) >= AUG}
+E.event_16 = {
+	could_play() {
+		return get_month(G.turn) >= AUG
+	}
+}
 
-//The Finland Corps
-E.event_17 = function() {return get_month(G.turn) >= AUG}
+// RU #17: The Finland Corps
+E.event_17 = {
+	could_play() {
+		return get_month(G.turn) >= AUG
+	}
+}
 
-//Treaty of Bucharest
-E.event_18 = function() {return get_month(G.turn) >= AUG}
+// RU #18: Treaty of Bucharest
+E.event_18 = {
+	could_play() {
+		return get_month(G.turn) >= AUG
+	}
+}
+
+// RU #42: Command Friction
+E.event_42 = {
+	confirm_prompt() {
+		V.prompt = `C${COMMAND_FRICTION}: At the beginning of the 'Place Orders' phase, FR may designate an area with more than one 1 RU leader. RU must discard a card to place orders there.`
+		button("confirm")
+	},
+	confirm_log() {
+		log_event_effect(COMMAND_FRICTION, "France may designate an area with more than 1 RU leader at the beginning of the 'Place Orders' phase.")
+	},
+	execute_prompt() {
+		V.prompt = `Designate an area with more than 1 RU leader. RU may only place orders there if they discard a card from their hand.`
+		let count = 0
+		for (let s of G.leaders.slice(first_ru_leader, last_ru_leader + 1)) {
+			if (G.leaders.slice(first_ru_leader, last_ru_leader + 1).filter(loc => s === loc).length >= 2) {
+				action("space", s)
+				count++
+			}
+		}
+		if (count === 0) {
+			button("pass")
+		}
+	},
+	on_space(s) {
+		push_undo()
+		add_event_keyword(COMMAND_FRICTION, { space: s })
+		log_event_effect(COMMAND_FRICTION, "This turn, Russia may o")
+	}
+}
+
+// RU #45: Poor Logistics
+E.event_45 = {
+	confirm_prompt() {
+		V.prompt = `C${POOR_LOGISTICS}: RU may not use 'Place Depot' orders this turn.`
+		button("confirm")
+	},
+	confirm_log() {
+		log_event_effect(POOR_LOGISTICS, "RU may not use 'Place Depot' orders this turn.")
+	}
+}
+
+// RU #46: Devastated Countryside
+E.event_46 = {
+	confirm_prompt() {
+		V.prompt = `C${DEVASTATED_COUNTRYSIDE}: The effect of Devastation markers is doubled for both sides this turn.`
+		button("confirm")
+	},
+	confirm_log() {
+		log_event_effect(DEVASTATED_COUNTRYSIDE, "The effect of Devastation markers is doubled for both sides this turn.")
+	}
+}
+
+// RU #52: Barclay de Tolly Resigns
+E.event_52 = {
+	confirm_prompt() {
+		if (!is_leader_on_map(DE_TOLLY)) {
+			V.prompt = `C${BARCLAY_DE_TOLLY_RESIGNS}: Barclay de Tolly is not on map - no effect.`
+			button("confirm")
+		} else if (is_leader_on_map(KUTUZOV)) {
+			V.prompt = `C${BARCLAY_DE_TOLLY_RESIGNS}: Kutuzov is on map - remove Barclay de Tolly from play.`
+			action("leader", DE_TOLLY)
+		} else {
+			V.prompt = `C${BARCLAY_DE_TOLLY_RESIGNS}: Kutuzov is not on map - no effect.`
+			button("confirm")
+		}
+	}
+}
+
 
 //	FR #1, #2: Hard Marching
 P.event_55 = function() { goto("hard_marching", {card: HARD_MARCHING_1}) }
@@ -2067,8 +2320,10 @@ P.event_58 = {
 }
 
 // FR #5: Polish Support
-E.event_59 = function() { 
-	return [S_KOVNO, S_VILNA, S_VITEBSK].includes(get_leader_location(NAPOLEON))
+E.event_59 = {
+	could_play() {
+		return [S_KOVNO, S_VILNA, S_VITEBSK].includes(get_leader_location(NAPOLEON))
+	}
 }
 
 P.event_59 = {
@@ -2105,9 +2360,28 @@ P.event_59 = {
 	}
 }
 
+// FR #8: Infighting & Intrigue
+E.event_62 = {
+	execute_prompt() {
+		V.prompt = prompt_event(INFIGHTING_AND_INTRIGUE, "Designate an area. In this turn, RU leaders there may only execute 'Forced March' or 'March' orders if they end their move in a FR-occupied area.")
+		for (let s of [...new Set(G.leaders.slice(first_ru_leader, last_ru_leader + 1))]) {
+			if (s !== OUT_OF_PLAY && s !== POOL) {
+				action("space", s)
+			}
+		}
+	},
+	on_space(s) {
+		push_undo()
+		add_event_keyword(INFIGHTING_AND_INTRIGUE, { space: s })
+		log_event_effect(INFIGHTING_AND_INTRIGUE, `This turn, RU leaders in ${get_space_name(s)} may only execute 'Forced March' or 'March' orders if they end their move in a FR-occupied area.`)
+	}
+}
+
 // FR #15: Peace Offer
-E.event_69 = function() {
-	return is_fr_controlled(S_MOSCOW)
+E.event_69 = {
+	could_play() {
+		return is_fr_controlled(S_MOSCOW)
+	}
 }
 
 P.event_69 = {
@@ -2120,7 +2394,7 @@ P.event_69 = {
 			V.prompt = `C${PEACE_OFFER}: Shift the VP Marker 1 in France's favor.`
 			action("vp", 0)
 		} else if (L.step === 0) {
-			V.prompt = `C${PEACE_OFFER}: Shift the Initiative Marker 2 in France's favor.`
+			V.prompt = `C${PEACE_OFFER}: Shift the Initiative Marker 2 in Russia's favor.`
 			action("initiative", 0)
 		} else {
 			V.prompt = `C${PEACE_OFFER}: Gain ${2 * L.spaces_controlled.length} VP.`
@@ -2183,8 +2457,10 @@ P.event_71 = {
 }
 
 // FR #19: IX Corps Arrives
-E.event_73 = function() {
-	return get_month(G.turn) >= AUG
+E.event_73 = {
+	could_play() {
+		return get_month(G.turn) >= AUG
+	}
 }
 
 P.event_73 = {
@@ -2205,8 +2481,10 @@ P.event_73 = {
 }
 
 // FR #20: XI Corps Arrives
-E.event_74 = function() {
-	return get_month(G.turn) >= SEPT
+E.event_74 = {
+	could_play() {
+		return get_month(G.turn) >= SEPT
+	}
 }
 
 P.event_74 = {
@@ -2223,6 +2501,74 @@ P.event_74 = {
 		add_troop(FR, s, FRESH_INFANTRY, 5)
 		log(`Placed 5 FR Infantry in ${get_space_name(s)}.`)
 		goto("event_done", {card: XI_CORPS_ARRIVES})
+	}
+}
+
+// FR #22: Poor Communications
+E.event_76 = {
+	confirm_prompt() {
+		V.prompt = `C${POOR_COMMUNICATIONS}: At the end of the 'Place Orders' phase, RU may designate 1 placed FR order to remove.`
+		button("confirm")
+	},
+	confirm_log() {
+		log_event_effect(POOR_COMMUNICATIONS, "At the end of the 'Place Orders' phase, RU may designate 1 placed FR order to remove.")
+	},
+	execute_prompt() {
+		V.prompt = "Designate a space to remove a random placed French order (CANNOT BE UNDONE)."
+		for (let s of [...new Set(G.orders.slice(first_fr_order))]) {
+			if (s !== POOL && s !== OUT_OF_PLAY) {
+				action("space", s)
+			}
+		}
+	},
+	on_space(s) {
+		clear_undo()
+
+		L.eligible_orders = []
+		for (let i = first_fr_order; i < G.orders.length; ++i) {
+			if (G.orders[i] === s) {
+				L.eligible_orders.push(i)
+			}
+		}
+
+		let removed_order = random(L.eligible_orders.length)
+		G.orders[L.eligible_orders[removed_order]] = POOL
+	}
+}
+
+// FR #24: Jérôme Goes Home
+E.event_78 = {
+	confirm_prompt() {
+		if (!is_leader_on_map(JEROME)) {
+			V.prompt = `C${JEROME_GOES_HOME}: Jérôme is not on map - no effect.`
+			button("confirm")
+		} else {
+			V.prompt = `C${JEROME_GOES_HOME}: Remove Jérôme from play.`
+			action("leader", JEROME)
+		}
+	}
+}
+
+function has_troop_in_space(who, s) {
+	if (!G.troops[s]) return false
+	if (who === RU && !G.troops[s][RU]) return false
+	if (who === FR && !G.troops[s][FR] && !G.troops[s][PR] && !G.troops[s][AU]) return false
+	return true
+}
+
+// FR #53: Lethargic Pursuit
+E.event_107 = {
+	execute_prompt() {
+		V.prompt = "Designate an RU-occupied area. If forces there move, they may not enter a space containing a FR leader."
+		for (let s = 1; s < space_count; ++s) {
+			if (has_troop_in_space(RU, s)) {
+				action("space", s)
+			}
+		}
+	},
+	on_space(s) {
+		push_undo()
+		add_event_keyword(LETHARGIC_PURSUIT, { space: s} )
 	}
 }
 

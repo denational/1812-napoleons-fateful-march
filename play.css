@@ -237,8 +237,8 @@ body.Russia header.your_turn {background-color: var(--russia);}
 
 /* ORDERS */
 .piece.order {
-	width: 70px;
-	height:90px;
+	width: 50px;
+	height: 75px;
 	background-image: url(pieces/fr\ order\ back.png);
 	position: relative;
 }
@@ -287,6 +287,9 @@ body.Russia header.your_turn {background-color: var(--russia);}
 
 .piece.order.dummy_order.ru { background-image: url(pieces/dummy_order_ru.png);}
 .piece.order.dummy_order.fr { background-image: url(pieces/dummy_order_fr.png);}
+
+.piece.order.hidden.ru { background-image: url(pieces/ru\ order\ back.png);}
+.piece.order.hidden.fr { background-image: url(pieces/fr\ order\ back.png);}
 
 /* TROOPS */
 .piece.infantry, .piece.cavalry, .piece.cossack, .piece.guard {

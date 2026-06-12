@@ -281,6 +281,11 @@ function get_pool_depots(side) {
     return (side === RU) ? "ru_pool_depots" : "fr_pool_depots"
 }
 
+function translate_right(rect, amt) {
+    rect[0] += amt
+    return rect
+}
+
 //=== INITIALIZE VIEW ===
 function on_init() {
     define_board("#map", 2500, 2027, [0, 0, 0, 0])
@@ -294,6 +299,7 @@ function on_init() {
     for (let s = 1; s < space_length; s++) {
         define_space("space", s, layout[get_space_name(s)]).tooltip(get_space_name(s))
         define_stack("space_stack", s, layout[get_space_name(s)], -20, -20, 0, -58, 0, 36, 1, 4, 0.5, 0.5)
+        define_stack("orders_stack", s, translate_right(layout[get_space_name(s)], 52), 0, -60, 0, -12)
     }
     define_layout("ru_pool_depots", 0, layout["Russia Pool Depots"], "square")
     define_layout("fr_pool_depots", 0, layout["France Pool Depots"], "square")
@@ -337,7 +343,6 @@ function on_init() {
             let trp = define_piece(action, i, keywords)
                     .keyword(`n${i}`)
                     .stackable()
-            console.log(trp)
         }
     }
 
@@ -518,8 +523,13 @@ function update_orders() {
         if (V.orders[order] === POOL) {
             populate("plan_orders", 0, "order", order + get_first_order(R))
         } else {
-            populate("space", V.orders[order], "order", order + get_first_order(R))
+            populate("orders_stack", V.orders[order], "order", order + get_first_order(R))
         }
+    }
+
+    for (let order = 0; order < V.enemy_orders.length; ++order) {
+        populate("orders_stack", V.enemy_orders[order], "order", order + get_first_order(enemy(R)))
+        update_keyword("order", order + get_first_order(enemy(R)), `hidden ${get_abbreviation(enemy(R))}`)
     }
 
     if (V.selected_orders) {
