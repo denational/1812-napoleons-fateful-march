@@ -6,7 +6,7 @@ const ROLES = ["Russia", "France"]
 
 var G, L, R, V = {} //Game, local state, role of player who triggered view object, view
 var P = {} //States and procedures table
-var E = {} //Can play event checks
+var E = {} //Event-related execution and checking methods
 
 //=== CONSTANTS ===
 /* NATIONS */
@@ -26,16 +26,9 @@ function get_nation_name(nation) {
 }
 
 function get_faction(nation) {
-	switch(nation) {
-		case RU: 
-			return RU
-		case FR:
-		case PR:
-		case AU:
-			return FR
-		default: 
-			return -1
-	}
+	if (nation === RU) { return RU }
+	else if (nation === FR || nation === PR || nation === AU) { return FR }
+	return -1
 }
 
 /* CARDS */
@@ -642,39 +635,39 @@ function on_setup(scenario, options) {
 	G.discard = [[], []]
 
 	switch(scenario) {
-		case THE_EAGLES_MARCH_ON_SMOLENSK:
-		case THE_EAGLES_MARCH_ON_MOSCOW:
-			for (let who = RU; who <= FR; ++who) {
-				G.deck[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) !== WINTER && !is_card_dummy(c.id)))
-				G.removed[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) === WINTER && !is_card_dummy(c.id)))
-			}
-			break
-		case THE_GRAND_CAMPAIGN:
-			for (let who = RU; who <= FR; ++who) {
-				G.deck[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) !== WINTER && !is_card_dummy(c.id)))
-				G.set_aside[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) === WINTER && !is_card_dummy(c.id)))
-			}
-			break
-		case HOLLOW_VICTORIES:
-			for (let who = RU; who <= FR; ++who) {
-				G.deck[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) !== WINTER && !is_card_dummy(c.id) && !scenario_data.removed_cards[who].includes(c.id)))
-				G.removed[who] = [...scenario_data.removed_cards[who], ...cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) === WINTER) && !is_card_dummy(c.id))]
-			}
-			break
-		case BATTLE_OF_SMOLENSK_CAMPAIGN_START:
-			for (let who = RU; who <= FR; ++who) {
-				G.deck[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) !== WINTER && !scenario_data.removed_cards[who].includes(c.id) && !is_card_dummy(c.id)))
-				G.set_aside[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) === WINTER && !is_card_dummy(c.id)))
-				G.removed[who] = scenario_data.removed_cards[who]
-			}
-			break
-		case THE_RETREAT_OF_THE_GRANDE_ARMEE:
-			for (let who = RU; who <= FR; ++who) {
-				G.deck[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) !== SUMMER && !scenario_data.removed_cards[who].includes(c.id) && !is_card_dummy(c.id)))
-				G.removed[who] = [...scenario_data.removed_cards[who], ...cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) === SUMMER && !is_card_dummy(c.id)))]
-			}
-			break
-		default: throw new Error(`${scenario} not found!`)
+	case THE_EAGLES_MARCH_ON_SMOLENSK:
+	case THE_EAGLES_MARCH_ON_MOSCOW:
+		for (let who = RU; who <= FR; ++who) {
+			G.deck[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) !== WINTER && !is_card_dummy(c.id)))
+			G.removed[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) === WINTER && !is_card_dummy(c.id)))
+		}
+		break
+	case THE_GRAND_CAMPAIGN:
+		for (let who = RU; who <= FR; ++who) {
+			G.deck[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) !== WINTER && !is_card_dummy(c.id)))
+			G.set_aside[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) === WINTER && !is_card_dummy(c.id)))
+		}
+		break
+	case HOLLOW_VICTORIES:
+		for (let who = RU; who <= FR; ++who) {
+			G.deck[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) !== WINTER && !is_card_dummy(c.id) && !scenario_data.removed_cards[who].includes(c.id)))
+			G.removed[who] = [...scenario_data.removed_cards[who], ...cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) === WINTER) && !is_card_dummy(c.id))]
+		}
+		break
+	case BATTLE_OF_SMOLENSK_CAMPAIGN_START:
+		for (let who = RU; who <= FR; ++who) {
+			G.deck[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) !== WINTER && !scenario_data.removed_cards[who].includes(c.id) && !is_card_dummy(c.id)))
+			G.set_aside[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) === WINTER && !is_card_dummy(c.id)))
+			G.removed[who] = scenario_data.removed_cards[who]
+		}
+		break
+	case THE_RETREAT_OF_THE_GRANDE_ARMEE:
+		for (let who = RU; who <= FR; ++who) {
+			G.deck[who] = cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) !== SUMMER && !scenario_data.removed_cards[who].includes(c.id) && !is_card_dummy(c.id)))
+			G.removed[who] = [...scenario_data.removed_cards[who], ...cards.filter(c => (is_card_friendly(who, c.id) && get_card_season(c.id) === SUMMER && !is_card_dummy(c.id)))]
+		}
+		break
+	default: throw new Error(`Scenario ${scenario} not found!`)
 	}
 
 	for (let who = RU; who <= FR; ++who) {
@@ -702,18 +695,18 @@ function on_setup(scenario, options) {
 	G.selected_orders = [[], []]
 
 	switch(get_month(G.turn)) {
-		case JUNE: 
-			setup_june()
-			break
-		case JULY: 
-			setup_july()
-			break
-		case AUG: 
-			setup_aug()
-			break
-		case OCT: 
-			setup_oct()
-			break
+	case JUNE: 
+		setup_june()
+		break
+	case JULY: 
+		setup_july()
+		break
+	case AUG: 
+		setup_aug()
+		break
+	case OCT: 
+		setup_oct()
+		break
 	}
 
 	for (let deck = RU; deck <= FR; ++deck) {
@@ -1330,6 +1323,125 @@ function remove_card(who, c) {
 	G.removed[who].push(c)
 	array_delete_item(G.hand[who], c)
 }
+
+//=== SUPPLY, ATTRITION & LINES OF COMMUNICATION ===
+const SUPPLY_SOURCES = [
+/* RU */	[S_RIGA, S_LIVONIA, S_PSKOV, S_UKRAINE, S_TORZHOK, S_VORONEZH, S_VLADIMIR_RUSSIA, S_UNNAMED_H2, S_RYAZAN], 
+/* FR */	[S_PRUSSIA_SOUTH, S_GRAND_DUCHY_OF_WARSAW_NORTH, S_GRAND_DUCHY_OF_WARSAW_SOUTH, S_AUSTRIA],
+]
+
+const ROAD_DISTANCE = 1
+const TRACK_DISTANCE = 2
+
+function get_all_adjacent_areas_by_track(area) {
+	return spaces[area].track
+}
+
+function get_all_adjacent_areas_by_road(area) {
+	return spaces[area].road
+}
+
+function has_enemy_sp(who, space) {
+	return (who === RU && has_troop_in_space(FR, space)) || (who === FR && has_troop_in_space(RU, space))
+}
+
+function get_supply_sources(who) {
+	let sources = SUPPLY_SOURCES[who].slice()
+	for (let area of G.depots[who]) {
+		if (area !== POOL) { set_add(sources, area) }
+	}
+	return sources
+}
+
+/* SUPPLY */
+//Returns the distance from each space to its closest node if in supply, greater than 5 if OOS
+
+function calculate_distance_to_nearest_depot(who) {
+	let sources = get_supply_sources(who)
+	let distance = Array(spaces.length).fill(999)
+
+	for (let source of sources) {
+		distance[source] = 0
+	}
+
+	for (let source of sources) {
+		let queue = [ source ]
+
+		while (queue.length > 0) {
+			let current = queue.shift()
+
+			if ((distance[current] > 5) || has_enemy_sp(who, current)) {
+				continue
+			}
+
+			for (let s of get_all_adjacent_areas_by_track(current)) {
+				if ((distance[s] > (distance[current] + TRACK_DISTANCE))) {
+					distance[s] = distance[current] + TRACK_DISTANCE
+					queue.push(s)
+				}
+			}
+
+			for (let s of get_all_adjacent_areas_by_road(current)) {
+				if (distance[s] > (distance[current] + ROAD_DISTANCE)) {
+					distance[s] = distance[current] + ROAD_DISTANCE
+					queue.push(s)
+				}
+			}
+		}
+
+	}
+	
+	return distance
+}
+
+/* LINES OF COMMUNICATION */
+//Returns a plain array map with each on-map depot of that side and its corresponding supply status
+
+function check_lines_of_communication(who) {
+	let sources = SUPPLY_SOURCES[who].slice() //Starting supply sources without depots
+
+	let depots = [] //Set of depot spaces for efficient lookup
+	for (let depot of G.depots[who].filter(s => s !== POOL)) {
+		set_add(depots, depot)
+	}
+
+	let depot_status = [] //Map pairing depots with whether they are in-supply or OOS
+	for (let depot of depots) {
+		map_set(depot_status, depot, false)
+	}
+
+	let queue = sources.slice()
+	let distance = Array(space_count).fill(999)
+	for (let source of sources) { //Start with supply sources
+		distance[source] = 0
+	}
+
+	while (queue.length > 0) {
+		let current = queue.shift()
+
+		//Cannot trace through enemy SPs & max. distance of 4
+		if (has_enemy_sp(who, current) || distance[current] >= 4) { 
+			continue
+		}
+
+		for (let s of get_all_adjacent_areas_by_road(current)) { //Can trace only via road, not track
+			if ((distance[s] > distance[current] + 1)) {
+				queue.push(s)
+				if (set_has(depots, s) && !set_has(sources, s)) { //If a new in-supply depot is encountered, make it a source
+					set_add(sources, s)
+					map_set(depot_status, s, true)
+					distance[s] = 0
+				} else {
+					distance[s] = distance[current] + 1
+				}
+			}
+		}
+	}
+
+	return depot_status
+}
+
+//Attrition - todo
 
 //=== TURN STRUCTURE ===
 P.begin_turn = function() {

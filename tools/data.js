@@ -766,7 +766,8 @@ const data = {
       "track": [],
       "road": [
         18,
-        41
+        41,
+        44
       ],
       "bridge": [
         18
@@ -785,7 +786,8 @@ const data = {
       ],
       "road": [
         41,
-        45
+        45,
+        43
       ],
       "bridge": []
     },
@@ -895,7 +897,7 @@ const data = {
     },
     {
       "id": 51,
-      "name": "D�naburg",
+      "name": "Dünaburg",
       "type": "fortress",
       "nation": null,
       "supply": false,
@@ -4346,270 +4348,271 @@ const data = {
     }
   ],
   "orders": [
+    null,
     {
+      "id": 1,
       "owner": 0,
-      "type": "forced_march",
-      "id": 1
+      "type": 0
     },
     {
+      "id": 2,
       "owner": 0,
-      "type": "forced_march",
-      "id": 2
+      "type": 0
     },
     {
+      "id": 3,
       "owner": 0,
-      "type": "forced_march",
-      "id": 3
+      "type": 0
     },
     {
+      "id": 4,
       "owner": 0,
-      "type": "forced_march",
-      "id": 4
+      "type": 0
     },
     {
+      "id": 5,
       "owner": 0,
-      "type": "cavalry_patrols",
-      "id": 5
+      "type": 1
     },
     {
+      "id": 6,
       "owner": 0,
-      "type": "cavalry_patrols",
-      "id": 6
+      "type": 1
     },
     {
+      "id": 7,
       "owner": 0,
-      "type": "march",
-      "id": 7
+      "type": 2
     },
     {
+      "id": 8,
       "owner": 0,
-      "type": "march",
-      "id": 8
+      "type": 2
     },
     {
+      "id": 9,
       "owner": 0,
-      "type": "march",
-      "id": 9
+      "type": 2
     },
     {
+      "id": 10,
       "owner": 0,
-      "type": "march",
-      "id": 10
+      "type": 2
     },
     {
+      "id": 11,
       "owner": 0,
-      "type": "march",
-      "id": 11
+      "type": 2
     },
     {
+      "id": 12,
       "owner": 0,
-      "type": "evade",
-      "id": 12
+      "type": 3
     },
     {
+      "id": 13,
       "owner": 0,
-      "type": "evade",
-      "id": 13
+      "type": 3
     },
     {
+      "id": 14,
       "owner": 0,
-      "type": "evade",
-      "id": 14
+      "type": 3
     },
     {
+      "id": 15,
       "owner": 0,
-      "type": "evade",
-      "id": 15
+      "type": 3
     },
     {
+      "id": 16,
       "owner": 0,
-      "type": "defend",
-      "id": 16
+      "type": 4
     },
     {
+      "id": 17,
       "owner": 0,
-      "type": "defend",
-      "id": 17
+      "type": 4
     },
     {
+      "id": 18,
       "owner": 0,
-      "type": "rally",
-      "id": 18
+      "type": 5
     },
     {
+      "id": 19,
       "owner": 0,
-      "type": "rally",
-      "id": 19
+      "type": 5
     },
     {
+      "id": 20,
       "owner": 0,
-      "type": "cossack_raid",
-      "id": 20
+      "type": 6
     },
     {
+      "id": 21,
       "owner": 0,
-      "type": "cossack_raid",
-      "id": 21
+      "type": 6
     },
     {
+      "id": 22,
       "owner": 0,
-      "type": "place_depot",
-      "id": 22
+      "type": 7
     },
     {
+      "id": 23,
       "owner": 0,
-      "type": "forage",
-      "id": 23
+      "type": 8
     },
     {
+      "id": 24,
       "owner": 0,
-      "type": "forage",
-      "id": 24
+      "type": 8
     },
     {
+      "id": 25,
       "owner": 0,
-      "type": "dummy_order",
-      "id": 25
+      "type": 9
     },
     {
+      "id": 26,
       "owner": 0,
-      "type": "dummy_order",
-      "id": 26
+      "type": 9
     },
     {
+      "id": 27,
       "owner": 0,
-      "type": "dummy_order",
-      "id": 27
+      "type": 9
     },
     {
+      "id": 28,
       "owner": 0,
-      "type": "dummy_order",
-      "id": 28
+      "type": 9
     },
     {
+      "id": 29,
       "owner": 1,
-      "type": "forced_march",
-      "id": 29
+      "type": 0
     },
     {
+      "id": 30,
       "owner": 1,
-      "type": "forced_march",
-      "id": 30
+      "type": 0
     },
     {
+      "id": 31,
       "owner": 1,
-      "type": "forced_march",
-      "id": 31
+      "type": 0
     },
     {
+      "id": 32,
       "owner": 1,
-      "type": "forced_march",
-      "id": 32
+      "type": 0
     },
     {
+      "id": 33,
       "owner": 1,
-      "type": "forced_march",
-      "id": 33
+      "type": 0
     },
     {
+      "id": 34,
       "owner": 1,
-      "type": "cavalry_patrols",
-      "id": 34
+      "type": 1
     },
     {
+      "id": 35,
       "owner": 1,
-      "type": "march",
-      "id": 35
+      "type": 2
     },
     {
+      "id": 36,
       "owner": 1,
-      "type": "march",
-      "id": 36
+      "type": 2
     },
     {
+      "id": 37,
       "owner": 1,
-      "type": "march",
-      "id": 37
+      "type": 2
     },
     {
+      "id": 38,
       "owner": 1,
-      "type": "march",
-      "id": 38
+      "type": 2
     },
     {
+      "id": 39,
       "owner": 1,
-      "type": "march",
-      "id": 39
+      "type": 2
     },
     {
+      "id": 40,
       "owner": 1,
-      "type": "evade",
-      "id": 40
+      "type": 3
     },
     {
+      "id": 41,
       "owner": 1,
-      "type": "evade",
-      "id": 41
+      "type": 3
     },
     {
+      "id": 42,
       "owner": 1,
-      "type": "evade",
-      "id": 42
+      "type": 3
     },
     {
+      "id": 43,
       "owner": 1,
-      "type": "defend",
-      "id": 43
+      "type": 4
     },
     {
+      "id": 44,
       "owner": 1,
-      "type": "rally",
-      "id": 44
+      "type": 5
     },
     {
+      "id": 45,
       "owner": 1,
-      "type": "rally",
-      "id": 45
+      "type": 5
     },
     {
+      "id": 46,
       "owner": 1,
-      "type": "place_depot",
-      "id": 46
+      "type": 7
     },
     {
+      "id": 47,
       "owner": 1,
-      "type": "forage",
-      "id": 47
+      "type": 8
     },
     {
+      "id": 48,
       "owner": 1,
-      "type": "forage",
-      "id": 48
+      "type": 8
     },
     {
+      "id": 49,
       "owner": 1,
-      "type": "forage",
-      "id": 49
+      "type": 8
     },
     {
+      "id": 50,
       "owner": 1,
-      "type": "dummy_order",
-      "id": 50
+      "type": 9
     },
     {
+      "id": 51,
       "owner": 1,
-      "type": "dummy_order",
-      "id": 51
+      "type": 9
     },
     {
+      "id": 52,
       "owner": 1,
-      "type": "dummy_order",
-      "id": 52
+      "type": 9
     },
     {
+      "id": 53,
       "owner": 1,
-      "type": "dummy_order",
-      "id": 53
+      "type": 9
     }
   ]
 }

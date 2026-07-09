@@ -30,7 +30,7 @@ fs.createReadStream(names)
         } = row
         data.spaces.push({
             id: Number(id),
-            name,
+            name: (name === "Dunaburg") ? "Dünaburg" : name, //handling the umlaut here since the csv messes it up
             type,
             nation: (nation === '') ? null : nation,
             supply: ((Number(supply) === 1) ? true : false),

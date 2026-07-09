@@ -19,7 +19,7 @@ id,space1,space2,type,bridge
 18,Lublin,Zamosc,road,0
 19,Kaltinenai,Siauliai,road,0
 20,Nemaksciai,Siauliai,track,0
-21,Kalvarija,Kaunas,road,1
+21,Kalvarija,Kovno,road,1
 22,Bialystok,Volkovysk,track,0
 23,Bialystok,Bielsk,road,0
 24,Drohiczyn,Bielsk,track,0
@@ -35,14 +35,14 @@ id,space1,space2,type,bridge
 34,Eckau,Unnamed B2,track,0
 35,Panevezys,Unnamed B2,track,0
 36,Siauliai,Kedainiai,road,0
-37,Kedainiai,Kaunas,road,0
-38,Kaunas,Vilkomir,track,0
+37,Kedainiai,Kovno,road,0
+38,Kovno,Vilkomir,track,0
 39,Panevezys,Vilkomir,track,0
-40,Kaunas,Vilnius,road,0
-41,Kaunas,Onuskis,track,0
-42,Onuskis,Vilnius,track,0
+40,Kovno,Vilna,road,0
+41,Kovno,Onuskis,track,0
+42,Onuskis,Vilna,track,0
 43,Onuskis,Lida,track,1
-44,Vilnius,Lida,road,0
+44,Vilna,Lida,road,0
 45,Grodno,Mostyr,road,0
 46,Mostyr,Lida,road,0
 47,Mostyr,Volkovysk,track,1
@@ -59,16 +59,16 @@ id,space1,space2,type,bridge
 58,Kovel,Lutsk,road,0
 59,Lutsk,Dubno,road,0
 60,Venden,Livonia,road,0
-61,Friedrichstadt,Jekabpils,road,0
-62,Unnamed B2,Jekabpils,track,1
-63,Unnamed B2,Daugapils,track,1
+61,Friedrichstadt,Jakobstadt,road,0
+62,Unnamed B2,Jakobstadt,track,1
+63,Unnamed B2,Dünaburg,track,1
 64,Unnamed B2,Salakas,track,0
 65,Vilkomir,Salakas,track,0
 66,Vilkomir,Svencionys,track,0
-67,Vilnius,Svencionys,road,0
-68,Vilnius,Nastaniski,track,0
-69,Vilnius,Molodechno,road,0
-70,Vilnius,Volozhin,track,0
+67,Vilna,Svencionys,road,0
+68,Vilna,Nastaniski,track,0
+69,Vilna,Molodechno,road,0
+70,Vilna,Volozhin,track,0
 71,Lida,Novgrudok,road,1
 72,Volkovysk,Novgrudok,track,0
 73,Slonim,Novgrudok,road,0
@@ -78,13 +78,13 @@ id,space1,space2,type,bridge
 77,Lutsk,Unnamed C6,track,0
 78,Livonia,Ostrov,track,0
 79,Livonia,Unnamed C1,track,0
-80,Jekabpils,Unnamed C1,track,0
+80,Jakobstadt,Unnamed C1,track,0
 81,Ostrov,Unnamed C1,track,0
-82,Jekabpils,Daugapils,road,0
-83,Daugapils,Ludzha,road,0
+82,Jakobstadt,Dünaburg,road,0
+83,Dünaburg,Ludzha,road,0
 84,Ludzha,Ostrov,road,0
-85,Daugapils,Vidzy,road,1
-86,Daugapils,Drissa,road,1
+85,Dünaburg,Vidzy,road,1
+86,Dünaburg,Drissa,road,1
 87,Salakas,Vidzy,track,0
 88,Vidzy,Drissa,road,0
 89,Svencionys,Vidzy,road,0
@@ -255,3 +255,4 @@ id,space1,space2,type,bridge
 254,Tula,Ryazan,road,0
 255,Tula,Unnamed H3,road,0
 256,Unnamed H3,Unnamed H4,road,0
+257,Lutsk,Vladimir (Galicia),road,0
