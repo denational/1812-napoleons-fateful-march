@@ -14,7 +14,7 @@ const connections = 'mapped_connections.csv'
 
 let done_with_spaces = false //flag to stop progress until writing of space data is finished
 
-data.spaces = [ null ]
+data.spaces = [ {name: "Pool"} ]
 
 fs.createReadStream(names)
 	.pipe(csv())

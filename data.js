@@ -1,6 +1,6 @@
 const data = {
 	"spaces": [
-		null,
+		{"name": "Pool"},
 		{
 			"id": 1,
 			"name": "Prussia North",

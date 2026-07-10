@@ -2,8 +2,8 @@
     --russia: hsl(100, 14%, 66%);
     --france: hsl(206, 55%, 73%);
 
-	--russia_dark: hsl(100, 15%, 60%);
-	--france_dark: hsl(213, 44%, 73%);
+	--russia_dark: #61ac5866;
+	--france_dark: hsl(213, 54%, 77%);
 
 	--russia_light: hsl(101, 38%, 79%);
 	--france_light: hsl(199, 36%, 79%);
