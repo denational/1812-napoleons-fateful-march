@@ -17,11 +17,11 @@ const AU = 3 //Austria
 
 function get_nation_name(nation) {
 	switch(nation) {
-		case RU: return "Russia"
-		case FR: return "France"
-		case PR: return "Prussia"
-		case AU: return "Austria"
-		default: return nation
+	case RU: return "Russia"
+	case FR: return "France"
+	case PR: return "Prussia"
+	case AU: return "Austria"
+	default: return nation
 	}
 }
 
@@ -463,19 +463,19 @@ function get_order_name(order) {
 }
 
 function get_order_type_name(type) {
-    switch(type) {
-        case FORCED_MARCH: return "Forced March"
-        case CAVALRY_PATROLS: return "Cavalry Patrols"
-        case MARCH: return "March"
-        case EVADE: return "Evade"
-        case DEFEND: return "Defend"
-        case RALLY: return "Rally"
-        case COSSACK_RAID: return "Cossack Raid"
-        case PLACE_DEPOT: return "Place Depot"
-        case FORAGE: return "Forage"
-        case DUMMY_ORDER: return "Dummy"
-        default: return type
-    }
+	switch(type) {
+	case FORCED_MARCH: return "Forced March"
+	case CAVALRY_PATROLS: return "Cavalry Patrols"
+	case MARCH: return "March"
+	case EVADE: return "Evade"
+	case DEFEND: return "Defend"
+	case RALLY: return "Rally"
+	case COSSACK_RAID: return "Cossack Raid"
+	case PLACE_DEPOT: return "Place Depot"
+	case FORAGE: return "Forage"
+	case DUMMY_ORDER: return "Dummy"
+	default: return type
+	}
 }
 
 const orders_count = 53
@@ -546,13 +546,13 @@ function get_turn_name(turn) {
 
 function get_month_name(turn) {
 	switch(get_month(turn)) {
-		case JUNE: return "June"
-		case JULY: return "July"
-		case AUG: return "August"
-		case SEPT: return "September"
-		case OCT: return "October"
-		case NOV: return "November"
-		default: return get_month(turn)
+	case JUNE: return "June"
+	case JULY: return "July"
+	case AUG: return "August"
+	case SEPT: return "September"
+	case OCT: return "October"
+	case NOV: return "November"
+	default: return get_month(turn)
 	}
 }
 
@@ -1327,7 +1327,7 @@ function remove_card(who, c) {
 //=== SUPPLY, ATTRITION & LINES OF COMMUNICATION ===
 const SUPPLY_SOURCES = [
 /* RU */	[S_RIGA, S_LIVONIA, S_PSKOV, S_UKRAINE, S_TORZHOK, S_VORONEZH, S_VLADIMIR_RUSSIA, S_UNNAMED_H2, S_RYAZAN], 
-/* FR */	[S_PRUSSIA_SOUTH, S_GRAND_DUCHY_OF_WARSAW_NORTH, S_GRAND_DUCHY_OF_WARSAW_SOUTH, S_AUSTRIA],
+	/* FR */	[S_PRUSSIA_SOUTH, S_GRAND_DUCHY_OF_WARSAW_NORTH, S_GRAND_DUCHY_OF_WARSAW_SOUTH, S_AUSTRIA],
 ]
 
 const ROAD_DISTANCE = 1
@@ -1468,6 +1468,8 @@ P.turn = script(`
 
 	call choose_orders { additional_orders: L.additional_orders }
 	call place_orders
+
+	call execute_forced_march
 `)
 
 P.draw_card_to_hand = {
@@ -1528,10 +1530,10 @@ P.draw_card_to_hand = {
 	},
 	undo() {
 		switch(L.state[R]) {
-			case "holy_mother_russia_ru_fr":
-				L.selected_key = -1
-				L.holy_mother_russia_executed = RU
-				break
+		case "holy_mother_russia_ru_fr":
+			L.selected_key = -1
+			L.holy_mother_russia_executed = RU
+			break
 		}
 	},
 	confirm() {
@@ -1649,9 +1651,9 @@ P.play_events = {
 	_begin() {
 		G.state = "play_events"
 		L.events = [[WELL_DISCIPLINED_RETREAT, OPOLCHENIE, SCORCHED_EARTH, GARRISON_TROOPS,
-						PRIDE_AND_HESITATION, KUTUZOV_APPOINTED, THE_FINLAND_CORPS, TREATY_OF_BUCHAREST, THE_CZAR_LEAVES_THE_ARMY],
-					[HARD_MARCHING_1, HARD_MARCHING_2, WAR_WEARINESS, HOLY_MOTHER_RUSSIA_FR, POLISH_SUPPORT, 
-						PEACE_OFFER, DAVOUT_TAKES_COMMAND, IX_CORPS_ARRIVES, XI_CORPS_ARRIVES]]
+			PRIDE_AND_HESITATION, KUTUZOV_APPOINTED, THE_FINLAND_CORPS, TREATY_OF_BUCHAREST, THE_CZAR_LEAVES_THE_ARMY],
+		[HARD_MARCHING_1, HARD_MARCHING_2, WAR_WEARINESS, HOLY_MOTHER_RUSSIA_FR, POLISH_SUPPORT, 
+			PEACE_OFFER, DAVOUT_TAKES_COMMAND, IX_CORPS_ARRIVES, XI_CORPS_ARRIVES]]
 		L.could_play_events = G.hand[G.active].filter(c => L.events[G.active].includes(c))	
 
 	},
@@ -1783,13 +1785,13 @@ function calculate_free_orders() {
 }
 
 function get_free_order_list(arr) {
-    const parts = []
-    for (let i = 0; i < arr.length; i += 2) {
-        const type = arr[i]
-        const count = arr[i + 1]
-        parts.push(`${count} ${get_order_type_name(type)}`)
-    }
-    return parts.join(", ")
+	const parts = []
+	for (let i = 0; i < arr.length; i += 2) {
+		const type = arr[i]
+		const count = arr[i + 1]
+		parts.push(`${count} ${get_order_type_name(type)}`)
+	}
+	return parts.join(", ")
 }
 
 P.choose_orders = {
@@ -1844,10 +1846,10 @@ P.choose_orders = {
 			for (let order = get_first_order(R); order <= get_last_order(R); ++order) {
 				if (!G.selected_orders[R].includes(order)) {
 					switch(true) {
-						case (is_event_active(POOR_LOGISTICS) && (R === RU) && (get_order_type(order) === PLACE_DEPOT)):
-						case (is_event_active(FREEZING_WEATHER) && (R === FR) && ((get_order_type(order) === PLACE_DEPOT) || (get_order_type(order) === FORAGE))):
-						case (is_event_active(EXTREME_WEATHER_FR) && (get_order_type(order) === FORCED_MARCH)):
-							continue
+					case (is_event_active(POOR_LOGISTICS) && (R === RU) && (get_order_type(order) === PLACE_DEPOT)):
+					case (is_event_active(FREEZING_WEATHER) && (R === FR) && ((get_order_type(order) === PLACE_DEPOT) || (get_order_type(order) === FORAGE))):
+					case (is_event_active(EXTREME_WEATHER_FR) && (get_order_type(order) === FORCED_MARCH)):
+						continue
 					}
 					action("order", order)
 				}
@@ -2036,7 +2038,6 @@ P.do_place_orders = {
 			G.active = enemy(G.active)
 			this.reset()
 		}
-		console.log(G.orders_by_type)
 	},
 	reset() {
 		L.space = -1
@@ -2052,7 +2053,7 @@ P.end_place_orders_events = {
 		L.state = is_event_active(POOR_COMMUNICATIONS) ? `event_${POOR_COMMUNICATIONS}` : "russian_events"
 	},
 	prompt() {
-		if (L.state = "russian_events") {
+		if (L.state === "russian_events") {
 			if (L.may_play_events.length > 0) {
 				V.prompt = `You may play 'end of Place Orders' events.`
 				for (let c of L.may_play_events) {
@@ -2083,13 +2084,48 @@ P.end_place_orders_events = {
 	}
 }
 
+P.execute_forced_march = script(`
+	call begin_forced_march
+	call do_forced_march
+	call end_forced_march
+`)
+
+/* Events that could occur...
+
+	RU
+	4 	Evasive Maneuvers 		Before
+	6 	Bagration's Retreat		When executing with Bagration
+	14	Extreme Weather			1 fresh SP gets exhausted when Forced marching
+	15	Pride and Hesitation	When FR leader moves out of Moscow
+	22	City Ablaze!			When FR gains control of a key city
+	25	Exhausting March		After FR have executed a forced march order
+	26	Exhausting March		Same as #25
+
+	FR
+	1	Hard Marching			1 Fresh SP in each forced marching force is exhausted after moving; fight at X1 combat value
+	2	Hard Marching			same as #1
+	46 	Energetic Leadership	FR determines who resolves that type of orders first regardless of initiative
+
+
+	Leader abilities...
+	Napoleon	Can switch order
+	Kutuzov
+	Chichagov
+*/
+
+P.begin_forced_march = {
+	_begin() {
+
+	}
+}
+
 //=== EVENTS ===
 //Season checks are done here; any additional checks (if present) are outsourced to the E.event_$.could_play() method
 function can_play_event(card) {
 	if ((get_card_season(card) !== BOTH) && (get_card_season(card) !== get_season(G.turn))) return false
 
 	let evt = E[`event_${card}`]
-    if (!evt || typeof evt.could_play !== "function") {
+	if (!evt || typeof evt.could_play !== "function") {
 		return true
 	}
 
@@ -2333,17 +2369,17 @@ P.hard_marching = {
 	},
 	prompt() {
 		switch(L.step) {
-			case -1:
-				V.prompt = `C${L.card}: Shift the Initiative 1 in France's favor.`
-				action("initiative", 0)
-				break
-			case 0:
-				V.prompt = `C${L.card}: Receive 1 free Forced March order, but 1 SP in each forced marching force is exhausted.`
-				button("confirm")
-				break
-			case 1:
-				V.prompt = `C${L.card}: This turn all French forces using 'Forced March' orders fight at X1 instead of X0,5.`
-				button("confirm")
+		case -1:
+			V.prompt = `C${L.card}: Shift the Initiative 1 in France's favor.`
+			action("initiative", 0)
+			break
+		case 0:
+			V.prompt = `C${L.card}: Receive 1 free Forced March order, but 1 SP in each forced marching force is exhausted.`
+			button("confirm")
+			break
+		case 1:
+			V.prompt = `C${L.card}: This turn all French forces using 'Forced March' orders fight at X1 instead of X0,5.`
+			button("confirm")
 		}
 	},
 	initiative(id) {
@@ -2704,40 +2740,40 @@ P.event_done = {
 function log_must_play_event(c, space = -1 /*For 'Holy Mother Russia' (Russian version)*/) {
 	card_box_begin(c)
 	switch(c) {
-		case HOLY_MOTHER_RUSSIA_RU:
-			if (space === -1) {
-				log("Russia +2 orders this turn.")
-			} else {
-				log(`France selected ${get_space_name(space)}.`)
-				log(`The side controlling ${get_space_name(space)} at the end of the turn gain +1 VP.`)
-			}
-			break
-		case EXTREME_WEATHER_RU:
-			log("Russia drew a card.")
-			log("France has -2 orders this turn.")
-			log("1 fresh SP in each force that uses 'March' or 'Forced March' becomes exhausted.")
-			break
-		case COMMAND_FRICTION:
-			log("France may designate an area with more than 1 RU leader at the beginning of the 'Place Orders' phase.")
-			break
-		case POOR_LOGISTICS:
-			log("Russia may not use 'Place Depot' orders this turn.")
-			break
-		case DEVASTATED_COUNTRYSIDE:
-			log("The effect of Devastation markers is doubled this turn.")
-			break
-		case BARCLAY_DE_TOLLY_RESIGNS:
-			log("Barclay de Tolly removed.")
-			break
-		case POOR_COMMUNICATIONS:
-			log("At the end of the 'Place Orders' phase, RU may designate 1 placed FR order to remove.")
-			break
-		case JEROME_GOES_HOME:
-			log("Jérôme Bonaparte removed.")
-			break
-		case CHAOS_IN_THE_REAR_AREAS:
-			log("Not implemented yet.")
-			break
+	case HOLY_MOTHER_RUSSIA_RU:
+		if (space === -1) {
+			log("Russia +2 orders this turn.")
+		} else {
+			log(`France selected ${get_space_name(space)}.`)
+			log(`The side controlling ${get_space_name(space)} at the end of the turn gain +1 VP.`)
+		}
+		break
+	case EXTREME_WEATHER_RU:
+		log("Russia drew a card.")
+		log("France has -2 orders this turn.")
+		log("1 fresh SP in each force that uses 'March' or 'Forced March' becomes exhausted.")
+		break
+	case COMMAND_FRICTION:
+		log("France may designate an area with more than 1 RU leader at the beginning of the 'Place Orders' phase.")
+		break
+	case POOR_LOGISTICS:
+		log("Russia may not use 'Place Depot' orders this turn.")
+		break
+	case DEVASTATED_COUNTRYSIDE:
+		log("The effect of Devastation markers is doubled this turn.")
+		break
+	case BARCLAY_DE_TOLLY_RESIGNS:
+		log("Barclay de Tolly removed.")
+		break
+	case POOR_COMMUNICATIONS:
+		log("At the end of the 'Place Orders' phase, RU may designate 1 placed FR order to remove.")
+		break
+	case JEROME_GOES_HOME:
+		log("Jérôme Bonaparte removed.")
+		break
+	case CHAOS_IN_THE_REAR_AREAS:
+		log("Not implemented yet.")
+		break
 	}
 	card_box_end()
 }
