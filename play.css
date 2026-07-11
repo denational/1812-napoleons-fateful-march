@@ -37,6 +37,13 @@ body.Russia header.your_turn {background-color: var(--russia);}
     }
 }
 
+#tip {
+	position: fixed;
+	z-index: 100;
+	right: 240px;
+	top: 60px;
+}
+
 .tip {
 	font-style: italic;
 }
@@ -62,9 +69,22 @@ body.Russia header.your_turn {background-color: var(--russia);}
     font-variant-caps: small-caps;
 }
 
+#log .h3 { 
+    background-color: lightgray;
+    text-align: left;
+}
+
+#log .h3.ru { background-color: var(--russia_light);}
+#log .h3.fr { background-color: var(--france_light);}
+
 #log {
-	& .group.header.fr { background-color: var(--france_dark); font-style: italic; }
-	& .group.header.ru { background-color: var(--russia_dark); font-style: italic; }
+	& .group.header { 
+		font-variant: small-caps; 
+		text-align: center; 
+		font-style: normal;
+	}
+	& .group.header.fr { background-color: var(--france_dark); }
+	& .group.header.ru { background-color: var(--russia_dark); }
 
 	& .group.fr { background-color: var(--france_light); }
 	& .group.ru { background-color: var(--russia_light); }
@@ -77,10 +97,15 @@ body.Russia header.your_turn {background-color: var(--russia);}
 		margin: 0 6px;
 		padding: 0px 8px;
 	}
-}
 
-#log .tip {
-    font-style: italic; 
+	& .i {
+		text-indent: 5px;
+	}
+
+	& .tip {
+		font-variant: small-caps;
+		font-style: normal;
+	}
 }
 
 #log .tip:hover {

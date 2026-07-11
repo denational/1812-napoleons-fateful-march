@@ -8,6 +8,12 @@ var G, L, R, V = {} //Game, local state, role of player who triggered view objec
 var P = {} //States and procedures table
 var E = {} //Event-related execution and checking methods
 
+const abbreviations = ["ru", "fr", "pr", "au"]
+
+function get_abbreviation(who) {
+	return abbreviations[who]
+}
+
 //=== CONSTANTS ===
 /* NATIONS */
 const RU = 0 //Russia
@@ -711,6 +717,8 @@ function on_setup(scenario, options) {
 	for (let deck = RU; deck <= FR; ++deck) {
 		shuffle(G.deck[deck])
 	}
+
+	G.supply = [calculate_distance_to_nearest_depot(RU), calculate_distance_to_nearest_depot(FR)]
 
 	G.active = [RU, FR]
 	call("setup_hand", {scenario, scenario_data})
@@ -1463,12 +1471,12 @@ P.begin_turn = function() {
 // P.resource_phase = {}
 
 P.turn = script(`
-	log ("=" + get_month_name(G.turn) + " " + get_turn_name(G.turn))
+	log ("!" + get_month_name(G.turn) + " " + get_turn_name(G.turn))
 
 	call draw_card_to_hand
 	call play_card_for_orders
 
-	log "#Play Events"
+	log "@Play Events"
 	set G.active (G.initiative > 0 ? RU : FR)
 	call play_events
 	set G.active (1 - G.active)
@@ -1493,7 +1501,7 @@ P.draw_card_to_hand = {
 		//Flag to track actions on "Holy Mother Russia" (Russian)
 		//-1: not executed yet; RU (0): Russia has confirmed event play; FR (1): France has selected the relevant space.
 		L.holy_mother_russia_executed = -1
-		log("#Draw Cards")
+		log("@Draw Cards")
 	},
 	prompt() {
 		//A mini state machine to handle must-play events without switching to separate event states
@@ -1589,7 +1597,7 @@ P.play_card_for_orders = {
 		G.state = "play_card_for_orders"
 		L.played_card = [-1, -1]
 		L.ops_played = [-1, -1]
-		log("#Play Cards")
+		log("@Play Cards")
 	},
 	prompt() {
 		if (L.played_card[R] === -1) {
@@ -1625,9 +1633,12 @@ P.play_card_for_orders = {
 			discard_card(R, L.played_card[R]) //Cards played for OPs may not be removed
 		}
 		if (Array.isArray(G.active) && G.active.length === 0) {
+			log()
 			for (let who = RU; who <= FR; ++who) {
-				log(`${ROLES[who]} played C${L.played_card[who]} for ${L.ops_played[who]} additional orders.`)
+				//log_h3(ROLES[who], who === RU ? "ru" : "fr")
+				log_h3(`C${L.played_card[who]}: +${L.ops_played[who]} orders`, who === RU ? "ru" : "fr")
 			}
+			log()
 			L.L.additional_orders = L.ops_played
 			end()
 		}
@@ -1768,8 +1779,9 @@ function calculate_free_orders() { //Returns a plain array Map keyed by order ty
 	map_set(free_orders[FR], DUMMY_ORDER, 4)
 
 	if (G.turn === JUNE_5) { //French Logistic Preparations
-		log("French Logistic Preparations.")
+		log_box_begin("French Logistic Preparations", FR)
 		log("France received a free 'Place Depot' and 'March' order.")
+		log_box_end()
 		map_set(free_orders[FR], PLACE_DEPOT, 1)
 		map_set(free_orders[FR], MARCH, 1)
 	}
@@ -1788,9 +1800,11 @@ function calculate_free_orders() { //Returns a plain array Map keyed by order ty
 		map_set(free_orders[FR], FORCED_MARCH, 2)
 		log_event_effect(HARD_MARCHING_1, "France received a free 'Forced March' order.")
 		log_event_effect(HARD_MARCHING_2, "France received a free 'Forced March' order.")
+
 	} else if (is_event_active(HARD_MARCHING_1)) {
 		map_set(free_orders[FR], FORCED_MARCH, 1)
 		log_event_effect(HARD_MARCHING_1, "France received a free 'Forced March' order.")
+
 	} else if (is_event_active(HARD_MARCHING_2)) {
 		map_set(free_orders[FR], FORCED_MARCH, 1)
 		log_event_effect(HARD_MARCHING_2, "France received a free 'Forced March' order.")
@@ -1813,8 +1827,11 @@ P.choose_orders = {
 	_begin() {
 		G.active = [RU, FR]
 		G.state = "choose_orders"
-		log("#Choose Orders")
+		log_h2("Choose Orders")
 		L.num_orders = calculate_num_orders(L.additional_orders)
+		L.num_orders_start = L.num_orders.slice()
+		console.log(L.num_orders)
+		console.log(L.num_orders_start)
 		L.free_orders = calculate_free_orders()
 		L.forbidden_orders = [[], []]
 
@@ -1897,7 +1914,12 @@ P.choose_orders = {
 			} else {
 				map_set(L.free_orders[R], get_order_type(id), map_get(L.free_orders[R], get_order_type(id), -1) - 1)
 			}
-			if ((L.free_orders[R].length) === 0) {L.state[R] = "select_normal_orders"}
+
+			if ((L.free_orders[R].length === 0) && (L.num_orders_start[R] <= 0)) {
+				L.state[R] = "finished"
+			} else if (L.free_orders[R].length === 0) {
+				L.state[R] = "select_normal_orders"
+			}
 		} else {
 			L.num_orders[R]--
 			if (L.num_orders[R] === 0) {
@@ -1910,7 +1932,7 @@ P.choose_orders = {
 
 		if (L.state[R] === "select_free_orders" && G.selected_orders[R].length === 0 && is_leader_on_map(PLATOV)) {
 			L.state[R] = "select_free_order_platov"
-		} else if (L.state[R] === "select_free_orders" || L.num_orders[R] === calculate_num_orders(L.additional_orders)[R]) {
+		} else if (L.state[R] === "select_free_orders" || L.num_orders[R] === L.num_orders_start[R]) {
 			if (!map_has(L.free_orders[R], get_order_type(id))) {
 				map_set(L.free_orders[R], get_order_type(id), 1)
 			} else {
@@ -1940,17 +1962,24 @@ P.choose_orders = {
 	French Logistic Preparations:
 	In turn 1 (June 5), France may place a 'Place Depot' order in Kovno, even though it is not French-controlled.
 
-	Events:
+	Events at BEGINNING of order placement:
 	RU
-	24 New Posting (END of order placement)
-	42 Command Friction (BEGINNING of order placement)
-	43 Exhausted Horses (END)
-	48 Disorderly March (END)
+	42 Command Friction
 
 	FR
-	8 Infighting & Intrigue (BEGINNING)
-	22 Poor Communications (END)
-	53 Lethargic Pursuit (BEGINNING)
+	8 Infighting & Intrigue
+	53 Lethargic Pursuit
+
+	Events at END of order placement:
+	RU
+	24 New Posting
+	43 Exhausted Horses
+	48 Disorderly March
+
+	FR
+	22 Poor Communications
+
+	Leader abilities:
 
 */
 
@@ -1958,10 +1987,10 @@ function enemy(who) {
 	return 1 - who
 }
 
-//TODO: Make alternating placing orders an options
+//TODO: Make alternating placing orders an option
 //The optional rule to place simultaneously is enforced by default for expediency
 P.place_orders = script(`
-	log "#Place Orders"
+	log "@Place Orders"
 	call start_place_orders
 	call do_place_orders_simultaneous
 	call end_place_orders	
@@ -2014,60 +2043,75 @@ P.start_place_orders = {
 
 P.do_place_orders_simultaneous = {
 	_begin() {
-		G.active = [RU, FR] //Player without the initiative
-		L.orders_to_place = G.selected_orders.slice()
-		G.executable_orders = [[], []]
-		L.space = [-1, -1]
-		L.selected_order = [-1, -1]
-		L.has_placed_order = [false, false]
-		G.orders_by_type = Array(NUM_ORDER_TYPES).fill([]) //To make subsequent states easier
-		G.selected_orders = [[], []] //Reusing existing client logic
+		G.active = [RU, FR]
+
+		L.orders_to_place = G.selected_orders.slice() //So that we can use the same client 'selected' code to highlight orders in this state
+		L.orders_placed = [[], []] //Local undo stack to pop last order back into orders_to_place
+
+		L.selected_order = [-1, -1] //Who has what order currently selected
+
+		G.orders_by_type = Array(NUM_ORDER_TYPES).fill([]) //Organized for easy lookup in subsequent states
+		G.selected_orders = [[], []] //Resetting the old selected orders container
 	},
 	prompt() {
-		if (L.selected_order[R] === -1) {
+		if (L.orders_to_place[R].length === 0) {
+			V.prompt = `Place Orders: All done.`
+			button("confirm")
+		}
+		else if (L.selected_order[R] === -1) {
 			V.prompt = `Select an order to place (${L.orders_to_place[R].length} remaining).`
 			for (let order of L.orders_to_place[R]) {
 				action("order", order)
 			}
-		} else if (!L.has_placed_order[R]) {
-			V.prompt = `Place ${get_order_name(L.selected_order[R])} in any space with friendly SPs.`
+		}
+		else {
+			if ((G.turn === JUNE_5) && (R === FR) && (get_order_type(L.selected_order[R]) === PLACE_DEPOT)) { //French Logistic Preparations special rule
+				V.prompt = `Place ${get_order_name(L.selected_order[R])} in any space with friendly SPs, or Kovno.`
+				action("space", S_KOVNO)
+			} else {
+				V.prompt = `Place ${get_order_name(L.selected_order[R])} in any space with friendly SPs.`
+			}
+
 			for (let s = 1; s < space_count; ++s) {
 				if (has_troop_in_space(R, s)) {
 					action("space", s)
 				}
-				if ((G.turn === JUNE_5) && (R === FR) && (get_order_type(L.selected_order[R]) === PLACE_DEPOT)) {
-					action("space", S_KOVNO)
-				}
 			}
-		} else {
-			V.prompt = `You placed ${get_order_name(L.selected_order[R])} at S${L.space[R]}.`
-			button("confirm")
 		}
+
+		button("undo", (L.orders_placed[R].length > 0) && (L.selected_order === -1))
 	},
 	order(order) {
-		push_undo()
 		L.selected_order[R] = order
-		G.selected_orders[R].push(order)
+		G.selected_orders[R].push(order) //Utilizing existing client logic to highlight the order
 	},
 	space(s) {
-		push_undo()
-		G.selected_orders[R] = []
+		G.orders[L.selected_order[R]] = s //Update order's location
 		map_set(G.orders_by_type[get_order_type(L.selected_order[R])], L.selected_order[R], s)
+		G.selected_orders[R] = [] //Unhighlight the order that was just placed
 
-		L.space[R] = s
-		G.orders[L.selected_order[R]] = s
-		log(`${ROLES[R]} placed an order at S${s}.`)
-		L.has_placed_order[R] = true
+		//Move order from 'to place' to 'placed'
 		array_delete_item(L.orders_to_place[R], L.selected_order[R])
+		L.orders_placed[R].push(L.selected_order[R])
+
+		L.selected_order[R] = -1 //Reset flag
+	},
+	undo() {
+		if (L.selected_order[R] > -1) { //i.e. has an order selected
+			G.selected_orders[R].pop()
+			L.selected_order[R] = -1
+		} else {
+			L.selected_order[R] = L.orders_placed[R].pop()
+			
+			G.orders[L.selected_order[R]] = POOL
+			map_delete(G.orders_by_type[get_order_type(L.selected_order[R])], L.selected_order[R])
+			G.selected_orders[R].push(L.selected_order[R])
+
+			L.orders_to_place[R].push(L.selected_order[R])
+		}
 	},
 	confirm() {
-		push_undo()
-		L.space[R] = -1
-		L.selected_order[R] = -1
-		L.has_placed_order[R] = false
-		if (L.orders_to_place[R].length === 0) {
-			set_delete(G.active, R)
-		}
+		set_delete(G.active, R)
 
 		if (Array.isArray(G.active) && G.active.length === 0) {
 			end()
@@ -2903,17 +2947,35 @@ function log_must_play_event(c, space = -1 /*For 'Holy Mother Russia' (Russian v
 
 function log_h1(text) {
 	log()
-	log(`=${text}`)
+	log(`!${text}`)
 	log()
+}
+
+function log_h2(text) {
+	log()
+	log(`@${text}`)
+	log()
+}
+
+function log_h3(text, who) {
+	log(`#${who}${text}`)
 }
 
 function card_box_begin(card) {
-	log()
-	log(`{C${card}`)
+	log_box_begin(`C${card}`, get_card_owner(card))
 }
 
 function card_box_end() {
-	log ("}")
+	log_box_end()
+}
+
+function log_box_begin(text, who) {
+	log()
+	log(`{${get_abbreviation(who)}${text}`)
+}
+
+function log_box_end() {
+	log("}")
 }
 
 //=== FRAMEWORK ===

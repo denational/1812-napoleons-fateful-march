@@ -428,56 +428,6 @@ function define_layout(action, id, rect, keywords, styles) {
 		.layout(rect)
 }
 
-function define_layout_track_h(action, a, b, layout, gap=0, keywords, styles) {
-	var [ x, y, w, h ] = layout
-	var n = 1 + Math.abs(b - a)
-	var cell_w = (w - gap * (n-1)) / n
-	if (a < b) {
-		for (var id = a; id <= b; ++id) {
-			define_layout(action, id, [ x, y, cell_w, h ], keywords, styles)
-			x += cell_w + gap
-		}
-	} else {
-		for (var id = a; id >= b; --id) {
-			define_layout(action, id, [ x, y, cell_w, h ], keywords, styles)
-			x += cell_w + gap
-		}
-	}
-}
-
-function define_layout_track_v(action, a, b, layout, gap=0, keywords, styles) {
-	var [ x, y, w, h ] = layout
-	var n = 1 + Math.abs(b - a)
-	var cell_h = (h - gap * (n-1)) / n
-	if (a < b) {
-		for (var id = a; id <= b; ++id) {
-			define_layout(action, id, [ x, y, w, cell_h ], keywords, styles)
-			y += cell_h + gap
-		}
-	} else {
-		for (var id = a; id >= b; --id) {
-			define_layout(action, id, [ x, y, w, cell_h ], keywords, styles)
-			y += cell_h + gap
-		}
-	}
-}
-
-function define_layout_grid(action, order, cols, rows, layout, gapx, gapy, keywords, styles) {
-	var [ x, y, w, h ] = layout
-	var cell_w = (w - gapx * (cols-1)) / cols
-	var cell_h = (h - gapy * (rows-1)) / rows
-	var r, c, i
-	i = 0
-	for (r = 0; r < rows; ++r) {
-		x = layout[0]
-		for (c = 0; c < cols; ++c) {
-			define_layout(action, order[i++], [ x, y, cell_w, cell_h ], keywords, styles)
-			x += cell_w + gapx
-		}
-		y += cell_h + gapy
-	}
-}
-
 function define_button(action, id, text) {
 	var element = document.createElement("button")
 	element.innerHTML = text
@@ -535,6 +485,82 @@ function define_marker_list(action, a, b, keywords) {
 function define_card_list(action, a, b, keywords_with_prefix) {
 	for (var i = a; i <= b; ++i)
 		define_card(action, i, keywords_with_prefix + i)
+}
+
+/* TRACKS & GRIDS */
+
+function _define_track_h(callback, action, a, b, layout, gap=0, keywords, styles) {
+	var [ x, y, w, h ] = layout
+	var n = 1 + Math.abs(b - a)
+	var cell_w = (w - gap * (n-1)) / n
+	if (a < b) {
+		for (var id = a; id <= b; ++id) {
+			callback(action, id, [ x, y, cell_w, h ], keywords, styles)
+			x += cell_w + gap
+		}
+	} else {
+		for (var id = a; id >= b; --id) {
+			callback(action, id, [ x, y, cell_w, h ], keywords, styles)
+			x += cell_w + gap
+		}
+	}
+}
+
+function _define_track_v(callback, action, a, b, layout, gap=0, keywords, styles) {
+	var [ x, y, w, h ] = layout
+	var n = 1 + Math.abs(b - a)
+	var cell_h = (h - gap * (n-1)) / n
+	if (a < b) {
+		for (var id = a; id <= b; ++id) {
+			callback(action, id, [ x, y, w, cell_h ], keywords, styles)
+			y += cell_h + gap
+		}
+	} else {
+		for (var id = a; id >= b; --id) {
+			callback(action, id, [ x, y, w, cell_h ], keywords, styles)
+			y += cell_h + gap
+		}
+	}
+}
+
+function _define_grid(callback, action, order, cols, rows, layout, gapx, gapy, keywords, styles) {
+	var [ x, y, w, h ] = layout
+	var cell_w = (w - gapx * (cols-1)) / cols
+	var cell_h = (h - gapy * (rows-1)) / rows
+	var r, c, i
+	i = 0
+	for (r = 0; r < rows; ++r) {
+		x = layout[0]
+		for (c = 0; c < cols; ++c) {
+			callback(action, order[i++], [ x, y, cell_w, cell_h ], keywords, styles)
+			x += cell_w + gapx
+		}
+		y += cell_h + gapy
+	}
+}
+
+function define_layout_track_h(action, a, b, layout, gap=0, keywords, styles) {
+	_define_track_h(define_layout, action, a, b, layout, gap, keywords, styles)
+}
+
+function define_layout_track_v(action, a, b, layout, gap=0, keywords, styles) {
+	_define_track_v(define_layout, action, a, b, layout, gap, keywords, styles)
+}
+
+function define_layout_grid(action, order, cols, rows, layout, gapx, gapy, keywords, styles) {
+	_define_grid(define_layout, action, order, cols, rows, layout, gapx, gapy, keywords, styles)
+}
+
+function define_space_track_h(action, a, b, layout, gap=0, keywords) {
+	_define_track_h(define_space, action, a, b, layout, gap, keywords, null)
+}
+
+function define_space_track_v(action, a, b, layout, gap=0, keywords) {
+	_define_track_v(define_space, action, a, b, layout, gap, keywords, null)
+}
+
+function define_space_grid(action, order, cols, rows, layout, gapx, gapy, keywords) {
+	_define_grid(define_space, action, order, cols, rows, layout, gapx, gapy, keywords, null)
 }
 
 /* UPDATE THINGS */
@@ -952,8 +978,9 @@ function end_update() {
 /* FIXME: workaround WebKit bug with :has(:empty) selectors */
 document.querySelectorAll(".panel.autohide").forEach(e => e.hidden = true)
 
-function create_panel(parent, action, id, text) {
+function create_panel(parent, html_id, action, id, text) {
 	var panel = document.createElement("div")
+	panel.id = html_id
 	var head = document.createElement("div")
 	var body = document.createElement("div")
 	panel.className = "panel"
@@ -986,7 +1013,6 @@ function update_panel_text(action, id, text) {
 	var thing = lookup_thing(action, id)
 	assert(thing.my_panel, "not a panel")
 	thing.my_panel_head.textContent = text
-	
 }
 
 function update_panel_text_html(action, id, text) {
@@ -1223,11 +1249,25 @@ function escape_html(text) {
 
 function escape_typography(text) {
 	text = String(text)
-	// TODO: smart quotes
+
+	// smart quotes
+	text = text.replace(/^'/, "\u2018")
+	text = text.replace(/^"/, "\u201c")
+	text = text.replace(/([\n (\[{<])"/g, "$1\u201c")
+	text = text.replace(/([\n (\[{<])'/g, "$1\u2018")
+	text = text.replace(/'/g, "\u2019")
+	text = text.replace(/"/g, "\u201d")
+
+	// dashes
 	text = text.replace(/---/g, "\u2014")
 	text = text.replace(/--/g, "\u2013")
+
+	// arrows
 	text = text.replace(/->/g, "\u2192")
+
+	// mathematical minus
 	text = text.replace(/-( ?[\d])/g, "\u2212$1")
+
 	return text
 }
 

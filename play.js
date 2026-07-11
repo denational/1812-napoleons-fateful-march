@@ -544,8 +544,7 @@ function update_orders() {
 function escape_text(text) {
 	escape_html(text)
 	escape_typography(text)
-
-	text = escape_tip_class_sub(text, /C(\d+)/g, "tip", "card card_$0", data.cards.map(card => card.name))
+	text = escape_tip_class_sub(text, /C(\d+)/g, "tip", "card card_$1", data.cards.map(card => card.name))
 	text = escape_tip_light(text, /S(\d+)/g, "tip", "space", data.spaces.map(s => s.name))
 	return text
 }
@@ -561,19 +560,25 @@ function on_log(text, ix) {
 		close_log_box(ix)
 		return p
 	case "{":
-		let side = (Number(text.substring(2)) >= 54) ? "fr" : "ru"
-		open_log_box(ix, side)
+		open_log_box(ix, text.substring(1, 3))
 		is_box_header = true
-		text = text.substring(1)
+		text = text.substring(3)
 		break
-	case "=":
+	case "!":
 		text = text.substring(1)
 		p.className = 'h1'
 		break
-	case "#":
+	case "@":
 		text = text.substring(1)
 		p.className = 'h2'
 		break
+	case "#":
+		p.className = `h3 ${text.substring(1, 3)}`
+		text = text.substring(3)
+		break
+	case ">":
+		text = text.substring(1)
+		p.className = 'i'
 	}
     
 	p.innerHTML = escape_text(text)
