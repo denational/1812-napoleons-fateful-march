@@ -29,6 +29,22 @@ function get_space_name(space) {
 }
 
 /* LEADERS */
+const ALEXANDER_I = 0
+const KUTUZOV = 1
+const DE_TOLLY = 2
+const BAGRATION = 3
+const TORMASOV = 4
+const WITTGENSTEIN = 5
+const CHICHAGOV = 6
+const PLATOV = 7
+
+const NAPOLEON = 8
+const JEROME = 9
+const DE_BEAUHARNAIS = 10
+const DAVOUT = 11
+const MURAT = 12
+const SCHWARZENBERG = 13
+
 const leaders = data.leaders
 const first_ru_leader = 0
 const last_ru_leader = 7
@@ -431,6 +447,29 @@ function on_update() {
 	action_button("russia", "Russia")
 	action_button("france", "France")
 
+	for (let leader = 0; leader <= 13; ++leader) {
+		action_button_with_argument(`leader-button`, leader, get_leader_short_name(leader))
+	}
+
+	action_button_with_argument("troop", FRESH_INFANTRY, "Infantry")
+	action_button_with_argument("troop", EXHAUSTED_INFANTRY, "Exh. Infantry")
+	action_button_with_argument("troop", FRESH_CAVALRY, "Cavalry")
+	action_button_with_argument("troop", EXHAUSTED_CAVALRY, "Exh. Cavalry")
+	action_button_with_argument("troop", FRESH_COSSACK, "Cossack")
+	action_button_with_argument("troop", EXHAUSTED_COSSACK, "Exh. Cossack")
+	action_button_with_argument("troop", FRESH_GUARD, "Guard")
+	action_button_with_argument("troop", EXHAUSTED_GUARD, "Exh. Guard")
+
+	action_button_with_argument("add-troop", FRESH_INFANTRY, "+ Infantry")
+	action_button_with_argument("add-troop", EXHAUSTED_INFANTRY, "+ Exh. Infantry")
+	action_button_with_argument("add-troop", FRESH_CAVALRY, "+ Cavalry")
+	action_button_with_argument("add-troop", EXHAUSTED_CAVALRY, "+ Exh. Cavalry")
+	action_button_with_argument("add-troop", FRESH_COSSACK, "+ Cossack")
+	action_button_with_argument("add-troop", EXHAUSTED_COSSACK, "+ Exh. Cossack")
+	action_button_with_argument("add-troop", FRESH_GUARD, "+ Guard")
+	action_button_with_argument("add-troop", EXHAUSTED_GUARD, "+ Exh. Guard")
+
+
 	action_button("undo", "Undo")
 
 	end_update()
@@ -506,16 +545,6 @@ function update_troops() {
 			}
 
 			update_text("troop-text", get_used(who, type), num)
-			/*
-			const cntr = document.querySelector(`.piece.${get_troop_name(type)}.${get_abbreviation(who)}.n${get_used(who, type)}`)
-
-			if (!cntr) {
-				console.warn("Missing troop element", { space: get_space_name(space), who: get_abbreviation(who), type: type})
-				continue
-			}
-
-			cntr.setAttribute("count", num)
-			*/
 			incr_used(who, type)
 		}
 	}

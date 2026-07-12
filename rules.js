@@ -563,6 +563,11 @@ function remove_troop(who, space, type, num) {
 	}
 }
 
+function move_troop(who, from, to, type, num) {
+	remove_troop(who, from, type, num)
+	add_troop(who, to, type, num)
+}
+
 function has_troop_in_space(who, space) {
 	if (!has_troop(space)) { return false }
 	for (let entry of get_space_troop_list(space)) {
@@ -660,7 +665,6 @@ function shift_initiative_in_favor_of_france() {
 //=== VIEW ===
 function on_view() {
 	V.active = G.active
-	V.state = G.state
 
 	V.depots = [...G.depots[RU], ...G.depots[FR]]
 	V.devastation = G.devastation
@@ -1301,7 +1305,6 @@ function set_devastation(where, level) {
 P.setup_hand = {
 	_begin() {
 		//L.scenario_data
-		G.state = "setup_hand"
 		L.scenario_hand_size = L.scenario_data.hand_size //The number of non-dummy cards in hand specified by the scenario
 		L.has_drawn_cards = [false, false]
 		L.discarded = [[], []]
@@ -1554,7 +1557,6 @@ P.turn = script(`
 P.draw_card_to_hand = {
 	_begin() {
 		G.active = [RU, FR]
-		G.state = "draw_card_to_hand"
 		L.has_drawn_card = [false, false]
 		L.drawn_card = [-1, -1]
 		L.state = ["draw_card", "draw_card"] //Each player's state is tracked separately
@@ -1655,7 +1657,6 @@ P.draw_card_to_hand = {
 P.play_card_for_orders = {
 	_begin() {
 		G.active = [RU, FR]
-		G.state = "play_card_for_orders"
 		L.played_card = [-1, -1]
 		L.ops_played = [-1, -1]
 		log("@Play Cards")
@@ -1731,7 +1732,6 @@ P.play_card_for_orders = {
 
 P.play_events = {
 	_begin() {
-		G.state = "play_events"
 		L.events = [[WELL_DISCIPLINED_RETREAT, OPOLCHENIE, SCORCHED_EARTH, GARRISON_TROOPS,
 			PRIDE_AND_HESITATION, KUTUZOV_APPOINTED, THE_FINLAND_CORPS, TREATY_OF_BUCHAREST, THE_CZAR_LEAVES_THE_ARMY],
 		[HARD_MARCHING_1, HARD_MARCHING_2, WAR_WEARINESS, HOLY_MOTHER_RUSSIA_FR, POLISH_SUPPORT, 
@@ -1887,7 +1887,6 @@ function get_free_order_list(arr) {
 P.choose_orders = {
 	_begin() {
 		G.active = [RU, FR]
-		G.state = "choose_orders"
 		log_h2("Choose Orders")
 		L.num_orders = calculate_num_orders(L.additional_orders)
 		L.num_orders_start = L.num_orders.slice()
@@ -2144,7 +2143,7 @@ P.do_place_orders_simultaneous = {
 	},
 	space(s) {
 		G.orders[L.selected_order[R]] = s //Update order's location
-		map_set(G.orders_by_type[get_order_type(L.selected_order[R])], L.selected_order[R], s)
+		set_add(G.orders_by_type[get_order_type(L.selected_order[R])], L.selected_order[R])
 		G.selected_orders[R] = [] //Unhighlight the order that was just placed
 
 		//Move order from 'to place' to 'placed'
@@ -2161,7 +2160,7 @@ P.do_place_orders_simultaneous = {
 			L.selected_order[R] = L.orders_placed[R].pop()
 			
 			G.orders[L.selected_order[R]] = POOL
-			map_delete(G.orders_by_type[get_order_type(L.selected_order[R])], L.selected_order[R])
+			set_delete(G.orders_by_type[get_order_type(L.selected_order[R])], L.selected_order[R])
 			G.selected_orders[R].push(L.selected_order[R])
 
 			L.orders_to_place[R].push(L.selected_order[R])
@@ -2176,7 +2175,7 @@ P.do_place_orders_simultaneous = {
 	}
 }
 
-P.do_place_orders_alternate = {
+P.do_place_orders_alternate = { //NOTE: needs rework before actually being usable
 	_begin() {
 		G.active = (G.initiative > 0 ? RU : FR) //Player without the initiative
 		L.orders_to_place = G.selected_orders.slice()
@@ -2347,6 +2346,8 @@ P.determine_initiative = {
 		}
 	},
 	pass() {
+		if (G.active === RU) { L.evasive_maneuvers = false }
+		else { L.energetic_leadership = false }
 		G.active = get_who_has_initiative()
 	},
 	russia() { 
@@ -2398,8 +2399,9 @@ function get_order_location(order) {
 P.do_forced_march = {
 	_begin() {
 		G.active = L.first_player
-		L.remaining_orders = map_get(G.orders_by_type, FORCED_MARCH, null)
+		L.remaining_orders = G.orders_by_type[FORCED_MARCH]
 		L.orders_by_side = [L.remaining_orders.filter(o => get_order_owner(o) === RU), L.remaining_orders.filter(o => get_order_owner(o) === FR)]
+		console.log()
 	},
 	prompt() {
 		if (L.orders_by_side[G.active].length === 0) {
@@ -2425,14 +2427,48 @@ P.do_forced_march = {
 	}
 }
 
+function get_all_troops_in_space(who, s) {
+	let list = []
+	for (let entry of get_space_troop_list(s)) {
+		let owner = decode_troop_entry_who(entry)
+		if (get_faction(owner) === who) {
+			let type = decode_troop_entry_type(entry)
+			let num = decode_troop_entry_num(entry)
+
+			list.push({owner, type, num})
+		}
+	}
+	return list
+}
+
 
 P.select_sps = {
 	_begin() {
 		//L.where
+		L.troops_in_space = get_all_troops_in_space(G.active, L.where)
+		L.move = {
+			leaders: [],
+			troops: []
+		}
 	},
 	prompt() {
-		V.prompt = `Select SPs to execute ${get_order_type_name(L.type)}.`
+		V.prompt = `Select leaders and SPs to execute ${get_order_type_name(L.type)}.`
+		for (let leader = get_first_leader(G.active); leader <= get_last_leader(G.active); ++leader) {
+			if (get_leader_location(leader) === L.where) {
+				console.log(get_leader_short_name(leader))
+				action("leader_button", leader)
+			}
+		}
+		for (let entry of L.troops_in_space) {
+			action("add-troop", entry.type)
+			//action("remove-troop", entry.type)
+		}
+	},
+	leader_button(leader) {
+		push_undo()
+		set_add(L.move.leaders, leader)
 	}
+
 }
 
 //=== EVENTS ===
