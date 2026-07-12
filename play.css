@@ -320,26 +320,11 @@ body.Russia header.your_turn {background-color: var(--russia);}
 .piece.infantry, .piece.cavalry, .piece.cossack, .piece.guard {
 	width: 67px;
 	height: 67px;
-	position: relative
+	position: relative;
 }
 
-.stack > .piece.infantry, .piece.cavalry, .piece.cossack, .piece.guard {
+.troop-text {
 	position: absolute;
-}
-/*
-.space > .piece.infantry,
-.space > .piece.cavalry,
-.space > .piece.cossack,
-.space > .piece.guard {
-    position: absolute;
-    left: -20px;
-    top: -20px;
-}
-	*/
-
-.piece.infantry::after, .piece.cavalry::after, .piece.cossack::after, .piece.guard::after {
-	position: absolute;
-	content: attr(count);
 	color: rgb(255, 255, 255);
 	background-color: rgb(0, 0, 0);
 	border-radius: 10px;
@@ -351,6 +336,10 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	font-weight: bold;
 	text-align: center;
 	align-items: center;
+}
+
+.stack > .piece.infantry, .piece.cavalry, .piece.cossack, .piece.guard {
+	position: absolute;
 }
 
 .piece.infantry.fr.fresh { background-image: url(pieces/fresh-infantry_fr.png);}

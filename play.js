@@ -146,16 +146,16 @@ const last_pr_inf = 139
 const first_au_inf = 140
 const last_au_inf = 150
 
-const first_ru_cav = 0
-const last_ru_cav = 15
-const first_fr_cav = 16
-const last_fr_cav = 30
+const first_ru_cav = 151
+const last_ru_cav = 166
+const first_fr_cav = 180
+const last_fr_cav = 210
 
-const first_ru_cossack = 0
-const last_ru_cossack = 15
+const first_ru_cossack = 211
+const last_ru_cossack = 230
 
-const first_fr_guard = 0
-const last_fr_guard = 4
+const first_fr_guard = 231
+const last_fr_guard = 235
 
 var used_troops = [
 	[first_ru_inf, first_fr_inf, first_pr_inf, first_au_inf],
@@ -261,6 +261,18 @@ function reset_used() {
 	]
 }
 
+function decode_troop_entry_who(entry) {
+	return entry >> 10
+}
+
+function decode_troop_entry_type(entry) {
+	return (entry >> 6) & 15
+}
+
+function decode_troop_entry_num(entry) {
+	return entry & 63
+}
+
 /* TIME */
 const JUNE_5 = 0
 const JULY_R = 1
@@ -340,9 +352,11 @@ function on_init() {
 	//Modified define_piece_list() adding a number keyword (to update values on counters)
 	function define_troop_list(action, a, b, keywords) {
 		for (var i = a; i <= b; ++i) {
-			let trp = define_piece(action, i, keywords)
+			let troop = define_piece(action, i, keywords)
 				.keyword(`n${i}`)
 				.stackable()
+			define_thing("troop-text", i)
+				.static_child(troop)
 		}
 	}
 
@@ -354,8 +368,8 @@ function on_init() {
 	define_troop_list("cavalry", first_ru_cav, last_ru_cav, "ru")
 	define_troop_list("cavalry", first_fr_cav, last_fr_cav, "fr")
 
-	define_troop_list("cossack", 0, 15, "ru")
-	define_troop_list("guard", 0, 4, "fr")
+	define_troop_list("cossack", first_ru_cossack, last_ru_cossack, "ru")
+	define_troop_list("guard", first_fr_guard, last_fr_guard, "fr")
 
 	/* CARDS */
 	define_card_list("card", 0, 107, "card_")
@@ -464,38 +478,45 @@ function update_leaders() {
 }
 
 function update_troops() {
-	for (let space in V.troops) {
-		for (let who in V.troops[space]) {
-			for (let type in V.troops[space][who]) {
-				const s = Number(space)
-				const owner = Number(who)
-				const troop_type = Number(type)
+	//Currently the idea is to use a common pool of markers for each troop type (fresh/exhausted of same big category are considered identical for this purpose)
+	//The used global variable tracks how many markers are used, and also gives the next unused marker to be populated
+	//The number of troops are later added with js/css
+	for (let i = 0; i < V.troops.length; i += 2) { //Plain array map keyed by space
+		let space = V.troops[i]			//V.troops is keyed by space
+		let entries = V.troops[i + 1]
 
-				if (is_fresh(troop_type))
-					update_keyword(get_troop_name(troop_type), get_used(owner, troop_type), "fresh")
-				else
-					update_keyword(get_troop_name(troop_type), get_used(owner, troop_type), "exhausted")
+		for (let entry of entries) {
+			//Unraveling bitmasks
+			let who = decode_troop_entry_who(entry)
+			let type = decode_troop_entry_type(entry)
+			let num = decode_troop_entry_num(entry)
 
-				if (Number(space) === FRENCH_CASUALTIES) {
-					populate("fr_casualties", 0, get_troop_name(troop_type), get_used(owner, troop_type))
-				} else {
-					if (has_friendly_leader(owner, s)) { //If there's a friendly leader in the space, put the troops on his mat
-						populate(`subordinate_${get_troop_bucket(troop_type)}`, get_seniormost_leader(owner, s), get_troop_name(troop_type), get_used(owner, troop_type))
-					} else { //Or else stack them on the map
-						populate("space_stack", s, get_troop_name(troop_type), get_used(owner, troop_type))
-					}
-				}
-                
-				const cntr = document.querySelector(`.piece.${get_troop_name(troop_type)}.${get_abbreviation(owner)}.n${get_used(owner, troop_type)}`)
-
-				if (!cntr) {
-					console.warn("Missing troop element", { space: get_space_name(space), who: get_abbreviation(who), type: type})
-					continue
-				}
-
-				cntr.setAttribute("count", V.troops[space][who][type])
-				incr_used(owner, troop_type)
+			//Updating the marker to its 'fresh' or 'exhausted' side
+			if (is_fresh(type)) {
+				update_keyword(get_troop_name(type), get_used(who, type), "fresh")
+			} else {
+				update_keyword(get_troop_name(type), get_used(who, type), "exhausted")
 			}
+
+			//Populating the marker (without the number of troops)
+			if (has_friendly_leader(who, space)) { //If there's a friendly leader in the space, put the troops on his mat
+				populate(`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader(who, space), get_troop_name(type), get_used(who, type))
+			} else { //Or else stack them on the map
+				populate("space_stack", space, get_troop_name(type), get_used(who, type))
+			}
+
+			update_text("troop-text", get_used(who, type), num)
+			/*
+			const cntr = document.querySelector(`.piece.${get_troop_name(type)}.${get_abbreviation(who)}.n${get_used(who, type)}`)
+
+			if (!cntr) {
+				console.warn("Missing troop element", { space: get_space_name(space), who: get_abbreviation(who), type: type})
+				continue
+			}
+
+			cntr.setAttribute("count", num)
+			*/
+			incr_used(who, type)
 		}
 	}
 }

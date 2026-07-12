@@ -354,10 +354,7 @@ function is_key_city(s) {
 
 function is_fr_controlled(s) {
 	if (is_french_off_map_area(s)) return true
-	if (!G.troops[s]) return false
-	if (!G.troops[s][FR] && !G.troops[s][AU] && !G.troops[s][PR]) return false
-	if (G.troops[s][RU]) return false
-	return true
+	return has_troop(s) && (has_troop_in_space(FR, s) || has_troop_in_space(PR, s) || has_troop_in_space(AU, s)) && !has_troop_in_space(RU, s)
 }
 
 function is_ru_controlled(s) {
@@ -495,6 +492,86 @@ const FRESH_COSSACK = 4
 const EXHAUSTED_COSSACK = 5
 const FRESH_GUARD = 6
 const EXHAUSTED_GUARD = 7
+
+function has_troop(s) {
+	return map_has(G.troops, s)
+}
+
+function get_space_troop_list(space) {
+	return G.troops[G.troops.indexOf(space) + 1]
+}
+
+function decode_troop_entry_who(entry) {
+	return entry >> 10
+}
+
+function decode_troop_entry_type(entry) {
+	return (entry >> 6) & 15
+}
+
+function decode_troop_entry_num(entry) {
+	return entry & 63
+}
+
+function construct_troop_entry(who, type, num) {
+	let entry = 0
+	entry += who << 10
+	entry += type << 6
+	entry += num
+	return entry
+}
+
+function get_troop_entry(who, space, type, fallback) {
+	for (let entry of get_space_troop_list(space)) {
+		if ((who === decode_troop_entry_who(entry)) && (type === decode_troop_entry_type(entry))) {
+			return entry
+		}
+	}
+	return fallback
+}
+
+function set_troop(who, space, type, num) {
+	if (!has_troop(space)) { 
+		map_set(G.troops, space, []) 
+	}
+	// who (2 bits), type (4 bits), num (6 bits)
+	set_add(get_space_troop_list(space), construct_troop_entry(who, type, num))
+}
+
+function add_troop(who, space, type, num) {
+	if (!has_troop(space)) {
+		map_set(G.troops, space, [])
+	}
+	let entry = get_troop_entry(who, space, type, -1)
+	if (entry !== -1) {
+		let existing_troop_count = decode_troop_entry_num(entry)
+		set_delete(get_space_troop_list(space), entry)
+		set_add(get_space_troop_list(space), construct_troop_entry(who, type, num + existing_troop_count))
+	} else {
+		set_add(get_space_troop_list(space), construct_troop_entry(who, type, num))
+	}
+}
+
+function remove_troop(who, space, type, num) {
+	let entry = get_troop_entry(who, space, type, -1)
+	if (entry !== -1) {
+		let remaining_troop_count = decode_troop_entry_num(entry) - num
+		set_delete(get_space_troop_list(space), entry)
+		if (remaining_troop_count > 0) {
+			set_add(get_space_troop_list(space), construct_troop_entry(who, type, remaining_troop_count))
+		}
+	}
+}
+
+function has_troop_in_space(who, space) {
+	if (!has_troop(space)) { return false }
+	for (let entry of get_space_troop_list(space)) {
+		if (get_faction(decode_troop_entry_who(entry)) === who) {
+			return true
+		}
+	}
+	return false
+}
 
 //Turns
 const JUNE = 0
@@ -687,7 +764,7 @@ function on_setup(scenario, options) {
 	G.french_logistic_preparations = scenario_data.french_logistic_preparations
 	G.winter = scenario_data.winter
 
-	G.troops = {}
+	G.troops = []
 	G.leaders = Array(leader_count).fill(POOL)
 	G.depots = [Array(NUM_DEPOTS_RU).fill(POOL), Array(NUM_DEPOTS_FR).fill(POOL)]
 	G.devastation = Array(space_count).fill(0)
@@ -2346,37 +2423,6 @@ P.do_forced_march = {
 			end()
 		}
 	}
-}
-
-function set_troop(who, space, type, num) {
-	if (!G.troops[space]) G.troops[space] = {}
-	if (!G.troops[space][who]) G.troops[space][who] = {}
-	if (!G.troops[space][who][type]) G.troops[space][who][type] = 0
-
-	G.troops[space][who][type] = num
-}
-
-function add_troop(who, space, type, num) {
-	if (!G.troops[space]) G.troops[space] = {}
-	if (!G.troops[space][who]) G.troops[space][who] = {}
-	if (!G.troops[space][who][type]) G.troops[space][who][type] = 0
-
-	G.troops[space][who][type] += num
-}
-/*
-function remove_troop(who, space, type, num) {
-	let num_troops_in_space = G.troops[space][who][type]
-	G.troops[space][who][type] = Math.max(0, num_troops_in_space)
-
-	if (G.troops[space][who][type] === 0) { delete G.troops[space][who][type] }
-	if (G)
-}
-*/
-function has_troop_in_space(who, s) {
-	if (!G.troops[s]) return false
-	if (who === RU && !G.troops[s][RU]) return false
-	if (who === FR && !G.troops[s][FR] && !G.troops[s][PR] && !G.troops[s][AU]) return false
-	return true
 }
 
 
