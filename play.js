@@ -413,6 +413,10 @@ function on_update() {
 	action_button("draw", "Draw")
 	action_button("confirm", "Confirm")
 	action_button("pass", "Pass")
+
+	action_button("russia", "Russia")
+	action_button("france", "France")
+
 	action_button("undo", "Undo")
 
 	end_update()
@@ -546,6 +550,7 @@ function escape_text(text) {
 	escape_typography(text)
 	text = escape_tip_class_sub(text, /C(\d+)/g, "tip", "card card_$1", data.cards.map(card => card.name))
 	text = escape_tip_light(text, /S(\d+)/g, "tip", "space", data.spaces.map(s => s.name))
+	text = escape_tip_light(text, /L(\d+)/g, "tip", "leader", data.leaders.map(leader => leader.short_name))
 	return text
 }
 
