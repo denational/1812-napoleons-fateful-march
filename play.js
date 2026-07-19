@@ -1,9 +1,9 @@
 "use strict"
 
-const RU = 0
-const FR = 1
-const PR = 2
-const AU = 3
+const RUSSIA = 0
+const FRANCE = 1
+const PRUSSIA = 2
+const AUSTRIA = 3
 
 const ROLES = ["Russia", "France"]
 const abbreviations = ["ru", "fr", "pr", "au"]
@@ -17,15 +17,15 @@ function enemy(who) {
 }
 
 /* SPACES */
-const spaces = data.spaces
-const space_length = spaces.length
+const areas = data.areas
+const area_length = areas.length
 
 const POOL = 0
 const FRENCH_CASUALTIES = 156
 const OUT_OF_PLAY = -1
 
-function get_space_name(space) {
-	return spaces[space].name
+function get_area_name(area) {
+	return areas[area].name
 }
 
 /* LEADERS */
@@ -68,30 +68,30 @@ function get_leader_faction(leader) {
 }
 
 function get_first_leader(faction) {
-	return (faction === RU) ? first_ru_leader : first_fr_leader
+	return (faction === RUSSIA) ? first_ru_leader : first_fr_leader
 }
 
 function get_last_leader(faction) {
-	return (faction === RU) ? last_ru_leader : last_fr_leader
+	return (faction === RUSSIA) ? last_ru_leader : last_fr_leader
 }
 
 function has_friendly_leader(who, s) {
 	return get_seniormost_leader(who, s) !== -1
 }
 
-function is_seniormost_leader(who, space) {
+function is_seniormost_leader(who, area) {
 	let faction = get_leader_faction(who)
 	for (let leader = get_first_leader(faction); leader <= get_last_leader(faction); ++leader) {
-		if (get_leader_location(leader) === space) {
+		if (get_leader_location(leader) === area) {
 			return (who === leader)
 		}
 	}
 	return false
 }
 
-function get_seniormost_leader(faction, space) {
+function get_seniormost_leader(faction, area) {
 	for (let leader = get_first_leader(faction); leader <= get_last_leader(faction); ++leader) {
-		if (get_leader_location(leader) === space) {
+		if (get_leader_location(leader) === area) {
 			return leader
 		}
 	}
@@ -116,15 +116,15 @@ const FORAGE = 8
 const DUMMY_ORDER = 9
 
 function get_first_order(who) {
-	return (who === RU) ? first_ru_order : first_fr_order
+	return (who === RUSSIA) ? first_ru_order : first_fr_order
 }
 
 function get_last_order(who) {
-	return (who === RU) ? last_ru_order : last_fr_order
+	return (who === RUSSIA) ? last_ru_order : last_fr_order
 }
 
 function get_player_orders(who) {
-	return (who === RU) ? G.russian.orders : (who === FR) ? G.french.orders : null
+	return (who === RUSSIA) ? G.russian.orders : (who === FRANCE) ? G.french.orders : null
 }
 
 function get_order_type_name(type) {
@@ -152,6 +152,16 @@ const FRESH_COSSACK = 4
 const EXHAUSTED_COSSACK = 5
 const FRESH_GUARD = 6
 const EXHAUSTED_GUARD = 7
+
+const TROOP_ENTRY_PLAYER_SHIFT = 11
+const TROOP_ENTRY_NATION_SHIFT = 9
+const TROOP_ENTRY_TYPE_SHIFT = 6
+const TROOP_ENTRY_NUM_SHIFT = 0
+
+const TROOP_ENTRY_PLAYER_MASK = 2048
+const TROOP_ENTRY_NATION_MASK = 1536
+const TROOP_ENTRY_TYPE_MASK = 448
+const TROOP_ENTRY_NUM_MASK = 63
 
 const first_ru_inf = 0
 const last_ru_inf = 79
@@ -245,10 +255,10 @@ function get_used(who, type) {
 		return used_troops[CAVALRY][who]
 	case FRESH_COSSACK:
 	case EXHAUSTED_COSSACK:
-		return used_troops[SPECIAL][RU]
+		return used_troops[SPECIAL][RUSSIA]
 	case FRESH_GUARD:
 	case EXHAUSTED_GUARD:
-		return used_troops[SPECIAL][FR]
+		return used_troops[SPECIAL][FRANCE]
 	}
 }
 
@@ -262,10 +272,10 @@ function incr_used(who, type) {
 		return used_troops[CAVALRY][who]++; break
 	case FRESH_COSSACK:
 	case EXHAUSTED_COSSACK:
-		return used_troops[SPECIAL][RU]++; break
+		return used_troops[SPECIAL][RUSSIA]++; break
 	case FRESH_GUARD:
 	case EXHAUSTED_GUARD:
-		return used_troops[SPECIAL][FR]++; break
+		return used_troops[SPECIAL][FRANCE]++; break
 	}
 }
 
@@ -277,16 +287,20 @@ function reset_used() {
 	]
 }
 
-function decode_troop_entry_who(entry) {
-	return entry >> 10
+function decode_troop_entry_player(entry) {
+	return (entry & TROOP_ENTRY_PLAYER_MASK) >> TROOP_ENTRY_PLAYER_SHIFT
+}
+
+function decode_troop_entry_nation(entry) {
+	return (entry & TROOP_ENTRY_NATION_MASK) >> TROOP_ENTRY_NATION_SHIFT
 }
 
 function decode_troop_entry_type(entry) {
-	return (entry >> 6) & 15
+	return (entry & TROOP_ENTRY_TYPE_MASK) >> TROOP_ENTRY_TYPE_SHIFT
 }
 
 function decode_troop_entry_num(entry) {
-	return entry & 63
+	return entry & TROOP_ENTRY_NUM_MASK
 }
 
 /* TIME */
@@ -306,7 +320,7 @@ var num_devastated = 0
 
 /* MISC FUNCTIONS */
 function get_pool_depots(side) {
-	return (side === RU) ? "ru_pool_depots" : "fr_pool_depots"
+	return (side === RUSSIA) ? "ru_pool_depots" : "fr_pool_depots"
 }
 
 function translate_right(rect, amt) {
@@ -320,14 +334,14 @@ function on_init() {
 	define_panel("#plan_orders", "plan_orders", 0)
 	define_panel("#played", "played", 0)
 	define_panel("#hand", "hand", 0)
-	define_panel("#ru_leaders", "leaders", RU)
-	define_panel("#fr_leaders", "leaders", FR)
+	define_panel("#ru_leaders", "leaders", RUSSIA)
+	define_panel("#fr_leaders", "leaders", FRANCE)
    
 	/* SPACES */
-	for (let s = 1; s < space_length; s++) {
-		define_space("space", s, layout[get_space_name(s)]).tooltip(get_space_name(s))
-		define_stack("space_stack", s, layout[get_space_name(s)], -20, -20, 0, -58, 0, 36, 1, 4, 0.5, 0.5)
-		define_stack("orders_stack", s, translate_right(layout[get_space_name(s)], 52), 0, -60, 0, -12)
+	for (let s = 1; s < area_length; s++) {
+		define_space("area", s, layout[get_area_name(s)]).tooltip(get_area_name(s))
+		define_stack("area_stack", s, layout[get_area_name(s)], -20, -20, 0, -58, 0, 36, 1, 4, 0.5, 0.5)
+		define_stack("orders_stack", s, translate_right(layout[get_area_name(s)], 52), 0, -60, 0, -12)
 	}
 	define_layout("ru_pool_depots", 0, layout["Russia Pool Depots"], "square")
 	define_layout("fr_pool_depots", 0, layout["France Pool Depots"], "square")
@@ -415,8 +429,8 @@ function on_init() {
 function on_update() {
 	begin_update()
 
-	roles[RU].stat.innerHTML = `${V.hand_length[RU]} cards`
-	roles[FR].stat.innerHTML = `${V.hand_length[FR]} cards`
+	roles[RUSSIA].stat.innerHTML = `${V.hand_length[RUSSIA]} cards`
+	roles[FRANCE].stat.innerHTML = `${V.hand_length[FRANCE]} cards`
 
 	//Reset counters
 	reset_used()
@@ -437,10 +451,10 @@ function on_update() {
 		populate("played", 0, "card", c)
 	}
 
-	//update_orders()    
-
 	action_button("done", "Done")
+	action_button("next", "Next")
 	action_button("draw", "Draw")
+	action_button("discard", "Discard")
 	action_button("confirm", "Confirm")
 	action_button("pass", "Pass")
 
@@ -448,7 +462,7 @@ function on_update() {
 	action_button("france", "France")
 
 	for (let leader = 0; leader <= 13; ++leader) {
-		action_button_with_argument(`leader-button`, leader, get_leader_short_name(leader))
+		action_button_with_argument(`leader_button`, leader, get_leader_short_name(leader))
 	}
 
 	action_button_with_argument("troop", FRESH_INFANTRY, "Infantry")
@@ -460,14 +474,14 @@ function on_update() {
 	action_button_with_argument("troop", FRESH_GUARD, "Guard")
 	action_button_with_argument("troop", EXHAUSTED_GUARD, "Exh. Guard")
 
-	action_button_with_argument("add-troop", FRESH_INFANTRY, "+ Infantry")
-	action_button_with_argument("add-troop", EXHAUSTED_INFANTRY, "+ Exh. Infantry")
-	action_button_with_argument("add-troop", FRESH_CAVALRY, "+ Cavalry")
-	action_button_with_argument("add-troop", EXHAUSTED_CAVALRY, "+ Exh. Cavalry")
-	action_button_with_argument("add-troop", FRESH_COSSACK, "+ Cossack")
-	action_button_with_argument("add-troop", EXHAUSTED_COSSACK, "+ Exh. Cossack")
-	action_button_with_argument("add-troop", FRESH_GUARD, "+ Guard")
-	action_button_with_argument("add-troop", EXHAUSTED_GUARD, "+ Exh. Guard")
+	action_button_with_argument("remove_troop", FRESH_INFANTRY, "- Infantry")
+	action_button_with_argument("remove_troop", EXHAUSTED_INFANTRY, "- Exh. Infantry")
+	action_button_with_argument("remove_troop", FRESH_CAVALRY, "- Cavalry")
+	action_button_with_argument("remove_troop", EXHAUSTED_CAVALRY, "- Exh. Cavalry")
+	action_button_with_argument("remove_troop", FRESH_COSSACK, "- Cossack")
+	action_button_with_argument("remove_troop", EXHAUSTED_COSSACK, "- Exh. Cossack")
+	action_button_with_argument("remove_troop", FRESH_GUARD, "- Guard")
+	action_button_with_argument("remove_troop", EXHAUSTED_GUARD, "- Exh. Guard")
 
 
 	action_button("undo", "Undo")
@@ -502,12 +516,12 @@ function update_leaders() {
 		switch(get_leader_location(leader)) {
 		case OUT_OF_PLAY: continue
 		case POOL:
-			populate((get_leader_faction(leader) === RU) ? "ru_pool_leaders" : "fr_pool_leaders", 0, "leader", leader); break
+			populate((get_leader_faction(leader) === RUSSIA) ? "ru_pool_leaders" : "fr_pool_leaders", 0, "leader", leader); break
 		case FRENCH_CASUALTIES:
 			populate("fr_casualties", 0, "leader", leader); break
 		default:
 			if (is_seniormost_leader(leader, get_leader_location(leader))) {
-				populate("space_stack", get_leader_location(leader), "leader", leader)
+				populate("area_stack", get_leader_location(leader), "leader", leader)
 				populate("leaders", get_leader_faction(leader), "leader_board", leader)
 			} else {
 				populate("subordinate_leaders", get_seniormost_leader(get_leader_faction(leader), get_leader_location(leader)), "leader", leader)
@@ -520,32 +534,33 @@ function update_troops() {
 	//Currently the idea is to use a common pool of markers for each troop type (fresh/exhausted of same big category are considered identical for this purpose)
 	//The used global variable tracks how many markers are used, and also gives the next unused marker to be populated
 	//The number of troops are later added with js/css
-	for (let i = 0; i < V.troops.length; i += 2) { //Plain array map keyed by space
-		let space = V.troops[i]			//V.troops is keyed by space
+	for (let i = 0; i < V.troops.length; i += 2) { //Plain array map keyed by area
+		let area = V.troops[i]			//V.troops is keyed by area
 		let entries = V.troops[i + 1]
 
 		for (let entry of entries) {
 			//Unraveling bitmasks
-			let who = decode_troop_entry_who(entry)
+			let player = decode_troop_entry_player(entry)
+			let nation = decode_troop_entry_nation(entry)
 			let type = decode_troop_entry_type(entry)
 			let num = decode_troop_entry_num(entry)
 
 			//Updating the marker to its 'fresh' or 'exhausted' side
 			if (is_fresh(type)) {
-				update_keyword(get_troop_name(type), get_used(who, type), "fresh")
+				update_keyword(get_troop_name(type), get_used(nation, type), "fresh")
 			} else {
-				update_keyword(get_troop_name(type), get_used(who, type), "exhausted")
+				update_keyword(get_troop_name(type), get_used(nation, type), "exhausted")
 			}
 
 			//Populating the marker (without the number of troops)
-			if (has_friendly_leader(who, space)) { //If there's a friendly leader in the space, put the troops on his mat
-				populate(`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader(who, space), get_troop_name(type), get_used(who, type))
+			if (has_friendly_leader(nation, area)) { //If there's a friendly leader in the area, put the troops on his mat
+				populate(`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader(nation, area), get_troop_name(type), get_used(nation, type))
 			} else { //Or else stack them on the map
-				populate("space_stack", space, get_troop_name(type), get_used(who, type))
+				populate("area_stack", area, get_troop_name(type), get_used(nation, type))
 			}
 
-			update_text("troop-text", get_used(who, type), num)
-			incr_used(who, type)
+			update_text("troop-text", get_used(nation, type), num)
+			incr_used(nation, type)
 		}
 	}
 }
@@ -553,9 +568,9 @@ function update_troops() {
 function update_depots() {
 	for (let depot = 0; depot < V.depots.length; ++depot) {
 		if (V.depots[depot] === POOL) {
-			populate(get_pool_depots((depot < 14 ? RU : FR)), 0, "depot", depot)
+			populate(get_pool_depots((depot < 14 ? RUSSIA : FRANCE)), 0, "depot", depot)
 		} else {
-			populate("space", V.depots[depot], "depot", depot)
+			populate("area", V.depots[depot], "depot", depot)
 		}
 	}
 }
@@ -564,7 +579,7 @@ function update_devastation() {
 	let num_devastated = 0
 	for (let dev = 1; dev < V.devastation.length; ++dev) {
 		if (Number(V.devastation[Number(dev)]) > 0) {
-			populate("space", Number(dev), "devastation", num_devastated)
+			populate("area", Number(dev), "devastation", num_devastated)
 			update_keyword("devastation", num_devastated, `lvl${V.devastation[dev]}`)
 
 			num_devastated++
@@ -599,7 +614,7 @@ function escape_text(text) {
 	escape_html(text)
 	escape_typography(text)
 	text = escape_tip_class_sub(text, /C(\d+)/g, "tip", "card card_$1", data.cards.map(card => card.name))
-	text = escape_tip_light(text, /S(\d+)/g, "tip", "space", data.spaces.map(s => s.name))
+	text = escape_tip_light(text, /S(\d+)/g, "area-tip", "area", data.areas.map(s => s.name))
 	text = escape_tip_light(text, /L(\d+)/g, "tip", "leader", data.leaders.map(leader => leader.short_name))
 	return text
 }

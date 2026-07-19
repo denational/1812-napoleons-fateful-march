@@ -37,15 +37,11 @@ body.Russia header.your_turn {background-color: var(--russia);}
     }
 }
 
-#tip {
+#tip, #space-tip {
 	position: fixed;
 	z-index: 100;
 	right: 240px;
 	top: 60px;
-}
-
-.tip {
-	font-style: italic;
 }
 
 /* LOGGING */
@@ -63,7 +59,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
 }
 
 #log .h2 { 
-    background-color: hsl(34, 50%, 80%);
+    background-color: wheat;
     padding:2px 0;
     text-align: center;
     font-variant-caps: small-caps;
@@ -106,9 +102,14 @@ body.Russia header.your_turn {background-color: var(--russia);}
 		font-variant: small-caps;
 		font-style: normal;
 	}
+
+	& .space-tip {
+		font-style: italic;
+	}
+
 }
 
-#log .tip:hover {
+#log .tip:hover, .space-tip:hover {
     cursor: pointer; 
     text-decoration: underline;
 }

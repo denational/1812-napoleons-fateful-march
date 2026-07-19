@@ -17,5 +17,5 @@ with open("connections.csv") as connections:
         connections_writer.writerow(["id", "space1", "space2", "type", "bridge"]) #header
         for row in connections_reader:
             connections_writer.writerow([row[0], id_space_map[row[1]], id_space_map[row[2]], row[3], row[4]])
-            print("Finished connection #" + row[0] + ": " + row[1] + " to " + row[2] + ".")
+            #print("Finished connection #" + row[0] + ": " + row[1] + " to " + row[2] + ".")
         print("Done!")
