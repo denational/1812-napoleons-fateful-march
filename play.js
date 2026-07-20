@@ -181,7 +181,7 @@ const first_ru_cossack = 211
 const last_ru_cossack = 230
 
 const first_fr_guard = 231
-const last_fr_guard = 235
+const last_fr_guard = 240
 
 var used_troops = [
 	[first_ru_inf, first_fr_inf, first_pr_inf, first_au_inf],
@@ -369,7 +369,7 @@ function on_init() {
 			.keyword("square")
 		define_thing("subordinate_special", leader)
 			.static_child(leader_board)
-			.keyword("square")
+			//.keyword("square")
 	}
 
 	for (let leader = 0; leader < leaders.length; ++leader) {

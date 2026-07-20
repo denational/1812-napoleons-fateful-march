@@ -45,35 +45,32 @@ body.Russia header.your_turn {background-color: var(--russia);}
 }
 
 /* LOGGING */
-
 #log {
-    background-color: hsl(52, 30%, 89%)
-}
+	background-color: hsl(52, 30%, 89%);
 
-#log .h1 { 
-    background-color: hsl(200, 34%, 73%);
-    font-weight: bold;
-    padding:2px 0;
-    text-align: center;
-    font-variant-caps: small-caps;
-}
+	& .h1 { 
+		background-color: hsl(200, 34%, 73%);
+		font-weight: bold;
+		padding:2px 0;
+		text-align: center;
+		font-variant-caps: small-caps;
+	}
 
-#log .h2 { 
-    background-color: wheat;
-    padding:2px 0;
-    text-align: center;
-    font-variant-caps: small-caps;
-}
+	& .h2 {
+    	background-color: wheat;
+    	padding:2px 0;
+    	text-align: center;
+    	font-variant-caps: small-caps;
+	}
 
-#log .h3 { 
-    background-color: lightgray;
-    text-align: left;
-}
+	& .h3 { 
+    	background-color: lightgray;
+    	text-align: left;
+	}
+	& .h3.ru { background-color: var(--russia_light);}
+	& .h3.fr { background-color: var(--france_light);}
 
-#log .h3.ru { background-color: var(--russia_light);}
-#log .h3.fr { background-color: var(--france_light);}
 
-#log {
 	& .group.header { 
 		font-variant: small-caps; 
 		text-align: center; 
@@ -215,7 +212,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
     background-size: cover;
 }
 
-.subordinate_leaders, .subordinate_infantry, .subordinate_cavalry, .subordinate_special {
+.leader_board > * {
 	position: absolute;
 	width: 190px;
     height: 75px;
@@ -226,9 +223,12 @@ body.Russia header.your_turn {background-color: var(--russia);}
 }
 
 .subordinate_special {
-	top: 225px;
-	z-index: 1;
-	border: rgba(255, 0, 0, 0.533);
+    top: 225px;
+    z-index: 1;
+}
+
+.subordinate_special > .piece.guard, .subordinate_special > .piece.cossack {
+	position: relative;
 }
 
 .subordinate_cavalry {

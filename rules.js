@@ -120,7 +120,7 @@ const VULNERABLE_SUPPLY_LINES = 94
 const FREEZING_WEATHER = 95
 const EXTREME_WEATHER_FR = 96
 const LOGISTICS_COLLAPSE = 97
-const CHAOTIC_FOOD_DISTRIIBUTION = 98
+const CHAOTIC_FOOD_DISTRIBUTION = 98
 const MUCH_NEEDED_VICTUALS = 99
 const ENERGETIC_LEADERSHIP = 100
 const INFERIOR_MUSKETRY = 101
@@ -500,6 +500,10 @@ function draw_card(who) {
 	return drawn_card
 }
 
+function return_dummy_to_hand(who) {
+	array_insert(get_hand(who), 0, get_dummy(who))
+}
+
 /* SPACES */
 function get_area_name(a) {
 	return areas[a].name
@@ -781,8 +785,30 @@ function move_troop(nation, from, to, type, num) {
 	add_troop(nation, to, type, num)
 }
 
+function rally_troop(nation, area, type, num = 1) {
+	remove_troop(nation, area, type, num)
+	add_troop(nation, area, type - 1, num)
+}
+
+function get_troop_types_at_area(area) {
+	let types = []
+	for (let entry of get_area_troop_set(area, [])) {
+		let type = decode_troop_entry_type(entry)
+		if (!set_has(types, type)) { set_add(types, type) }
+	}
+	return types
+}
+
+function is_troop_type_exhausted(type) {
+	return !!(type % 2)
+}
+
 function has_troop_in_area(player, area) {
 	return get_area_troop_set(area, null)?.some(entry => decode_troop_entry_player(entry) === player) ?? false
+}
+
+function has_exhausted_sp(who, area) {
+	return get_area_troop_set(area, undefined)?.some(entry => (decode_troop_entry_player(entry) === who) && (is_troop_type_exhausted(decode_troop_entry_type(entry))))
 }
 
 /* TIME */
@@ -878,7 +904,7 @@ function get_areas_with_devastation() {
 }
 
 function get_devastated_areas_with_french_troops() {
-	return get_areas_with_devastation.filter(area => has_troop_in_area(FRANCE, area))
+	return get_areas_with_devastation().filter(area => has_troop_in_area(FRANCE, area))
 }
 
 //=== VIEW ===
@@ -1182,7 +1208,7 @@ function setup_july() {
 }
 
 function setup_aug() {
-	log_h2("August Setup")
+	log_h1("August Setup")
 	/* RUSSIA */
 	set_troop(RUSSIA, S_RIGA, FRESH_INFANTRY, 1)
 	set_troop(RUSSIA, S_MITAU, FRESH_INFANTRY, 1)
@@ -1528,7 +1554,6 @@ P.setup_hand = { //TODO: clarification on whether discards are public, shuffle d
 		set_delete(G.active, R)
 
 		if (G.active.length === 0) { //Scenario 5 special rule
-			/*
 			if (L.scenario === BATTLE_OF_SMOLENSK_CAMPAIGN_START) {
 				if (set_has(get_discard(RUSSIA), HOLY_MOTHER_RUSSIA_RU)) {
 					set_delete(get_discard(RUSSIA), HOLY_MOTHER_RUSSIA_RU)
@@ -1538,8 +1563,7 @@ P.setup_hand = { //TODO: clarification on whether discards are public, shuffle d
 				get_deck(RUSSIA).push(HOLY_MOTHER_RUSSIA_RU)
 				log(`C${HOLY_MOTHER_RUSSIA_RU} placed on top of the Russian deck.`)
 			}
-			*/
-			test_card(VULNERABLE_SUPPLY_LINES)
+			test_card(CHAOTIC_FOOD_DISTRIBUTION)
 			call("begin_turn")
 		}
 	}
@@ -1569,6 +1593,7 @@ P.turn = script(`
 	eval { log_h1(get_month_name(G.turn) + " " + get_turn_name(G.turn))}
 
 	call draw_card_to_hand
+	call play_card_for_orders
 `)
 
 /* 
@@ -1624,6 +1649,7 @@ P.draw_card_to_hand = {
 		map_set(L.event_execution_status, HOLY_MOTHER_RUSSIA_RU, -1)
 		map_set(L.event_execution_status, CHAOS_IN_THE_REAR_AREAS, -1)
 		map_set(L.event_execution_status, VULNERABLE_SUPPLY_LINES, -1)
+		map_set(L.event_execution_status, CHAOTIC_FOOD_DISTRIBUTION, -1)
 
 		//Event flags
 		//To handle logging on leader events (kludge!)
@@ -1705,15 +1731,47 @@ P.draw_card_to_hand = {
 				button_confirm()
 			}
 			return
+		case `event_${CHAOTIC_FOOD_DISTRIBUTION}`:
+			if (G.depots[FRANCE].some(depot => (depot !== POOL) && (depot !== OUT_OF_PLAY))) {
+				if (map_get(L.event_execution_status, CHAOTIC_FOOD_DISTRIBUTION, null) === -1) {
+					prompt_card(CHAOTIC_FOOD_DISTRIBUTION, "Remove a French depot from map.")
+					for (let area of get_areas_with_depots(FRANCE)) {
+						action("area", area)
+					}
+				} else if (map_get(L.event_execution_status, CHAOTIC_FOOD_DISTRIBUTION, null) === 0) {
+					if (has_exhausted_sp(R, L.selected_area)) {
+						prompt_card(CHAOTIC_FOOD_DISTRIBUTION, `Rally one exhausted SP at S${L.selected_area}.` )
+						for (let type of get_troop_types_at_area(L.selected_area)) {
+							if (is_troop_type_exhausted(type)) {
+								action("troop", type)
+							}
+						}
+					} else {
+						prompt_card(CHAOTIC_FOOD_DISTRIBUTION, "No troops to rally.")
+						button_next()
+					}
+				} else {
+					prompt_card(CHAOTIC_FOOD_DISTRIBUTION, "Draw a card.")
+					button_draw()
+				}
+			} else {
+				prompt_card(CHAOTIC_FOOD_DISTRIBUTION, "All done.")
+				button_confirm()
+			}
+			button_undo(map_get(L.event_execution_status, CHAOTIC_FOOD_DISTRIBUTION, null) > -1)
+			return
 		default: 
 			prompt_event_confirmation(L.state[R])
 			return
 		}
 	},
 	draw() {
-		if (L.state[R] === `event_${EXTREME_WEATHER_RU}`) { //EXCEPTION: Since another must-play could be drawn, log here
+		if (L.drawn_card[R] === EXTREME_WEATHER_RU) { //EXCEPTION: Since another must-play could be drawn, log here
 			log_event_confirmation(EXTREME_WEATHER_RU)
 			discard_or_remove_card(EXTREME_WEATHER_RU)
+		} else if ((L.drawn_card[R] === CHAOTIC_FOOD_DISTRIBUTION)) {
+			card_box_end()
+			discard_or_remove_card(CHAOTIC_FOOD_DISTRIBUTION)
 		}
 
 		L.drawn_card[R] = draw_card(R)
@@ -1722,6 +1780,8 @@ P.draw_card_to_hand = {
 			L.persistent_events.push(L.drawn_card[R])
 			if (L.drawn_card[R] === VULNERABLE_SUPPLY_LINES) {
 				L.depots_to_remove = get_all_unoccupied_depots(FRANCE)
+			} else if (L.drawn_card[R] === CHAOTIC_FOOD_DISTRIBUTION) {
+				card_box_begin(CHAOTIC_FOOD_DISTRIBUTION)
 			}
 		} else {
 			L.state[R] = "review_drawn_card"
@@ -1736,7 +1796,15 @@ P.draw_card_to_hand = {
 		map_set(L.event_execution_status, VULNERABLE_SUPPLY_LINES, 0) //Increment execution status
 	},
 	next() {
-		map_set(L.event_execution_status, VULNERABLE_SUPPLY_LINES, 1)
+		switch(L.state[R]) {
+		case `event_${VULNERABLE_SUPPLY_LINES}`:
+			map_set(L.event_execution_status, VULNERABLE_SUPPLY_LINES, 1)
+			return
+		case `event_${CHAOTIC_FOOD_DISTRIBUTION}`:
+			map_set(L.event_execution_status, CHAOTIC_FOOD_DISTRIBUTION, 1)
+			return
+		}
+		
 	},
 	done() {
 		finish("WIP", "exit code 1")
@@ -1761,7 +1829,16 @@ P.draw_card_to_hand = {
 			remove_depot(FRANCE, a)
 			set_delete(L.depots_to_remove, a)
 			return
+		case `event_${CHAOTIC_FOOD_DISTRIBUTION}`:
+			L.selected_area = a
+			remove_depot(FRANCE, a)
+			map_set(L.event_execution_status, CHAOTIC_FOOD_DISTRIBUTION, 0)
+			return
 		}
+	},
+	troop(type) {
+		rally_troop(R, L.selected_area, type)
+		map_set(L.event_execution_status, CHAOTIC_FOOD_DISTRIBUTION, 1)
 	},
 	undo() {
 		switch(L.state[R]) {
@@ -1785,7 +1862,10 @@ P.draw_card_to_hand = {
 			set_delete(G.active, R)
 		} 
 		else if ((L.drawn_card[R] !== HOLY_MOTHER_RUSSIA_RU) && (L.state[R] !== "holy_mother_russia_ru_fr") && (L.state[R] !== "review_drawn_card")) { //Any must-play event except "Holy Mother Russia"
-			if (!L.event_already_executed[R]) {
+			if (L.drawn_card[R] === CHAOTIC_FOOD_DISTRIBUTION) {
+				log("No effect.")
+				card_box_end()
+			} else if (!L.event_already_executed[R]) {
 				log_event_confirmation(L.drawn_card[R]) //Do all logging in one go to prevent unintended nesting between both players' events
 			}
 			discard_or_remove_card(L.drawn_card[R])
@@ -1817,6 +1897,65 @@ P.draw_card_to_hand = {
 			for (let evt of L.persistent_events) { add_persistent_event(evt) }
 			if (L.selected_key > -1) { add_event_keyword(HOLY_MOTHER_RUSSIA_RU, { area : L.selected_key}) }
 
+			end()
+		}
+	}
+}
+
+/*
+	At the beginning of each new Turn, each player plays a card to increase the number of orders for that turn by its OPS value.
+	If a player doesn’t want to use a card for extra orders, he uses his Dummy card to hide this intention from his opponent.
+	Players then simultaneously flip their chosen card revealing it to the opponent. (p. 9)
+*/
+
+P.play_card_for_orders = {
+	_begin() {
+		G.active = [RUSSIA, FRANCE]
+		L.played_card = [-1, -1]
+		L.ops_played = [-1, -1]
+		log_h2("Play Cards for Orders")
+	},
+	prompt() {
+		if (L.played_card[R] === -1) {
+			prompt("Play a card for additional orders, or play a Dummy.")
+			for (let c of get_hand(R)) {
+				action_card(c)
+			}
+		} else {
+			prompt(`You played C${L.played_card[R]} for ${L.ops_played[R]} additional orders.`)
+			button_confirm()
+			button_undo()
+		}
+	},
+	card(c) {
+		L.played_card[R] = c
+		L.ops_played[R] = get_card_ops(c)
+		array_delete_item(get_hand(R), c)
+	},
+	undo() {
+		if (is_card_dummy(L.played_card[R])) {
+			return_dummy_to_hand(R)
+		} else {
+			get_hand(R).push(L.played_card[R])
+		}
+		L.played_card[R] = -1
+		L.ops_played[R] = -1
+	},
+	confirm() {
+		set_delete(G.active, R)
+		if (is_card_dummy(L.played_card[R])) {
+			return_dummy_to_hand(R)
+		} else {
+			discard_card(R, L.played_card[R])
+		}
+
+		if (G.active.length === 0) {
+			log()
+			for (let who = RUSSIA; who <= FRANCE; ++who) {
+				log_h3(`C${L.played_card[who]}: +${L.ops_played[who]} orders`, who)
+			}
+			log()
+			L.L.additional_orders = L.ops_played
 			finish("Success", "exit code 0")
 		}
 	}
@@ -2139,6 +2278,10 @@ function log_must_play_event(c) {
 	card_box_end()
 }
 
+function get_abbreviation(who) {
+	return (who === RUSSIA) ? "ru" : "fr"
+}
+
 function log_h1(text) {
 	log()
 	log(`!${text}`)
@@ -2149,6 +2292,10 @@ function log_h2(text) {
 	log()
 	log(`@${text}`)
 	log()
+}
+
+function log_h3(text, who) {
+	log(`#${get_abbreviation(who)}${text}`)
 }
 
 function card_box_begin(card) {
