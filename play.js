@@ -555,6 +555,8 @@ function update_troops() {
 			//Populating the marker (without the number of troops)
 			if (has_friendly_leader(nation, area)) { //If there's a friendly leader in the area, put the troops on his mat
 				populate(`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader(nation, area), get_troop_name(type), get_used(nation, type))
+			} else if (area === FRENCH_CASUALTIES) {
+				populate("fr_casualties", 0, get_troop_name(type), get_used(nation, type))
 			} else { //Or else stack them on the map
 				populate("area_stack", area, get_troop_name(type), get_used(nation, type))
 			}

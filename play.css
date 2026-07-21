@@ -37,11 +37,16 @@ body.Russia header.your_turn {background-color: var(--russia);}
     }
 }
 
-#tip, #space-tip {
+#tip, #area-tip {
 	position: fixed;
 	z-index: 100;
 	right: 240px;
 	top: 60px;
+}
+
+.area.highlight {
+	border-color: lime;
+	box-shadow: 0 0 0 1px black, inset 0 0 0 1px black;
 }
 
 /* LOGGING */
@@ -92,24 +97,21 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	}
 
 	& .i {
-		text-indent: 5px;
+		text-indent: 12px;
 	}
 
 	& .tip {
 		font-variant: small-caps;
 		font-style: normal;
 	}
-
-	& .space-tip {
-		font-style: italic;
-	}
-
 }
 
-#log .tip:hover, .space-tip:hover {
+#log .tip:hover, .area-tip:hover {
     cursor: pointer; 
     text-decoration: underline;
 }
+
+
 
 /* ORDER PLANNING MINIBOARD */
 #plan_orders {
@@ -124,19 +126,19 @@ body.Russia header.your_turn {background-color: var(--russia);}
 }
 
 /* SPACES */
-.space {
+.area {
 	box-sizing: border-box;
 	position: absolute;
 	border: 3px solid transparent;
 	border-radius: 50% 50% 50% 50%;
 }
 
-.space.action {
+.area.action {
 	border-color: yellow;
 	z-index: 20;
 }
 
-.space_stack {
+.area_stack {
 	z-index: 5;
 }
 
@@ -402,7 +404,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	z-index: -2;
 }
 
-.space > .marker.devastation { /* top left */
+.area > .marker.devastation { /* top left */
 	top: -35px;
 	left: -35px;
 }
@@ -419,7 +421,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	bottom: -20px;
 }
 
-.space > .marker.depot {
+.area > .marker.depot {
 	bottom: -25px;
 	left: -40px;
 }

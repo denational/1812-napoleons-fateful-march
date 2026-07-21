@@ -759,8 +759,6 @@ function add_troop(nation, area, type, num) {
 	} else {
 		set_add(get_area_troop_set(area), construct_troop_entry(nation, type, num))
 	}
-
-	logi(num + " " + get_troop_type_name(type))
 }
 
 function remove_troop(nation, area, type, num) {
@@ -829,9 +827,35 @@ function get_troop_type_name(type) {
 	}
 }
 
+function count_num_sps(who, area) {
+	let count = 0
+	for (let entry of get_area_troop_set(area))
+		if (decode_troop_entry_player(entry) === who)
+			count += decode_troop_entry_num(entry)
+	return count
+}
+
+function find_areas_with_most_ru_sps() {
+	let area_with_most_sps = []
+	let count = 0
+	map_for_each(G.troops, (area, set) => {
+		if (has_russian_sp(area) && (count_num_sps(RUSSIA, area) > count)) {
+			set_add(area_with_most_sps, area)
+			count = count_num_sps(RUSSIA, area)
+			let entries_to_delete = area_with_most_sps.filter(s => count_num_sps(RUSSIA, s) < count)
+			for (let s of entries_to_delete) { set_delete(area_with_most_sps, s) }
+		}
+	})
+	return area_with_most_sps
+}
+
 /* TIME */
 function get_month(turn) {
 	return Math.ceil(turn / 6)
+}
+
+function get_current_month() {
+	return get_month(G.turn)
 }
 
 function is_resource_turn(turn) {
@@ -861,12 +885,15 @@ function get_season(turn) {
 }
 
 function shift_initiative(in_favor_of, amount = 1) {
-	if (in_favor_of === RUSSIA) {
-		if (G.initiative > -4) {G.initiative--}
-		if (G.initiative === 0) {G.initiative--}
-	} else {
-		if (G.initiative < 4) {G.initiative++}
-		if (G.initiative === 0) {G.initiative++}
+	while(amount > 0) {
+		if (in_favor_of === RUSSIA) {
+			if (G.initiative > -4) {G.initiative--}
+			if (G.initiative === 0) {G.initiative--} //no zero
+		} else {
+			if (G.initiative < 4) {G.initiative++}
+			if (G.initiative === 0) {G.initiative++} //no zero
+		}
+		--amount
 	}
 }
 
@@ -1000,7 +1027,7 @@ function on_setup(scenario, options) {
 	G.enemy_orders = []
 	G.selected_orders = [[], []]
 
-	switch(get_month(G.turn)) {
+	switch(get_current_month()) {
 	case JUNE: setup_june(); break
 	case JULY: setup_july(); break
 	case AUG: setup_aug(); break
@@ -1597,126 +1624,6 @@ function test_card(c) {
 	log(`TEST: C${c} placed on top of the ${ROLES[who]} deck.`)
 }
 
-//=== SUPPLY, LINES OF COMMUNICATION & ATTRITION ===
-const SUPPLY_SOURCES = [
-	[S_RIGA, S_LIVONIA, S_PSKOV, S_UKRAINE, S_TORZHOK, S_VORONEZH, S_VLADIMIR_RUSSIA, S_UNNAMED_H2, S_RYAZAN], 
-	[S_PRUSSIA_SOUTH, S_GRAND_DUCHY_OF_WARSAW_NORTH, S_GRAND_DUCHY_OF_WARSAW_SOUTH, S_AUSTRIA],
-]
-
-const MAX_SUPPLY_DISTANCE = 5
-const MAX_LOC_DISTANCE = 4
-
-const ROAD = 1
-const TRACK = 2
-
-function get_all_adjacent_areas_of_connection_type(area, connection_type) {
-	return (connection_type === ROAD) ? get_adjacent_areas_by_road(area) : get_adjacent_areas_by_track(area) 
-}
-
-function get_supply_sources(who) {
-	return SUPPLY_SOURCES[who].slice()
-}
-
-function get_supply_sources_and_depots(who) {
-	let sources = get_supply_sources(who)
-	for (let area of G.depots[who]) 
-		if (area !== POOL) 
-			set_add(sources, area)
-	return sources
-}
-
-function is_in_supply(who, space) {
-	return G.supply[who][space] <= MAX_SUPPLY_DISTANCE
-}
-
-function has_enemy_sp(who, space) {
-	return (who === RUSSIA && has_friendly_troop_in_space(FRANCE, space)) || (who === FRANCE && has_friendly_troop_in_space(RUSSIA, space))
-}
-
-/* SUPPLY */
-
-//Returns the distance from each space to its closest node if in supply, greater than 5 if OOS
-function calculate_distance_to_nearest_depot(who) {
-	let sources = get_supply_sources_and_depots(who)
-	let distance = Array(NUM_SPACES).fill(999)
-
-	for (let source of sources) {
-		distance[source] = 0
-	}
-
-	for (let source of sources) {
-		let queue = [ source ]
-
-		while (queue.length > 0) {
-			let current = queue.shift()
-
-			if ((distance[current] > MAX_SUPPLY_DISTANCE) || has_enemy_sp(who, current)) {
-				continue
-			}
-
-			//Tracks and Roads are identical for supply purposes except for their modified distance: Road - 1, Track - 2
-			for (let connection_type = ROAD; connection_type <= TRACK; ++connection_type) {
-				for (let s of get_all_adjacent_areas_of_connection_type(current, connection_type)) {
-					if (distance[s] > distance[current] + connection_type) {
-						distance[s] = distance[current] + connection_type
-						queue.push(s)
-					}
-				}
-			}
-		}
-
-	}
-	
-	return distance
-}
-
-/* LINES OF COMMUNICATION */
-
-//Returns a plain array map with each on-map depot of that side and its corresponding supply status
-function check_lines_of_communication(who) {
-	let sources = get_supply_sources(who) //Starting supply sources without depots
-
-	let depots = [] //Set of depot spaces for efficient lookup
-	for (let depot of G.depots[who].filter(s => s !== POOL)) {
-		set_add(depots, depot)
-	}
-
-	let depot_status = [] //Map pairing depots with whether they are in-supply or OOS
-	for (let depot of depots) {
-		map_set(depot_status, depot, false)
-	}
-
-	let queue = sources.slice()
-	let distance = Array(NUM_SPACES).fill(999)
-	for (let source of sources) { //Start with supply sources
-		distance[source] = 0
-	}
-
-	while (queue.length > 0) {
-		let current = queue.shift()
-
-		//Cannot trace through enemy SPs & max. distance of 4
-		if (has_enemy_sp(who, current) || distance[current] > MAX_LOC_DISTANCE) { 
-			continue
-		}
-
-		for (let s of get_adjacent_areas_by_road(current)) { //Can trace only via road, not track
-			if ((distance[s] > distance[current] + 1)) {
-				queue.push(s)
-				if (set_has(depots, s) && !set_has(sources, s)) { //If a new in-supply depot is encountered, make it a source
-					set_add(sources, s)
-					map_set(depot_status, s, true)
-					distance[s] = 0
-				} else {
-					distance[s] = distance[current] + 1
-				}
-			}
-		}
-	}
-
-	return depot_status
-}
-
 //=== BEGINNING OF TURN ===
 P.begin_turn = function() {
 	if (is_resource_turn(G.turn)) {
@@ -2185,6 +2092,148 @@ P.play_events_with_ops_card = {
 	}
 }
 
+//=== 3. CHOOSE ORDERS ===
+
+//=== 4. PLACE ORDERS ===
+
+//=== 5. EXECUTE FORCED MARCH ORDERS ===
+
+//=== 6. EXECUTE CAVALRY PATROLS ORDERS ===
+
+//=== 7. EXECUTE MARCH ORDERS ===
+
+//=== 8. EXECUTE EVADE ORDERS ===
+
+//=== 9. BATTLE RESOLUTION ===
+
+//=== 10. EXECUTE RALLY ORDERS ===
+
+//=== 11. EXECUTE COSSACK RAID ORDERS ===
+
+//=== 12. EXECUTE PLACE DEPOT ORDERS ===
+
+//=== SUPPLY, LINES OF COMMUNICATION & ATTRITION ===
+const SUPPLY_SOURCES = [
+	[S_RIGA, S_LIVONIA, S_PSKOV, S_UKRAINE, S_TORZHOK, S_VORONEZH, S_VLADIMIR_RUSSIA, S_UNNAMED_H2, S_RYAZAN], 
+	[S_PRUSSIA_SOUTH, S_GRAND_DUCHY_OF_WARSAW_NORTH, S_GRAND_DUCHY_OF_WARSAW_SOUTH, S_AUSTRIA],
+]
+
+const MAX_SUPPLY_DISTANCE = 5
+const MAX_LOC_DISTANCE = 4
+
+const ROAD = 1
+const TRACK = 2
+
+function get_all_adjacent_areas_of_connection_type(area, connection_type) {
+	return (connection_type === ROAD) ? get_adjacent_areas_by_road(area) : get_adjacent_areas_by_track(area) 
+}
+
+function get_supply_sources(who) {
+	return SUPPLY_SOURCES[who].slice()
+}
+
+function get_supply_sources_and_depots(who) {
+	let sources = get_supply_sources(who)
+	for (let area of G.depots[who]) 
+		if (area !== POOL) 
+			set_add(sources, area)
+	return sources
+}
+
+function is_in_supply(who, space) {
+	return G.supply[who][space] <= MAX_SUPPLY_DISTANCE
+}
+
+function has_enemy_sp(who, space) {
+	return (who === RUSSIA && has_friendly_troop_in_space(FRANCE, space)) || (who === FRANCE && has_friendly_troop_in_space(RUSSIA, space))
+}
+
+/* SUPPLY */
+
+//Returns the distance from each space to its closest node if in supply, greater than 5 if OOS
+function calculate_distance_to_nearest_depot(who) {
+	let sources = get_supply_sources_and_depots(who)
+	let distance = Array(NUM_SPACES).fill(999)
+
+	for (let source of sources) {
+		distance[source] = 0
+	}
+
+	for (let source of sources) {
+		let queue = [ source ]
+
+		while (queue.length > 0) {
+			let current = queue.shift()
+
+			if ((distance[current] > MAX_SUPPLY_DISTANCE) || has_enemy_sp(who, current)) {
+				continue
+			}
+
+			//Tracks and Roads are identical for supply purposes except for their modified distance: Road - 1, Track - 2
+			for (let connection_type = ROAD; connection_type <= TRACK; ++connection_type) {
+				for (let s of get_all_adjacent_areas_of_connection_type(current, connection_type)) {
+					if (distance[s] > distance[current] + connection_type) {
+						distance[s] = distance[current] + connection_type
+						queue.push(s)
+					}
+				}
+			}
+		}
+
+	}
+	
+	return distance
+}
+
+/* LINES OF COMMUNICATION */
+
+//Returns a plain array map with each on-map depot of that side and its corresponding supply status
+function check_lines_of_communication(who) {
+	let sources = get_supply_sources(who) //Starting supply sources without depots
+
+	let depots = [] //Set of depot spaces for efficient lookup
+	for (let depot of G.depots[who].filter(s => s !== POOL)) {
+		set_add(depots, depot)
+	}
+
+	let depot_status = [] //Map pairing depots with whether they are in-supply or OOS
+	for (let depot of depots) {
+		map_set(depot_status, depot, false)
+	}
+
+	let queue = sources.slice()
+	let distance = Array(NUM_SPACES).fill(999)
+	for (let source of sources) { //Start with supply sources
+		distance[source] = 0
+	}
+
+	while (queue.length > 0) {
+		let current = queue.shift()
+
+		//Cannot trace through enemy SPs & max. distance of 4
+		if (has_enemy_sp(who, current) || distance[current] > MAX_LOC_DISTANCE) { 
+			continue
+		}
+
+		for (let s of get_adjacent_areas_by_road(current)) { //Can trace only via road, not track
+			if ((distance[s] > distance[current] + 1)) {
+				queue.push(s)
+				if (set_has(depots, s) && !set_has(sources, s)) { //If a new in-supply depot is encountered, make it a source
+					set_add(sources, s)
+					map_set(depot_status, s, true)
+					distance[s] = 0
+				} else {
+					distance[s] = distance[current] + 1
+				}
+			}
+		}
+	}
+
+	return depot_status
+}
+
+/* ATTRITION - TODO */
+
 //=== EVENTS ===
 /*
 	E - Catch-all global variable to store most things relevant to events, including:
@@ -2293,7 +2342,7 @@ P.event_1 = {
 		prompt_card(WELL_DISCIPLINED_RETREAT, "For this, and the next turn, Russia suffers no exhaustion when using Evade orders.")
 		button_next()
 	},
-	confirm() {
+	next() {
 		push_undo()
 		log("For this, and the next turn, Russia suffers no exhaustion when using Evade orders.")
 		add_persistent_event(WELL_DISCIPLINED_RETREAT)
@@ -2309,9 +2358,6 @@ P.event_3 = {
 	},
 	inactive: "raise the militia",
 	prompt() {
-		console.log(L.areas)
-		console.log(L.areas.map(s => `S${s}`))
-		console.log(join_array_with_and(L.areas.map(s => `S${s}`)))
 		//Always guaranteed at least Pskov (Russian off-map area cannot be entered by France)
 		prompt_card(OPOLCHENIE, `Place 2 exhausted Russian Infantry SPs at ${join_array_with_and(L.areas.map(s => `S${s}`))}.`)
 		for (let area of L.areas) {
@@ -2322,6 +2368,7 @@ P.event_3 = {
 		push_undo()
 		log("Placed at S" + area)
 		add_troop(RUSSIA, area, EXHAUSTED_INFANTRY, 2)
+		logi(2 + " " + get_troop_type_name(EXHAUSTED_INFANTRY))
 		set_delete(L.areas, area)
 		if (!L.areas || L.areas.length === 0) end()
 	}
@@ -2454,6 +2501,7 @@ P.event_13 = {
 		L.units_moved = 0
 		L.selected_area = -1
 		L.force_selected = false
+		finish("WIP", "exit code 2")
 	},
 	inactive: "disband minor garrisons",
 	prompt() {
@@ -2492,7 +2540,7 @@ P.event_15 = {
 	_begin() {
 		L.has_shifted_initiative = false
 	},
-	inactive: "to exploit Napoleon's hubris",
+	inactive: "exploit Napoleon's hubris",
 	prompt() {
 		if (L.has_shifted_initiative) {
 			prompt_card(PRIDE_AND_HESITATION, "This turn, Russia +1 VP if any French leaders leave Moscow.")
@@ -2512,30 +2560,6 @@ P.event_15 = {
 		shift_initiative(RUSSIA)
 		L.has_shifted_initiative = true
 	}
-}
-
-function get_current_month() {
-	return get_month(G.turn)
-}
-
-function count_num_sps(who, area) {
-	let count = 0
-	for (let entry of get_area_troop_set(area))
-		if (decode_troop_entry_player(entry) === who)
-			count += decode_troop_entry_num(entry)
-	return count
-}
-
-function find_areas_with_most_ru_sps() {
-	let area_with_most_sps = []
-	let count = 0
-	map_for_each(G.troops, (area, entry) => {
-		if (has_russian_sp(area) && (count_num_sps(RUSSIA, area) > count)) {
-			set_add(area_with_most_sps, area)
-			count = count_num_sps(RUSSIA, area)
-		}
-	})
-	return area_with_most_sps
 }
 
 // RU #16: Kutuzov Appointed
@@ -2567,11 +2591,14 @@ P.event_16 = {
 		log("Placed at S" + area)
 		move_leader(KUTUZOV, area)
 		add_troop(RUSSIA, area, FRESH_INFANTRY, 1)
+		logi(1 + " " + get_troop_type_name(FRESH_INFANTRY))
 		add_troop(RUSSIA, area, FRESH_COSSACK, 1)
+		logi(1 + " " + get_troop_type_name(FRESH_COSSACK))
 		L.has_placed_kutuzov = true
 	},
 	next() {
 		push_undo()
+		log("Received a free Rally order.")
 		add_persistent_event(KUTUZOV_APPOINTED) //To add the free Rally order later
 		end()
 	}
@@ -2593,8 +2620,9 @@ P.event_17 = {
 			}
 		}
 		L.troops_to_place = 3
+		L.placement_status = []
 	},
-	inactive: "to deploy Steinheil's Finland Corps",
+	inactive: "deploy Steinheil's Finland Corps",
 	prompt() {
 		//Always guaranteed Livonia and Pskov (Russian off-map areas)
 		prompt_card(THE_FINLAND_CORPS, `Place ${L.troops_to_place} Infantry among ${join_array_with_or(L.spaces.map(area => get_area_name(area)))}.`)
@@ -2604,9 +2632,19 @@ P.event_17 = {
 	},
 	area(area) {
 		push_undo()
-		log("Placed at S" + area)
+		if (map_has(L.placement_status, area)) {
+			map_increment(L.placement_status, area)
+		} else {
+			map_set(L.placement_status, area, 1)
+		}
 		add_troop(RUSSIA, area, FRESH_INFANTRY, 1)
-		if (--L.troops_to_place === 0) end()
+		if (--L.troops_to_place === 0) {
+			map_for_each(L.placement_status, (a, amount) => {
+				log("Placed at S" + a)
+				logi(amount + " " + get_troop_type_name(FRESH_INFANTRY))
+			})
+			end()
+		} 
 	}
 }
 
@@ -2617,8 +2655,37 @@ E.event_18 = {
 	}
 }
 
-//RU #19: The Czar Leaves the Army
+P.event_18 = {
+	inactive: "transfer Chichagov from Bessarabia",
+	prompt() {
+		prompt_card(TREATY_OF_BUCHAREST, `Place Chichagov and 3 Infantry SPs at S${S_UKRAINE} or S${S_MOLDAVIA}.`)
+		action_area(S_UKRAINE)
+		action_area(S_MOLDAVIA)
+	},
+	area(area) {
+		push_undo()
+		log("Placed at S" + area)
+		move_leader(CHICHAGOV, area)
+		add_troop(RUSSIA, area, FRESH_INFANTRY, 3)
+		end()
+	}
+}
 
+//RU #19: The Czar Leaves the Army
+P.event_19 = {
+	inactive: "send Alexander back to St. Petersburg",
+	prompt() {
+		prompt_card(THE_CZAR_LEAVES_THE_ARMY, "Remove Alexander from play at no cost.")
+		action_leader(ALEXANDER)
+	},
+	leader(alexander) {
+		push_undo()
+		log("Removed from S" + get_leader_location(ALEXANDER)) 
+		move_leader(alexander, POOL)
+		finish("WIP", "exit code 3")
+		goto("draw_card_ru")
+	}
+}
 
 // RU #42: Command Friction
 E.event_42 = {
@@ -2675,6 +2742,248 @@ E.event_52 = {
 	}
 }
 
+// FR #1: Hard Marching
+// FR #2: Hard Marching
+P.event_55 = function() { goto("hard_marching", {card: HARD_MARCHING_1}) }
+P.event_56 = function() { goto("hard_marching", {card: HARD_MARCHING_2}) }
+
+P.hard_marching = {
+	_begin() {
+		//L.card
+		L.step = -1
+	},
+	inactive: "demonstrate its military prowess",
+	prompt() {
+		if (L.step === -1) {
+			prompt_card(L.card, "Shift the Initiative 1 in France's favor.")
+			action_initiative_marker()
+		} else if (L.step === 0) {
+			prompt_card(L.card, "Receive 1 free Forced March order, but 1 SP in each forced marching force is exhausted.")
+			button_next()
+		} else {
+			prompt_card(L.card, "This turn all French forces using 'Forced March' orders fight at X1 instead of X0,5.")
+			button_next()
+		}
+	},
+	initiative() {
+		push_undo()
+		shift_initiative(FRANCE)
+		++L.step
+	},
+	next() {
+		push_undo()
+		if (L.step === 0) {
+			++L.step
+			log("France receives 1 free Forced March order, but 1 SP in each forced marching force is exhausted.")
+		} else {
+			add_persistent_event(L.card)
+			log("This turn all French forces using 'Forced March' orders fight at X1 instead of X0,5.")
+			end()
+		}
+	}
+}
+
+//FR #3: War Weariness
+P.event_57 = {
+	_begin() {
+		L.controlled_areas = [S_MOSCOW, S_TORZHOK, S_BEZHANITZY, S_OSTROV, S_VENDEN].filter(s => is_fr_controlled(s))
+		L.eliminated_russian_leaders = []
+		for (let i = first_ru_leader; i <= last_ru_leader; ++i) {
+			if (G.leaders[i] === OUT_OF_PLAY) L.eliminated_russian_leaders.push(i)
+		}
+
+		L.french_vp = L.controlled_areas.length + L.eliminated_russian_leaders.length
+	},
+	inactive: "press for a negotiated settlement",
+	prompt() {
+		prompt_card(WAR_WEARINESS, `Shift the VP marker ${L.french_vp} in France's favor.`)
+		action_vp_marker()
+	},
+	vp() {
+		push_undo()
+		G.vp += L.french_vp
+		log(`France +${L.french_vp} VP.`)
+		for (let s of L.controlled_areas) {
+			logi(`+1 S${s}`)
+		}
+		for (let leader of L.eliminated_russian_leaders) {
+			logi(`+1 ${get_leader_short_name(leader)}`)
+		}
+		end()
+	}
+}
+
+// FR #4: Holy Mother Russia (FR)
+P.event_58 = {
+	inactive: "to exploit the pressure on the Russian leadership",
+	prompt() {
+		prompt_card(HOLY_MOTHER_RUSSIA_FR, "Designate a Key City area. France +1 VP for each RU force that leaves there via 'Forced March', 'March', or 'Evade' orders.")
+		for (let area = FIRST_AREA; area <= LAST_AREA; ++area) { //TO CHECK: Does this have to be restricted to RU-controlled Key cities?
+			if (get_area_type(area) === "key_city") {
+				action_area(area)
+			}
+		}
+	},
+	area(area) {
+		log(`This turn, France will gain 1 VP for each RU force that leaves S${area} via 'Force March', 'March' or 'Evade'.`)
+		add_persistent_event(HOLY_MOTHER_RUSSIA_FR, {area: area})
+		end()
+	}
+}
+
+// FR #5: Polish Support
+E.event_59 = {
+	could_play() {
+		return set_has([S_KOVNO, S_VILNA, S_VITEBSK], get_leader_location(NAPOLEON))
+	}
+}
+
+P.event_59 = {
+	_begin() {
+		L.has_placed_sp = false
+	},
+	inactive: "recruit Polish volunteers",
+	prompt() {
+		if (L.has_placed_sp) {
+			prompt_card(POLISH_SUPPORT, "Draw a card.")
+			button_draw()
+		} else {
+			prompt_card(POLISH_SUPPORT, "Place 2 Infantry SPs at S" + get_leader_location(NAPOLEON) + ".")
+			action_area(get_leader_location(NAPOLEON))
+		}
+	},
+	area(area) {
+		push_undo()
+		log("Placed at S" + area)
+		add_troop(FRANCE, area, FRESH_INFANTRY, 2)
+		logi(2 + " " + get_troop_type_name(FRESH_INFANTRY))
+		L.has_placed_sp = true
+	},
+	draw() {
+		finish("WIP", "exit code 3")
+	}
+}
+
+// FR #15: Peace Offer
+function increase_vp(who, amount = 1) {
+	if (who === RUSSIA)
+		G.vp -= amount
+	else
+		G.vp += amount
+}
+
+E.event_69 = {
+	could_play() {
+		return is_fr_controlled(S_MOSCOW)
+	}
+}
+
+P.event_69 = {
+	_begin() {
+		L.step = -1
+		L.areas_occupied = [S_RIGA, S_OSTROV, S_KIEV, S_BEZHANITZY, S_TVER].filter(area => is_fr_controlled(area))
+		L.french_vp = L.areas_occupied.length * 2
+	},
+	inactive: "propose a peace deal",
+	prompt() {
+		if (L.step === -1) {
+			prompt_card(PEACE_OFFER, "France +1 VP.")
+			action_vp_marker()
+		} else if (L.step === 0) {
+			prompt_card(PEACE_OFFER, "Shift Initiative 2 in favor of Russia.")
+			action_initiative_marker()
+		} else {
+			prompt_card(PEACE_OFFER, `France +${L.french_vp} VP.`)
+			button_next()
+		}
+	},
+	vp() {
+		push_undo()
+		increase_vp(FRANCE)
+		++L.step
+	},
+	initiative() {
+		push_undo()
+		shift_initiative(RUSSIA, 2)
+		++L.step
+	},
+	next() {
+		push_undo()
+		increase_vp(FRANCE, L.french_vp)
+		for (let area of L.areas_occupied) {
+			logi("+2 " + get_area_name(area))
+		}
+		end()
+	}
+
+}
+
+// FR #17: Davout Takes Command
+P.event_71 = {
+	inactive: "appoint Davout as commander",
+	prompt() {
+		prompt_card(DAVOUT_TAKES_COMMAND, "Place Davout and 1 Infantry SP at any French-occupied area.")
+		for (let area = FIRST_AREA; area <= LAST_AREA; ++area) 
+			if (is_fr_controlled(area)) action_area(area)
+	},
+	area(area) {
+		push_undo()
+		log("Placed at S" + area)
+		move_leader(DAVOUT, area)
+		add_troop(FRANCE, area, FRESH_INFANTRY, 1)
+		logi(1 + " " + get_troop_type_name(FRESH_INFANTRY))
+		end()
+	}
+}
+
+// FR #19: IX Corps Arrives
+E.event_73 = {
+	could_play() {
+		return get_current_month() >= AUG
+	}
+}
+
+P.event_73 = {
+	inactive: "bring on the IX Corps",
+	prompt() {
+		prompt_card(IX_CORPS_ARRIVES, "Place 4 French Infantry SP at one French-controlled key city or off-map area.")
+		for (let area = FIRST_AREA; area <= LAST_AREA; ++area)
+			if (is_fr_controlled(area) && ((get_area_type(area) === "off_map") || get_area_type(area) === "key_city"))
+				action_area(area)
+	},
+	area(area) {
+		push_undo()
+		log("Placed at S" + area)
+		add_troop(FRANCE, area, FRESH_INFANTRY, 4)
+		logi("4 " + get_troop_type_name(FRESH_INFANTRY))
+		end()
+	}
+}
+
+// FR #20: XI Corps Arrives
+E.event_74 = {
+	could_play() {
+		return get_current_month() >= SEPT
+	}
+}
+
+P.event_74 = {
+	inactive: "bring on the XI Corps",
+	prompt() {
+		prompt_card(XI_CORPS_ARRIVES, "Place 5 French Infantry SP at one French-controlled key city or off-map area.")
+		for (let area = FIRST_AREA; area <= LAST_AREA; ++area)
+			if (is_fr_controlled(area) && ((get_area_type(area) === "off_map") || get_area_type(area) === "key_city"))
+				action_area(area)
+	},
+	area(area) {
+		push_undo()
+		log("Placed at S" + area)
+		add_troop(FRANCE, area, FRESH_INFANTRY, 5)
+		logi("5 " + get_troop_type_name(FRESH_INFANTRY))
+		end()
+	}
+}
+
 // FR #22: Poor Communications
 E.event_76 = {
 	confirm_prompt() {
@@ -2708,7 +3017,7 @@ E.event_78 = {
 // FR #41: Freezing Weather
 E.event_95 = {
 	confirm_prompt() {
-		if (get_month(G.turn) === OCT) {
+		if (get_current_month() === OCT) {
 			prompt_card(FREEZING_WEATHER, "No effect.")
 		} else {
 			prompt_card(FREEZING_WEATHER, "FR may not use 'Place Depot' or 'Forage' orders this turn. All moving FR forces have a maximum move of 1 and fight as if under 'Forced March' orders.")
@@ -2745,8 +3054,6 @@ E.event_97 = {
 		log("For the rest of the game, France must discard a card to execute a 'Place Depot' order.")
 	}
 }
-
-/* EVENTS PLAYED WITH OPS CARD */
 
 //=== MISC HELPERS ===
 function array_count(array, callback) {
@@ -2831,6 +3138,13 @@ function action_initiative_marker() {
 	action("initiative", 0)
 }
 
+function action_leader(leader) {
+	action("leader", leader)
+}
+
+function action_vp_marker() {
+	action("vp", 0)
+}
 //=== LOGGING ===
 function get_abbreviation(who) {
 	return (who === RUSSIA) ? "ru" : "fr"
