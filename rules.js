@@ -374,7 +374,6 @@ const first_fr_order = 29
 const last_fr_order = 53
 
 //A dictionary of each order to look up its properties
-//todo: move to data.js
 const orders = data.orders
 
 const FORCED_MARCH = 0
@@ -2024,7 +2023,7 @@ P.play_card_for_orders = {
 
 /* 
 	Basic rules:
-		Then the non-initiative player declares if he wants to play any events along with his OPS card and
+		First, the non-initiative player declares if he wants to play any events along with his OPS card and
 		place the chosen event(s) face up on the table, and then the player with the Initiative does the same. (p. 9)
 
 	Events:
@@ -2328,12 +2327,31 @@ function log_event_execution(c, info) {
 
 P.event = script(`
 	eval { card_box_begin(L.card) }
-	call ("event_" + L.card)
+	if (is_mandatory_event(L.card)) {
+		call mandatory_event { card: L.card }
+	} else {
+		call ("event_" + L.card)
+	}
 	eval {
 		card_box_end()
 		discard_or_remove_card(L.card)
 	}	
 `)
+
+P.mandatory_event = {
+	_begin() {
+		if ([HOLY_MOTHER_RUSSIA_RU, CHAOS_IN_THE_REAR_AREAS, VULNERABLE_SUPPLY_LINES, CHAOTIC_FOOD_DISTRIBUTION].includes(L.card)) {
+			goto(`event${L.card}`)
+		}
+	},
+	prompt() {
+		prompt_event_confirmation(L.card)
+	},
+	confirm() {
+		log_event_confirmation(L.card)
+		end()
+	}
+}
 
 //RU #1: Well-Disciplined Retreat
 P.event_1 = {
@@ -2465,6 +2483,59 @@ E.event_11 = {
 	execute_log(area) {
 		log("Russia +2 orders.")
 		log(`The side controlling S${area} at the end of the turn gain +1 VP.`)
+	}
+}
+
+P.event_11 = script(`
+	set G.active FRANCE
+	call holy_mother_russia
+	set G.active RUSSIA
+	call holy_mother_russia
+`)
+
+P.holy_mother_russia = {
+	_begin() {
+		if (G.active === RUSSIA) L.step = -1
+		L.selected_area =  is_event_active(HOLY_MOTHER_RUSSIA) ? map_get(G.persistent_events, HOLY_MOTHER_RUSSIA, null).area : -1
+	},
+	inactive: "acknowledge the dissatisfaction of the rank-and-file",
+	prompt() {
+		if (G.active === FRANCE) {
+			if (L.selected_area === -1) {
+				prompt_card(HOLY_MOTHER_RUSSIA_RU, "Designate a Russian-controlled key city. The side controlling it at the end of the turn gains +1 VP.")
+				for (let area = FIRST_AREA; area <= LAST_AREA; ++area) 
+					if (get_area_type(area) === "key_city" && is_ru_controlled(area)) action_area(area)
+			} else {
+				prompt_card(HOLY_MOTHER_RUSSIA_RU, "All done.") 
+				button_done()
+			}
+		} else {
+			if (L.step === -1) {
+				prompt_card(HOLY_MOTHER_RUSSIA_RU, `France selected ${L.selected_area}. The side controlling it at the end of the turn gain +1 VP.`)
+				button_next()
+			} else if (L.step === 0) {
+				prompt_card(HOLY_MOTHER_RUSSIA_RU, "Russia +2 orders.")
+				button_next()
+			} else {
+				prompt_card(HOLY_MOTHER_RUSSIA_RU, "All done.")
+				button_done()
+			}
+		}
+	},
+	area(area) {
+		push_undo()
+		add_persistent_event(HOLY_MOTHER_RUSSIA, { area: area })
+		log("France selected S" + area + ".")
+		log("The side controlling S" + area + " gain +1 VP.")
+		L.selected_area = area
+	},
+	done() {
+		end()
+	},
+	next() {
+		push_undo()
+		if (++L.step === 1) 
+			log("Russia +2 orders this turn.")
 	}
 }
 
@@ -3011,6 +3082,18 @@ E.event_78 = {
 	},
 	execute_log() {
 		log("Jérôme removed from play.")
+	}
+}
+
+// FR #39: Chaos In The Rear Areas
+
+// FR #40: Vulnerable Supply Lines
+P.event_94 = {
+	_begin() {
+	}
+	inactive: "struggle against partisans",
+	prompt() {
+
 	}
 }
 
