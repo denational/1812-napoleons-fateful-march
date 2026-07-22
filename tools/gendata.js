@@ -7,6 +7,12 @@ let data = {}
 const RUSSIA = 0
 const FRANCE = 1
 
+function get_nation_id(nation) {
+	if (nation === "russia") return RUSSIA
+	if (nation === "france") return FRANCE
+	throw new Error (`Nation ${nation} not found!`)
+}
+
 //=== SPACES ===
 const names = 'names.csv'
 const connections = 'mapped_connections.csv'
@@ -31,7 +37,7 @@ fs.createReadStream(names)
 			name: (name === "Dunaburg") ? "Dünaburg" : name, //handling the umlaut here since the csv messes it up
 			type,
 			fortress: ((Number(fortress) === 1) ? true : false),
-			nation: (nation === '') ? null : nation,
+			nation: (nation === '') ? null : get_nation_id(nation),
 			supply: ((Number(supply) === 1) ? true : false),
 			depot: ((Number(depot) === 1) ? true : false),
 			vp: (Number(vp) > 0) ? Number(vp) : 0,

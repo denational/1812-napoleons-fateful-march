@@ -1637,6 +1637,7 @@ P.turn = script(`
 
 	call draw_card_to_hand
 	call play_card_for_additional_orders
+	call choose_orders
 `)
 
 //=== 1. DRAW CARD TO HAND ===
@@ -2268,6 +2269,10 @@ function can_play_event(card) {
 	return (typeof could_play_event !== "function") ? true : could_play_event()
 }
 
+function is_event_active(event) {
+	return map_has(G.persistent_events, event)
+}
+
 function add_persistent_event(evt, keywords) {
 	let removal_turn = (evt === WELL_DISCIPLINED_RETREAT || evt === EXTREME_WEATHER_FR) ? G.turn + 1 : G.turn
 	let key = evt
@@ -2327,8 +2332,8 @@ function log_event_execution(c, info) {
 
 P.event = script(`
 	eval { card_box_begin(L.card) }
-	if (is_mandatory_event(L.card)) {
-		call mandatory_event { card: L.card }
+	if (is_must_play_event(L.card)) {
+		call must_play_event { card: L.card }
 	} else {
 		call ("event_" + L.card)
 	}
@@ -2338,10 +2343,10 @@ P.event = script(`
 	}	
 `)
 
-P.mandatory_event = {
+P.must_play_event = {
 	_begin() {
 		if ([HOLY_MOTHER_RUSSIA_RU, CHAOS_IN_THE_REAR_AREAS, VULNERABLE_SUPPLY_LINES, CHAOTIC_FOOD_DISTRIBUTION].includes(L.card)) {
-			goto(`event${L.card}`)
+			goto(`event_${L.card}`)
 		}
 	},
 	prompt() {
@@ -2349,8 +2354,30 @@ P.mandatory_event = {
 	},
 	confirm() {
 		log_event_confirmation(L.card)
+		discard_or_remove_card(L.card)
 		end()
-	}
+	},
+	draw() {
+		if (L.card === EXTREME_WEATHER_RU) { //EXCEPTION: Since another must-play could be drawn, log here
+			log("France has -2 orders this turn.")
+			log("1 fresh SP in each force that uses 'March' or 'Forced March' becomes exhausted")
+			discard_or_remove_card(EXTREME_WEATHER_RU)
+		}
+
+		L.drawn_card = draw_card(G.active)
+		if (is_must_play_event(L.drawn_card)) {
+			goto("must_play_event", { card: L.drawn_card })
+		} else {
+			end()
+		}
+	},
+	leader(leader) {
+		//Possible calls from "Barclay de Tolly Resigns" or "Jérôme Goes Home"
+		move_leader(leader, OUT_OF_PLAY)
+		log_event_execution(L.card)
+		discard_or_remove_card(L.card)
+		end()
+	},
 }
 
 //RU #1: Well-Disciplined Retreat
@@ -2496,7 +2523,7 @@ P.event_11 = script(`
 P.holy_mother_russia = {
 	_begin() {
 		if (G.active === RUSSIA) L.step = -1
-		L.selected_area =  is_event_active(HOLY_MOTHER_RUSSIA) ? map_get(G.persistent_events, HOLY_MOTHER_RUSSIA, null).area : -1
+		L.selected_area =  is_event_active(HOLY_MOTHER_RUSSIA_RU) ? map_get(G.persistent_events, HOLY_MOTHER_RUSSIA_RU, null).area : -1
 	},
 	inactive: "acknowledge the dissatisfaction of the rank-and-file",
 	prompt() {
@@ -2524,7 +2551,7 @@ P.holy_mother_russia = {
 	},
 	area(area) {
 		push_undo()
-		add_persistent_event(HOLY_MOTHER_RUSSIA, { area: area })
+		add_persistent_event(HOLY_MOTHER_RUSSIA_RU, { area: area })
 		log("France selected S" + area + ".")
 		log("The side controlling S" + area + " gain +1 VP.")
 		L.selected_area = area
@@ -2744,17 +2771,45 @@ P.event_18 = {
 
 //RU #19: The Czar Leaves the Army
 P.event_19 = {
+	_begin() {
+		L.step = -1
+	},
 	inactive: "send Alexander back to St. Petersburg",
 	prompt() {
-		prompt_card(THE_CZAR_LEAVES_THE_ARMY, "Remove Alexander from play at no cost.")
-		action_leader(ALEXANDER)
+		if (L.step === -1) {
+			prompt_card(THE_CZAR_LEAVES_THE_ARMY, "Remove Alexander from play at no cost.")
+			action_leader(ALEXANDER)
+		} else if (L.step === 0) {
+			prompt_card(THE_CZAR_LEAVES_THE_ARMY, "Draw a card.")
+			button_draw()
+		} else {
+			prompt_card(THE_CZAR_LEAVES_THE_ARMY, "All done.")
+			button_next()
+		}
+		
 	},
 	leader(alexander) {
 		push_undo()
 		log("Removed from S" + get_leader_location(ALEXANDER)) 
 		move_leader(alexander, POOL)
-		finish("WIP", "exit code 3")
-		goto("draw_card_ru")
+		++L.step
+	},
+	draw() {
+		clear_undo()
+		L.drawn_card = draw_card(R)
+		if (is_must_play_event(L.drawn_card)) {
+			log_box_end()
+			goto("event", { card: L.drawn_card})
+		} else {
+			++L.step
+		}
+	},
+	_resume() {
+		++L.step
+	},
+	next() {
+		push_undo()
+		end()
 	}
 }
 
@@ -2911,16 +2966,19 @@ E.event_59 = {
 
 P.event_59 = {
 	_begin() {
-		L.has_placed_sp = false
+		L.step = -1
 	},
 	inactive: "recruit Polish volunteers",
 	prompt() {
-		if (L.has_placed_sp) {
+		if (L.step === -1) {
+			prompt_card(POLISH_SUPPORT, "Place 2 Infantry SPs at S" + get_leader_location(NAPOLEON) + ".")
+			action_area(get_leader_location(NAPOLEON))
+		} else if (L.step === 0) {
 			prompt_card(POLISH_SUPPORT, "Draw a card.")
 			button_draw()
 		} else {
-			prompt_card(POLISH_SUPPORT, "Place 2 Infantry SPs at S" + get_leader_location(NAPOLEON) + ".")
-			action_area(get_leader_location(NAPOLEON))
+			prompt_card(POLISH_SUPPORT, "All done.")
+			button_next()
 		}
 	},
 	area(area) {
@@ -2928,11 +2986,26 @@ P.event_59 = {
 		log("Placed at S" + area)
 		add_troop(FRANCE, area, FRESH_INFANTRY, 2)
 		logi(2 + " " + get_troop_type_name(FRESH_INFANTRY))
-		L.has_placed_sp = true
+		++L.step
 	},
 	draw() {
-		finish("WIP", "exit code 3")
-	}
+		clear_undo()
+		L.drawn_card = draw_card(G.active)
+		if (is_must_play_event(L.drawn_card)) {
+			log_box_end()
+			log_box_begin(L.drawn_card)
+			call("must_play_event", { card: L.drawn_card })
+		} else {
+			++L.step
+		}
+	},
+	next() {
+		push_undo()
+		end()
+	},
+	_resume() {
+		++L.step
+	},
 }
 
 // FR #15: Peace Offer
@@ -3086,14 +3159,67 @@ E.event_78 = {
 }
 
 // FR #39: Chaos In The Rear Areas
+P.event_93 = { //TODO
+	_begin() {
+		end()
+	}
+}
 
 // FR #40: Vulnerable Supply Lines
 P.event_94 = {
 	_begin() {
-	}
+		L.discarded_card = -1
+		L.step = -1
+		L.depots_to_remove = get_all_unoccupied_depots(FRANCE)
+	},
 	inactive: "struggle against partisans",
 	prompt() {
-
+		if (L.num_french_depots >= 4) {
+			if (L.step === -1) {
+				prompt_card(VULNERABLE_SUPPLY_LINES, "Discard a card from your hand.")
+				for (let c of get_hand(G.active)) {
+					if (!is_card_dummy(c) && (c !== VULNERABLE_SUPPLY_LINES)) {
+						action_card(c)
+					}
+				}
+			} else if (L.step === 0) {
+				prompt_card(VULNERABLE_SUPPLY_LINES, `You discarded C${L.discarded_card}.`)
+				button_next()
+			} else {
+				if (L.depots_to_remove.length > 0) {
+					prompt_card(VULNERABLE_SUPPLY_LINES, "Remove all unoccupied French Depot Markers.")
+					for (let area of L.depots_to_remove) {
+						action("area", area)
+					}
+				} else {
+					prompt_card(VULNERABLE_SUPPLY_LINES, "All done.")
+					button_next()
+				}
+			}
+		} else {
+			prompt_card(VULNERABLE_SUPPLY_LINES, "No effect.")
+			button_confirm()
+		}
+	},
+	card(c) {
+		push_undo()
+		discard_card(c)
+		log("France discarded a card.")
+		++L.step
+		if (L.depots_to_remove.length > 0) log("Removed depots")
+	},
+	area(area) {
+		push_undo()
+		remove_depot(G.active, area)
+		logi(`S${area}`)
+	},
+	next() {
+		if (++L.step > 1) {
+			end()
+		}
+	},
+	confirm() {
+		end()
 	}
 }
 
@@ -3135,6 +3261,76 @@ E.event_97 = {
 	},
 	confirm_log() {
 		log("For the rest of the game, France must discard a card to execute a 'Place Depot' order.")
+	}
+}
+
+// FR #44: Chaotic Food Distribution
+P.event_98 = {
+	_begin() {
+		L.step = -1
+		L.selected_area = -1
+	},
+	prompt() {
+		if (G.depots[FRANCE].some(depot => (depot !== POOL) && (depot !== OUT_OF_PLAY))) {
+			if (L.step === -1) {
+				prompt_card(CHAOTIC_FOOD_DISTRIBUTION, "Remove a French depot from map.")
+				for (let area of get_areas_with_depots(FRANCE)) {
+					action("area", area)
+				}
+			} else if (L.step === 0) {
+				if (has_exhausted_sp(G.active, L.selected_area)) {
+					prompt_card(CHAOTIC_FOOD_DISTRIBUTION, `Rally one exhausted SP at S${L.selected_area}.` )
+					for (let type of get_troop_types_at_area(L.selected_area)) {
+						if (is_troop_type_exhausted(type)) {
+							action("troop", type)
+						}
+					}
+				} else {
+					prompt_card(CHAOTIC_FOOD_DISTRIBUTION, "No troops to rally.")
+					button_next()
+				}
+			} else if (L.step === 1) {
+				prompt_card(CHAOTIC_FOOD_DISTRIBUTION, "Draw a card.")
+				button_draw()
+			} else {
+				prompt_card(CHAOTIC_FOOD_DISTRIBUTION, "All done.")
+				button_confirm()
+			}
+		} else {
+			prompt_card(CHAOTIC_FOOD_DISTRIBUTION, "All done.")
+			button_confirm()
+		}
+	},
+	area(area) {
+		push_undo()
+		L.selected_area = area
+		remove_depot(FRANCE, area)
+		log("Removed depot")
+		logi(`S${area}`)
+		++L.step
+	},
+	troop(type) {
+		push_undo()
+		rally_troop(G.active, L.selected_area, type)
+		++L.step
+	},
+	draw() {
+		clear_undo()
+		L.drawn_card = draw_card(G.active)
+		if (is_must_play_event(L.drawn_card)) {
+			log_box_end()
+			log_box_begin(L.drawn_card)
+			call("must_play_event", { card: L.drawn_card })
+		}
+	},
+	_resume() {
+		++L.step
+	},
+	next() {
+		++L.step
+	},
+	confirm() {
+		end()
 	}
 }
 
