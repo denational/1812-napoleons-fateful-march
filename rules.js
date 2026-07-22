@@ -1015,14 +1015,14 @@ function on_setup(scenario, options) {
 	G.winter = SCENARIO_DATA.winter
 
 	G.troops = []
-	G.leaders = Array(NUM_LEADERS).fill(POOL)
-	G.depots = [Array(NUM_DEPOTS_RU).fill(POOL), Array(NUM_DEPOTS_FR).fill(POOL)]
-	G.devastation = Array(NUM_SPACES).fill(0)
+	G.leaders = new Array(NUM_LEADERS).fill(POOL)
+	G.depots = [new Array(NUM_DEPOTS_RU).fill(POOL), new Array(NUM_DEPOTS_FR).fill(POOL)]
+	G.devastation = new Array(NUM_SPACES).fill(0)
 
 	G.played_cards = [[], []]
 	G.persistent_events = []
 
-	G.orders = [null, ...Array(NUM_ORDERS).fill(POOL)]
+	G.orders = [null, ...(new Array(NUM_ORDERS).fill(POOL))]
 	G.enemy_orders = []
 	G.selected_orders = [[], []]
 
@@ -1637,7 +1637,7 @@ P.turn = script(`
 
 	call draw_card_to_hand
 	call play_card_for_additional_orders
-	call choose_orders
+	call select_orders
 `)
 
 //=== 1. DRAW CARD TO HAND ===
@@ -2093,6 +2093,296 @@ P.play_events_with_ops_card = {
 }
 
 //=== 3. CHOOSE ORDERS ===
+function calculate_num_orders() {
+	//Each player has two free orders by default
+	var orders = [2, 2] 
+	
+	//And some additional orders based on the OPs value of their committed card
+	orders[RUSSIA] += G.additional_orders[RUSSIA]
+	orders[FRANCE] += G.additional_orders[FRANCE]
+
+	// RU #11: Holy Mother Russia - Russia +2 orders
+	if (is_event_active(HOLY_MOTHER_RUSSIA_RU)) { 
+		orders[RUSSIA] += 2
+	}
+
+	// RU #14: Extreme Weather - France -2 orders
+	if (is_event_active(EXTREME_WEATHER_RU)) {
+		orders[FRANCE] = Math.max(0, orders[FRANCE] - 2)
+	}
+
+	// FR #42: Extreme Weather - Both sides -2 orders
+	if (is_event_active(EXTREME_WEATHER_FR)) {
+		orders[RUSSIA] = Math.max(0, orders[RUSSIA] - 2)
+		orders[FRANCE] = Math.max(0, orders[FRANCE] - 2)
+	}
+
+	return orders
+}
+
+function find_forbidden_orders() { //Being proactive here, maybe rollback later?
+	let forbidden_orders = [[], []]
+
+	// RU #45: Russia may not use 'Place Depot' orders.
+	if (is_event_active(POOR_LOGISTICS)) {
+		L.forbidden_orders[RUSSIA].push(PLACE_DEPOT)
+	}
+
+	// FR #41: France may not use 'Place Depot' or 'Forage' orders.
+	if (is_event_active(FREEZING_WEATHER)) {
+		L.forbidden_orders[FRANCE].push(PLACE_DEPOT, FORAGE)
+	}
+
+	// FR #42: Neither side may use 'Forced March' orders.
+	if (is_event_active(EXTREME_WEATHER_FR)) {
+		L.forbidden_orders[RUSSIA].push(FORCED_MARCH)
+		L.forbidden_orders[FRANCE].push(FORCED_MARCH)
+	}
+
+	return forbidden_orders
+}
+
+/*
+	Choose Orders
+	Current order of selection: (mainly so that players are able to pick all the specified orders before moving to freely choosable ones)
+
+	Apply leader abilities first:
+		Platov - may select a free 'Cossack Raid' or 'Evade' order
+
+	Then orders limited to a specific type:
+		Basic free orders -
+			Russia - 1 Cavalry Patrols
+			France - 1 Forage
+
+		Dummy orders -
+			Russia - 4 Dummy orders
+			France - 4 Dummy orders
+
+		French Logistic Preparations (special rule for June 5 only) - 
+			France - 1 Place Depot, 1 March
+
+		Events
+			RU #10 Scorched Earth:
+				Russia - 1 Evade order
+			RU #16 Kutuzov Appointed:
+				Russia - 1 Rally order
+			FR #1 Hard Marching:
+			FR #2 Hard Marching:
+				France - 1 Forced March order per card
+
+		Optional rule (Increased French Command Capability) -
+			France - 1 Cavalry Patrols
+
+	Then orders that may be selected among any of the remaining options.
+		Basic:
+			Russia - 2 orders
+			France - 2 orders
+
+		Committed card:
+			Russia - X orders (1-3 depending on card)
+			France - X orders (1-4 depending on card)
+
+		Events - 
+			RU #11 Holy Mother Russia
+				Russia - 2 orders
+			RU #14 Extreme Weather
+				France: -2 orders
+			FR #42 Extreme Weather
+				Russia: -2 orders
+				France: -2 orders
+
+	Some orders may not be used during a turn (dictated by events), but can be selected (and used as a Dummy).
+	TODO: Add warnings for this.		
+*/
+
+function get_selected_orders(who) {
+	return G.selected_orders[who]
+}
+
+function generate_select_order_actions(who, types) {
+	if (typeof types === 'number') types = [types]
+
+	for (let order = get_first_order(who); order <= get_last_order(who); ++order) 
+		if (!get_selected_orders(who).includes(order) && (types.includes(get_order_type(order))))
+			action_order(order)
+}
+
+function get_current_turn() {
+	return G.turn
+}
+
+const STATE_SELECT_FREE_ORDER_PLATOV = 0
+const STATE_SELECT_BASIC_FREE_ORDER = 1
+const STATE_SELECT_DUMMY_ORDERS = 2
+const STATE_FRENCH_LOGISTIC_PREPARATIONS = 3
+const STATE_SCORCHED_EARTH = 4
+const STATE_KUTUZOV_APPOINTED = 5
+const STATE_HARD_MARCHING_1 = 6
+const STATE_HARD_MARCHING_2 = 7
+const STATE_INCREASED_FRENCH_COMMAND_CAPABILITY = 8
+const STATE_SELECT_ORDERS_MAIN = 9
+
+const CHOOSE_ORDERS_STATE_TRANSITIONS = [
+	function(who) { return (who === RUSSIA) && is_leader_on_map(PLATOV) },
+	function(who) { return true },
+	function(who) { return true },
+	function(who) { return (who === FRANCE) && (get_current_turn() === JUNE_5) },
+	function(who) { return (who === RUSSIA) && is_event_active(SCORCHED_EARTH) },
+	function(who) { return (who === RUSSIA) && is_event_active(KUTUZOV_APPOINTED) },
+	function(who) { return (who === FRANCE) && is_event_active(HARD_MARCHING_1) },
+	function(who) { return (who === FRANCE) && is_event_active(HARD_MARCHING_2) },
+	function(who) { return (who === FRANCE) && false /*TODO is_increased_french_command_capability()*/ },
+	function(who) { return true },
+]
+
+P.select_orders = {
+	_begin() {
+		G.active = [RUSSIA, FRANCE]
+		log_h2("Select Orders")
+
+		L.num_orders = calculate_num_orders() //Number of basic 'any-choose' orders
+
+		G.selected_orders = [[], []] //Stack of orders selected by each side, can be popped to undo
+		L.state = [-1, -1]
+		L.state_history = [[], []] //Stack for undo purposes
+
+		this.update_state(RUSSIA)
+		this.update_state(FRANCE)
+		
+		L.count = [-1, -1] //Generic counting variable used in multiple sub-states
+		L.already_selected = [[], []] //To track whether a type of order has already been selected in this sub-state
+	},
+	prompt() {
+		switch(L.state[R]) {
+		case STATE_SELECT_FREE_ORDER_PLATOV:
+			prompt_leader(PLATOV, "Select a Cossack Raid or Evade order.")
+			generate_select_order_actions(R, [COSSACK_RAID, EVADE])
+			break
+		case STATE_SELECT_BASIC_FREE_ORDER:
+			if (R === RUSSIA) {
+				prompt("Select basic orders: 1 Cavalry Patrols.")
+				generate_select_order_actions(R, CAVALRY_PATROLS)
+			} else {
+				prompt("Select basic orders: 1 Forage.")
+				generate_select_order_actions(R, FORAGE)
+			}
+			break
+		case STATE_SELECT_DUMMY_ORDERS:
+			prompt(`Select dummy orders (${L.count[R]} remaining).`)
+			generate_select_order_actions(R, DUMMY_ORDER)
+			break
+		case STATE_FRENCH_LOGISTIC_PREPARATIONS:
+			prompt(`French Logistic Preparations: Select 1 Place Depot and 1 March order.`) //TODO: Modify prompt dynamically
+			for (let order = get_first_order(R); order <= get_last_order(R); ++order) 
+				if (!get_selected_orders(R).includes(order) && (get_order_type(order) === PLACE_DEPOT || get_order_type(order) === MARCH) && !set_has(L.already_selected[R], get_order_type(order)))
+					action_order(order)
+			break
+		case STATE_SCORCHED_EARTH:
+			prompt_card(SCORCHED_EARTH, "Select 1 Evade order.")
+			generate_select_order_actions(R, EVADE)
+			break
+		case STATE_KUTUZOV_APPOINTED:
+			prompt_card(KUTUZOV_APPOINTED, "Select 1 Rally order.")
+			generate_select_order_actions(R, RALLY)
+			break
+		case STATE_HARD_MARCHING_1:
+			prompt_card(HARD_MARCHING_1, "Select 1 Forced March order.")
+			generate_select_order_actions(R, FORCED_MARCH)
+			break
+		case STATE_HARD_MARCHING_2:
+			prompt_card(HARD_MARCHING_2, "Select 1 Forced March order.")
+			generate_select_order_actions(R, FORCED_MARCH)
+			break
+		case STATE_INCREASED_FRENCH_COMMAND_CAPABILITY:
+			prompt("Increased French Command Capability: Select 1 Cavalry Patrols order.")
+			generate_select_order_actions(R, CAVALRY_PATROLS)
+			break
+		case STATE_SELECT_ORDERS_MAIN:
+			if (L.count[R] > 0) {
+				prompt(`Select ${L.count[R]} more orders.`)
+				for (let order = get_first_order(R); order <= get_last_order(R); ++order) {
+					if (!get_selected_orders(R).includes(order)) action_order(order)
+				}
+			} else {
+				prompt(`Select orders: All done.`)
+				button_done()
+			}
+		}
+		button_undo(G.selected_orders[R].length > 0)
+	},
+	order(order_id) {
+		G.selected_orders[R].push(order_id)
+		switch(L.state[R]) {
+		case STATE_SELECT_DUMMY_ORDERS:
+			//console.log(L.count[R])
+			if (--L.count[R] <= 0) this.update_state(R)
+			return
+		case STATE_FRENCH_LOGISTIC_PREPARATIONS:
+			set_add(L.already_selected[R], get_order_type(order_id))
+			if (L.already_selected[R].length === 2) this.update_state(R)
+			return
+		case STATE_SELECT_ORDERS_MAIN:
+			--L.count[R]
+			return
+		default:
+			this.update_state(R)	
+		}
+	},
+	done() {
+		set_delete(G.active, R)
+		log(`${ROLES[R]} chose ${G.selected_orders[R].length} orders.`)
+		if (G.active.length === 0) {
+			finish("WIP", "exit code 0")
+		}
+	},
+	undo() {
+		G.selected_orders[R].pop()
+
+		switch(L.state[R]) {
+		case STATE_SELECT_DUMMY_ORDERS:
+			if (L.count[R] < 4) ++L.count[R]
+			else L.state[R] = L.state_history[R].pop()
+			break
+		case STATE_FRENCH_LOGISTIC_PREPARATIONS:
+			if (L.already_selected[R].length === 0) {
+				L.state[R] = L.state_history[R].pop()
+				L.count[R] = 1
+			} else {
+				L.already_selected[R].pop()
+			}
+			break
+		case STATE_SELECT_ORDERS_MAIN:
+			if (L.count[R] < L.num_orders[R]) {
+				++L.count[R]
+				break
+			}
+			//NOTE: Intended fallthrough to default (in order to rewind state correctly if no orders have been selected yet in this state)
+		default:
+			L.state[R] = L.state_history[R].pop()
+
+			if (L.state[R] === STATE_SELECT_DUMMY_ORDERS)
+				L.count[R] = 1
+			else if (L.state[R] === STATE_SELECT_ORDERS_MAIN)
+				L.count[R] = 1
+			else if (L.state[R] === STATE_FRENCH_LOGISTIC_PREPARATIONS)
+				L.already_selected[R].pop()
+		}
+	},
+	update_state(who) {
+		for (let state = L.state[who] + 1; state <= CHOOSE_ORDERS_STATE_TRANSITIONS.length; ++state) {
+			if (CHOOSE_ORDERS_STATE_TRANSITIONS[state](who)) {
+				L.state_history[who].push(L.state[who])
+				L.state[who] = state
+				break
+			}
+		}
+
+		if (L.state[who] === STATE_SELECT_DUMMY_ORDERS)
+			L.count[R] = 4
+		else if (L.state[who] === STATE_SELECT_ORDERS_MAIN)
+			L.count[R] = L.num_orders[R]
+	}
+}
 
 //=== 4. PLACE ORDERS ===
 
@@ -2153,7 +2443,7 @@ function has_enemy_sp(who, space) {
 //Returns the distance from each space to its closest node if in supply, greater than 5 if OOS
 function calculate_distance_to_nearest_depot(who) {
 	let sources = get_supply_sources_and_depots(who)
-	let distance = Array(NUM_SPACES).fill(999)
+	let distance = new Array(NUM_SPACES).fill(999)
 
 	for (let source of sources) {
 		distance[source] = 0
@@ -2202,7 +2492,7 @@ function check_lines_of_communication(who) {
 	}
 
 	let queue = sources.slice()
-	let distance = Array(NUM_SPACES).fill(999)
+	let distance = new Array(NUM_SPACES).fill(999)
 	for (let source of sources) { //Start with supply sources
 		distance[source] = 0
 	}
@@ -3355,28 +3645,33 @@ function map_decrement(map, key, amount = 1) {
 		map_set(map, key, current - amount)
 }
 
-function join_array_with(arr, what) {
-	switch(arr.length) {
-	case 1: return String(arr[0])
-	case 2: return String(arr[0]) + " " + what + " " + String(arr[1])
+//=== PROMPT HELPERS ===
+function prompt_leader(leader, text) {
+	prompt(`L${leader}: ${text}`)
+}
+
+function join_array_with(array, what) {
+	switch(array.length) {
+	case 1: return String(array[0])
+	case 2: return String(array[0]) + " " + what + " " + String(array[1])
 	default: 
 		var s = ""
-		for (let i = 0; i < arr.length - 1; ++i) {
-			s = s + String(arr[i]) + ", "
+		for (let i = 0; i < array.length - 1; ++i) {
+			s = s + String(array[i]) + ", "
 		}
-		return s + what + " " + String(arr[arr.length - 1])
+		return s + what + " " + String(array[array.length - 1])
 	}
 }
 
-function join_array_with_and(arr) {
-	return join_array_with(arr, "and")
+function join_array_with_and(array) {
+	return join_array_with(array, "and")
 }
 
-function join_array_with_or(arr) {
-	return join_array_with(arr, "or")
+function join_array_with_or(array) {
+	return join_array_with(array, "or")
 }
 
-//=== WRAPPER FUNCTIONS ===
+//=== ACTION/BUTTON WRAPPER FUNCTIONS ===
 function button_draw() {
 	button("draw")
 }
@@ -3423,6 +3718,10 @@ function action_leader(leader) {
 
 function action_vp_marker() {
 	action("vp", 0)
+}
+
+function action_order(order) {
+	action("order", order)
 }
 //=== LOGGING ===
 function get_abbreviation(who) {
