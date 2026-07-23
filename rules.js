@@ -1026,6 +1026,8 @@ function on_setup(scenario, options) {
 	G.enemy_orders = []
 	G.selected_orders = [[], []]
 
+	G.supply = update_supply()
+
 	switch(get_current_month()) {
 	case JUNE: setup_june(); break
 	case JULY: setup_july(); break
@@ -1042,6 +1044,11 @@ function on_setup(scenario, options) {
 	G.active = [RUSSIA, FRANCE]
 	call("setup_hand", {scenario, hand_size: SCENARIO_DATA.hand_size.slice()})
 
+}
+
+function update_supply(who) {
+	if (who === undefined) G.supply = [calculate_distance_to_nearest_depot(RUSSIA), calculate_distance_to_nearest_depot(FRANCE)]
+	else G.supply[who] = calculate_distance_to_nearest_depot(who)
 }
 
 function setup_june() {
@@ -1638,6 +1645,7 @@ P.turn = script(`
 	call draw_card_to_hand
 	call play_card_for_additional_orders
 	call select_orders
+	call place_orders
 `)
 
 //=== 1. DRAW CARD TO HAND ===
@@ -2272,7 +2280,13 @@ P.select_orders = {
 			generate_select_order_actions(R, DUMMY_ORDER)
 			break
 		case STATE_FRENCH_LOGISTIC_PREPARATIONS:
-			prompt(`French Logistic Preparations: Select 1 Place Depot and 1 March order.`) //TODO: Modify prompt dynamically
+			if (set_has(L.already_selected, PLACE_DEPOT))
+				prompt("French Logistic Preparations: Select 1 March order.")
+			else if (set_has(L.already_selected, MARCH))
+				prompt("French Logistic Preparations: Select 1 Place Depot order.")
+			else
+				prompt(`French Logistic Preparations: Select 1 Place Depot and 1 March order.`) //TODO: Modify prompt dynamically
+			
 			for (let order = get_first_order(R); order <= get_last_order(R); ++order) 
 				if (!get_selected_orders(R).includes(order) && (get_order_type(order) === PLACE_DEPOT || get_order_type(order) === MARCH) && !set_has(L.already_selected[R], get_order_type(order)))
 					action_order(order)
@@ -2332,7 +2346,7 @@ P.select_orders = {
 		set_delete(G.active, R)
 		log(`${ROLES[R]} chose ${G.selected_orders[R].length} orders.`)
 		if (G.active.length === 0) {
-			finish("WIP", "exit code 0")
+			end()
 		}
 	},
 	undo() {
@@ -2385,6 +2399,127 @@ P.select_orders = {
 }
 
 //=== 4. PLACE ORDERS ===
+//TODO: Allow alternating placing orders (implementing simultaneous optional rule as default for expediency)
+P.place_orders = script(`
+	log "@Place Orders"
+	
+	set G.active FRANCE
+	if (is_event_active(COMMAND_FRICTION)) {
+		call ("event_" + COMMAND_FRICTION)
+	}
+	call place_orders_events { time: "beginning" }
+
+	set G.active [RUSSIA, FRANCE]
+	call do_place_orders
+
+	set G.active RUSSIA
+	if (is_event_active(POOR_COMMUNICATIONS)) {
+		call ("event_" + POOR_COMMUNICATIONS)
+	}
+	call place_orders_events { time: "end" }
+	eval { finish("Success", "exit code 0") }
+`)
+
+P.place_orders_events = {
+	_begin() {
+		//L.time
+		L.events = (L.time === "beginning") ? [INFIGHTING_AND_INTRIGUE, LETHARGIC_PURSUIT] : [NEW_POSTING, EXHAUSTED_HORSES, DISORDERLY_MARCH]
+		L.events = L.events.filter(card => can_play_event(card) && get_hand(G.active).includes(card))
+		L.has_played_event = false
+	},
+	prompt() {
+		if (L.events.length > 0) {
+			prompt(`You may play events (${L.events.map(card => `C${card}`).join(", ")}).`)
+			for (let c of L.events) action_card(c)
+		} else {
+			if (L.has_played_event)
+				prompt("No more events to play.")
+			else 
+				prompt("No eligible events in hand to play.")
+			button_done()
+		}
+	},
+	card(c) {
+		push_undo()
+		L.has_played_event = true
+		set_delete(L.events, c)
+		call("event", { card: c })
+	},
+	done() {
+		end()
+	}
+}
+
+P.do_place_orders = {
+	_begin() {
+		L.orders_to_place = G.selected_orders.slice() //So that we can use the same client 'selected' code to highlight orders in this state
+		L.orders_placed = [[], []] //Local undo stack to pop last order back into orders_to_place
+
+		L.selected_order = [-1, -1] //Who has what order currently selected
+
+		G.orders_by_type = Array(NUM_ORDER_TYPES).fill([]) //Organized for easy lookup in subsequent states
+		G.selected_orders = [[], []] //Resetting the old selected orders container
+	},
+	prompt() {
+		if (L.orders_to_place[R].length === 0) {
+			prompt("Place Orders: All done.")
+			button_confirm()
+		}
+		else if (L.selected_order[R] === -1) {
+			prompt(`Select an order to place (${L.orders_to_place[R].length} remaining).`)
+			for (let order of L.orders_to_place[R]) action_order(order)
+		}
+		else {
+			if ((G.turn === JUNE_5) && (R === FRANCE) && (get_order_type(L.selected_order[R]) === PLACE_DEPOT)) { //French Logistic Preparations special rule
+				prompt(`Place ${get_order_name(L.selected_order[R])} in any area with friendly SPs, or Kovno.`)
+				action_area(S_KOVNO)
+			} else {
+				prompt(`Place ${get_order_name(L.selected_order[R])} in any area with friendly SPs.`)
+			}
+
+			for (let area = FIRST_AREA; area <= LAST_AREA; ++area)
+				if (has_friendly_troop_in_space(R, area)) 
+					action_area(area)
+		}
+
+		button_undo((L.orders_placed[R].length > 0) || (L.selected_order[R] !== -1))
+	},
+	order(order) {
+		L.selected_order[R] = order
+		G.selected_orders[R].push(order) //Utilizing existing client logic to highlight the order
+	},
+	area(area) {
+		G.orders[L.selected_order[R]] = area //Update order's location
+		set_add(G.orders_by_type[get_order_type(L.selected_order[R])], L.selected_order[R])
+		G.selected_orders[R] = [] //Unhighlight the order that was just placed
+
+		//Move order from 'to place' to 'placed'
+		array_delete_item(L.orders_to_place[R], L.selected_order[R])
+		L.orders_placed[R].push(L.selected_order[R])
+
+		L.selected_order[R] = -1
+	},
+	undo() {
+		if (L.selected_order[R] > -1) { //i.e. has an order selected
+			G.selected_orders[R].pop()
+			L.selected_order[R] = -1
+		} else {
+			L.selected_order[R] = L.orders_placed[R].pop()
+			
+			G.orders[L.selected_order[R]] = POOL
+			set_delete(G.orders_by_type[get_order_type(L.selected_order[R])], L.selected_order[R])
+			G.selected_orders[R].push(L.selected_order[R])
+
+			L.orders_to_place[R].push(L.selected_order[R])
+		}
+	},
+	confirm() {
+		set_delete(G.active, R)
+		if (G.active.length === 0) {
+			end()
+		}
+	}
+}
 
 //=== 5. EXECUTE FORCED MARCH ORDERS ===
 
@@ -3103,6 +3238,59 @@ P.event_19 = {
 	}
 }
 
+function is_area_in_supply(who, area) {
+	return G.supply[who][area] <= MAX_SUPPLY_DISTANCE
+}
+
+// RU #24: New Posting
+P.event_24 = {
+	_begin() {
+		L.leaders_not_relocated = [ALEXANDER, KUTUZOV, DE_TOLLY, BAGRATION, TORMASOV, WITTGENSTEIN, CHICHAGOV, PLATOV].filter(leader => ((get_leader_location(leader) !== POOL) && (get_leader_location(leader) !== OUT_OF_PLAY)))
+		L.selected_leader = -1
+	},
+	prompt() {
+		if (L.leaders_not_relocated.length === 0) {
+			prompt_card(NEW_POSTING, "All done.")
+			button_done()
+		}
+		else if (L.selected_leader === -1) {
+			prompt_card(NEW_POSTING, "You may relocate as many leaders as you wish.")
+			for (let leader of L.leaders_not_relocated) {
+				if ((is_area_in_supply(RUSSIA, get_leader_location(leader)))) {
+					action_leader(leader)
+				}
+			}
+			button_pass()
+		}
+		else {
+			prompt_card(NEW_POSTING, `Relocate L${L.selected_leader} to any in-supply space.`)
+			for (let area = FIRST_AREA; area <= LAST_AREA; ++area) {
+				if (is_area_in_supply(RUSSIA, area) && (area !== get_leader_location(L.selected_leader))) {
+					action_area(area)
+				}
+			}
+			button_pass()
+		}
+	},
+	leader(leader) {
+		push_undo()
+		L.selected_leader = leader
+	},
+	area(area) {
+		push_undo()
+		log("Moved")
+		move_leader(L.selected_leader, area)
+		set_delete(L.leaders_not_relocated, L.selected_leader)
+		L.selected_leader = -1
+	},
+	pass() {
+		end()
+	},
+	done() {
+		end()
+	}
+}
+
 // RU #42: Command Friction
 E.event_42 = {
 	confirm_prompt() {
@@ -3111,6 +3299,52 @@ E.event_42 = {
 	},
 	confirm_log() {
 		log("France may designate an area with more than 1 RU leader at the beginning of the 'Place Orders' phase.")
+	}
+}
+
+P.event_42 = {
+	_begin() {
+		card_box_begin(COMMAND_FRICTION)
+		L.selected_area = -1
+		L.areas_with_multiple_russian_leaders =  G.leaders.slice(get_first_leader(RUSSIA), get_last_leader(RUSSIA) + 1).filter(loc => array_count(G.leaders.slice(get_first_leader(RUSSIA), get_last_leader(RUSSIA) + 1), l => loc === l) > 2).filter(s => (s !== POOL) && (s !== OUT_OF_PLAY))
+	},
+	inactive: "start a fight",
+	prompt() {
+		if (L.selected_area > -1) {
+			prompt_card(COMMAND_FRICTION, `You selected S${L.selected_area}.`)
+			button_confirm()
+		} else {
+			if (L.areas_with_multiple_russian_leaders.length === 0) {
+				prompt_card(COMMAND_FRICTION, `No areas with multiple Russian leaders.`)
+				button_pass()
+			} else {
+				prompt_card(COMMAND_FRICTION, `Select an area with multiple Russian leaders. (${join_array_with_or(L.areas_with_multiple_russian_leaders.map(area => `S${area}`))}).`)
+				for (let area of L.areas_with_multiple_russian_leaders) {
+					action_area(area)
+				}
+			}
+		}
+	},
+	area(area) {
+		push_undo()
+		L.selected_area = area
+	},
+	pass() {
+		log("No areas with multiple Russian leaders.")
+		card_box_end()
+		end()
+	},
+	confirm() {
+		log("France selected S" + L.selected_area + ".") 
+		card_box_end()
+		end()
+	}
+}
+
+// RU #43: Exhausted Horses
+P.event_43 = { //TODO
+	_begin() {
+		end()
 	}
 }
 
@@ -3133,6 +3367,92 @@ E.event_46 = {
 	},
 	confirm_log() {
 		log("The effect of Devastation markers is doubled for both sides this turn.")
+	}
+}
+
+function has_french_sp(area) {
+	return has_friendly_troop_in_space(FRANCE, area)
+}
+
+function get_order_location(order) {
+	return G.orders[order]
+}
+
+function get_orders_at_area(area) {
+	let orders = []
+	for (let order = FIRST_ORDER; order <= LAST_ORDER; ++order)
+		if (get_order_location(order) === area) set_add(orders, order)
+	return orders
+}
+
+function remove_order(id) {
+	G.orders[id] = POOL
+}
+
+// RU #48: Disorderly March
+P.event_48 = {
+	_begin() {
+		L.step = -1
+		L.orders_to_remove = []
+	},
+	inactive: "expose the French troops' poor discipline",
+	prompt() {
+		if (L.step === -1) {
+			prompt_card(DISORDERLY_MARCH, "Shift the Initiative marker 1 in Russia's favor.")
+			action_initiative_marker()
+		} else if (L.step === 0) {
+			prompt_card(DISORDERLY_MARCH, "Designate an area: France must remove all 'Defend', 'Forage', and 'Place Depot' orders on it.")
+			for (let area = FIRST_AREA; area <= LAST_AREA; ++area) 
+				if (has_french_sp(area)) action_area(area)
+		} else if (L.step === 1) {
+			prompt_card(DISORDERLY_MARCH, "You designated S" + L.selected_area + ". French forces must stop moving immediately after entering/exiting it. (CANNOT BE UNDONE)")
+			button_confirm()
+		} else if (L.step === 2) {
+			if (L.orders_to_remove.length > 0) {
+				prompt_card(DISORDERLY_MARCH, `Remove all 'Defend', 'Forage', and 'Place Depot' orders from S${L.selected_area}.`)
+				for (let order of L.orders_to_remove) {
+					action_order(order)
+				}
+			} else {
+				prompt_card(DISORDERLY_MARCH, `Remove orders at S${L.selected_area}: All done.`)
+				button_done()
+			}
+		} else {
+			prompt_card(DISORDERLY_MARCH, "All done.")
+			button_next()
+		}
+	},
+	initiative() {
+		push_undo()
+		shift_initiative(RUSSIA)
+		++L.step
+	},
+	area(area) {
+		push_undo()
+		log(`Designated S${area}.`)
+		L.selected_area = area
+		++L.step
+	},
+	order(order_id) {
+		push_undo()
+		log("Removed from S" + L.selected_area)
+		log("1 order")
+		remove_order(order_id)
+		set_delete(L.orders_to_remove, order_id)
+	},
+	done() {
+		++L.step
+		G.active = RUSSIA
+	},
+	confirm() {
+		clear_undo()
+		log(`France must remove all 'Defend', 'Forage', and 'Place Depot' orders at S${L.selected_area}.`)
+		L.orders_to_remove = get_orders_at_area(L.selected_area).filter(order => [DEFEND, FORAGE, PLACE_DEPOT].includes(get_order_type(order)))
+		++L.step
+		G.active = FRANCE
+	},
+	next() {
+		end()
 	}
 }
 
@@ -3296,6 +3616,34 @@ P.event_59 = {
 	_resume() {
 		++L.step
 	},
+}
+
+// FR #8: Infighting & Intrigue
+P.event_62 = {
+	_begin() {
+		L.selected_area = -1
+	},
+	inactive: "try to make the Russians give battle",
+	prompt() {
+		if (L.selected_area > -1) {
+			prompt_card(INFIGHTING_AND_INTRIGUE, `You selected S${L.selected_area}.`)
+			button_confirm()
+		} else {
+			prompt_card(INFIGHTING_AND_INTRIGUE, `Designate an area. This turn, Russian leaders there may only execute 'Forced March' or 'March' orders if they end in a French-occupied area.`)
+			for (let area of [...new Set(G.leaders.slice(first_ru_leader, last_ru_leader + 1).filter(a => (a !== POOL) && (a !== OUT_OF_PLAY)))]) {
+				action_area(area)
+			}
+		}
+	},
+	area(area) {
+		push_undo()
+		L.selected_area = area
+	},
+	confirm() {
+		push_undo()
+		add_persistent_event(INFIGHTING_AND_INTRIGUE, { area: L.selected_area })
+		end()
+	}
 }
 
 // FR #15: Peace Offer
@@ -3620,6 +3968,33 @@ P.event_98 = {
 		++L.step
 	},
 	confirm() {
+		end()
+	}
+}
+
+// FR #53: Lethargic Pursuit
+P.event_107 = {
+	_begin() {
+		L.selected_area = -1
+	},
+	inactive: "exploit Kutuzov's lethargy",
+	prompt() {
+		if (L.selected_area > -1) {
+			prompt_card(LETHARGIC_PURSUIT, `You selected S${L.selected_area}.`)
+			button_confirm()
+		} else {
+			prompt_card(LETHARGIC_PURSUIT, `Designate an area. This turn, Russian forces there move, they may not enter areas containing a French leader.`)
+			for (let area = FIRST_AREA; area <= LAST_AREA; ++area)
+				if (has_russian_sp(area)) action_area(area)
+		}
+	},
+	area(area) {
+		push_undo()
+		L.selected_area = area
+	},
+	confirm() {
+		push_undo()
+		add_persistent_event(LETHARGIC_PURSUIT, { area: L.selected_area })
 		end()
 	}
 }
