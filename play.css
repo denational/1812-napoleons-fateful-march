@@ -402,6 +402,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	height: 40px;
 	left: -15px;
 	z-index: -2;
+	border-radius: 50%;
 }
 
 .area > .marker.devastation { /* top left */

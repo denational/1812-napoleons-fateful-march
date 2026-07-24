@@ -456,7 +456,6 @@ function on_update() {
 	action_button("draw", "Draw")
 	action_button("discard", "Discard")
 	action_button("confirm", "Confirm")
-	action_button("pass", "Pass")
 
 	action_button("russia", "Russia")
 	action_button("france", "France")
@@ -483,6 +482,7 @@ function on_update() {
 	action_button_with_argument("remove_troop", FRESH_GUARD, "- Guard")
 	action_button_with_argument("remove_troop", EXHAUSTED_GUARD, "- Exh. Guard")
 
+	action_button("pass", "Pass")
 
 	action_button("undo", "Undo")
 

@@ -1026,7 +1026,7 @@ function on_setup(scenario, options) {
 	G.enemy_orders = []
 	G.selected_orders = [[], []]
 
-	G.supply = update_supply()
+	update_supply()
 
 	switch(get_current_month()) {
 	case JUNE: setup_june(); break
@@ -1614,6 +1614,7 @@ P.setup_hand = { //TODO: clarification on whether discards are public, shuffle d
 				get_deck(RUSSIA).push(HOLY_MOTHER_RUSSIA_RU)
 				log(`C${HOLY_MOTHER_RUSSIA_RU} placed on top of the Russian deck.`)
 			}
+			test_card(NEW_POSTING)
 			call("begin_turn")
 		}
 	}
@@ -1646,6 +1647,7 @@ P.turn = script(`
 	call play_card_for_additional_orders
 	call select_orders
 	call place_orders
+	call forced_march
 `)
 
 //=== 1. DRAW CARD TO HAND ===
@@ -2417,7 +2419,6 @@ P.place_orders = script(`
 		call ("event_" + POOR_COMMUNICATIONS)
 	}
 	call place_orders_events { time: "end" }
-	eval { finish("Success", "exit code 0") }
 `)
 
 P.place_orders_events = {
@@ -2431,6 +2432,7 @@ P.place_orders_events = {
 		if (L.events.length > 0) {
 			prompt(`You may play events (${L.events.map(card => `C${card}`).join(", ")}).`)
 			for (let c of L.events) action_card(c)
+			button_pass()
 		} else {
 			if (L.has_played_event)
 				prompt("No more events to play.")
@@ -2445,9 +2447,8 @@ P.place_orders_events = {
 		set_delete(L.events, c)
 		call("event", { card: c })
 	},
-	done() {
-		end()
-	}
+	pass() { end() },
+	done() { end() }
 }
 
 P.do_place_orders = {
@@ -2521,7 +2522,468 @@ P.do_place_orders = {
 	}
 }
 
+//=== COMMON ORDER EXECUTION STATES ===
+P.determine_who_goes_first = {
+	_begin() {
+		//L.order_type
+		//These events are mutually exclusive since Evasive Maneuvers is summer-only and Energetic Leadership is winter-only
+		if ((L.order_type === FORCED_MARCH) && can_play_event(EVASIVE_MANEUVERS)) {
+			L.state = EVASIVE_MANEUVERS
+			G.active = RUSSIA
+		} else if (can_play_event(ENERGETIC_LEADERSHIP)) {
+			L.state = ENERGETIC_LEADERSHIP
+			G.active = FRANCE
+		} else {
+			L.state = -1
+			G.active = get_who_has_initiative()
+		}
+
+		L.has_played_card = false
+		L.step = -1
+		L.first_player = -1
+	},
+	inactive: "choose who goes first",
+	prompt() {
+		switch(L.state) {
+		case EVASIVE_MANEUVERS:
+			if (L.played_card) {
+				prompt_card(EVASIVE_MANEUVERS, "Russia executes all forced march orders first this turn, but may not end moves in or adjacent to enemy-occupied areas.")
+				button_confirm()
+			} else {
+				if (get_hand(RUSSIA).includes(EVASIVE_MANEUVERS)) {
+					prompt(`You may play C${EVASIVE_MANEUVERS}.`)
+					action_card(EVASIVE_MANEUVERS)
+				} else {
+					prompt(`You do not have C${EVASIVE_MANEUVERS} in hand.`)
+					button_pass()
+				}
+			}
+			return
+		case ENERGETIC_LEADERSHIP:
+			if (L.played_card) {
+				if (L.step === -1) {
+					prompt_card(ENERGETIC_LEADERSHIP, `France executes ${get_order_type_name(L.order_type)} orders first this turn.`)
+					button_next()
+				} else if (L.step === 0) {
+					prompt_card(ENERGETIC_LEADERSHIP, "Draw a card.")
+					button_draw()
+				} else {
+					prompt_card(ENERGETIC_LEADERSHIP, "All done.")
+					button_confirm()
+				}
+			} else {
+				if (get_hand(FRANCE).includes(ENERGETIC_LEADERSHIP)) {
+					prompt(`You may play C${ENERGETIC_LEADERSHIP}.`)
+					action_card(ENERGETIC_LEADERSHIP)
+				} else {
+					prompt(`You do not have C${ENERGETIC_LEADERSHIP}.`)
+					button_pass()
+				}
+			}
+			return
+		default:
+			if (L.step === -1) {
+				prompt(`Pick who executes ${get_order_type_name(L.order_type)} first this turn.`)
+				button("russia")
+				button("france")
+			} else {
+				prompt(`You chose ${ROLES[L.first_player]} to go first.`)
+				button_confirm()
+			}
+			return
+		}
+	},
+	card(card) {
+		push_undo()
+		L.played_card = true
+		log_box_begin(card)
+	},
+	next() {
+		push_undo()
+		++L.step
+	},
+	pass() {
+		push_undo()
+		G.active = get_who_has_initiative()
+		L.state = -1
+		L.step = -1
+	},
+	draw() {
+		clear_undo()
+
+		let drawn_card = draw_card(G.active)
+		if (is_must_play_event(drawn_card)) {
+			call("must_play_event", { card: drawn_card })
+		}
+	},
+	_resume() {
+		++L.step
+	},
+	confirm() {
+		if (L.played_card) log_box_end()
+		L.L.$ = L.first_player
+		log(`${ROLES[G.active]} chose ${ROLES[L.first_player]} to go first.`)
+		end()
+	},
+	russia() {
+		L.first_player = RUSSIA
+		++L.step
+	},
+	france() {
+		L.first_player = FRANCE
+		++L.step
+	}
+}
+
+/* 
+	Napoléon 	- may change any order to any order
+	Davout 		- may change an order to 'March'
+	Schwarzen.	- may discard a card to place an Evade order during that step
+
+	Kutuzov		- may change any order to Rally
+	de Tolly	- may change an order to 'Evade'
+	Bagration	- may change an order to 'Defend'
+	Chichagov	- may discard a card to place a 'Forced March' order during that step
+
+*/
+
+function has_card_in_hand(who) {
+	return get_hand(who).some(card => !is_card_dummy(card)) && (get_hand(who).length > 0)
+}
+
+function has_order_of_type(who, type, area) {
+	return get_orders_at_area(who, area).some(order => get_order_type(order) === type)
+}
+
+function has_order_of_switchable_type(who, current_type, area) {
+	for (let type = FORAGE; type >= current_type; --type) {
+		if (has_order_of_type(who, type, area)) return true
+	}
+	return false
+}
+
+function has_switchable_order_in_pool(who, type) {
+	return has_order_of_switchable_type(who, type, POOL)
+}
+
+function has_non_dummy_order_at_area(who, area) {
+	return get_orders_at_area(who, area).some(order => get_order_type(order) !== DUMMY_ORDER)
+}
+
+function place_order(id, location) {
+	G.orders[id] = location
+	set_add(G.orders_by_type[get_order_type(id)], id)
+}
+
+function add_order_of_type_from_pool(who, type, where) {
+	let id = get_orders_at_area(who, POOL).find(order => get_order_type(order) === type)
+	place_order(id, where)
+	return id
+}
+
+/* 
+	to SWITCH from
+	has to have order of type in space
+	has to have a future non-dummmy order in pool
+	leader must be able to switch out of order
+
+	to switch TO
+	has to have a non-dummy order at space
+	has to have order of desired type in pool
+*/
+
+function can_change_order_to(leader, current_type, type_to, area) {
+	let side = get_leader_faction(leader)
+
+	//If in an execution phase PRIOR to the order the leader has the ability to switch to,
+	//there must be an order of the current type in the leader's location and an order of the type he can switch to in the pool.
+	if (current_type < type_to)
+		return (has_order_of_type(side, current_type, area) && has_order_of_type(side, type_to, POOL))
+
+	//If in the execution phase of the order the leader has the ability to switch to,
+	//there must be a non-dummy (since dummies don't count) order at the leader's location and an order of the type he can switch to in the pool.
+	if (current_type === type_to)
+		return (has_non_dummy_order_at_area(side, area) && has_order_of_type(side, type_to, POOL))
+
+	return false
+}
+
+function can_switch_order(leader, current_type) {
+	let area = get_leader_location(leader)
+
+	switch(leader) {
+	//May change an order to ‘Rally’.
+	case KUTUZOV:
+		return can_change_order_to(KUTUZOV, current_type, RALLY, area)
+	//May change an order to ‘Evade’
+	case DE_TOLLY:
+		return can_change_order_to(DE_TOLLY, current_type, EVADE, area)
+	//May change an order to ‘Defend’
+	case BAGRATION:
+		return can_change_order_to(BAGRATION, current_type, DEFEND, area)
+	//May discard a card to place a ‘Forced March’ order in that order´s step
+	case CHICHAGOV:
+		return (current_type === FORCED_MARCH) && (has_card_in_hand(RUSSIA) && has_order_of_type(RUSSIA, FORCED_MARCH, POOL))
+	//May change an order to ANY order
+	case NAPOLEON:
+		return (has_order_of_type(FRANCE, current_type, area) && has_switchable_order_in_pool(FRANCE, current_type)) || (has_non_dummy_order_at_area(FRANCE, area) && has_order_of_type(FRANCE, current_type, POOL))
+	//May change an order to ‘March’
+	case DAVOUT:
+		return can_change_order_to(DAVOUT, current_type, MARCH, area)
+	//May discard a card to place an ‘Evade’ order during that order´s step
+	case SCHWARZENBERG:
+		return (current_type === EVADE) && (has_card_in_hand(FRANCE) && has_order_of_type(FRANCE, EVADE, POOL))
+	}
+}
+
+P.switch_orders = {
+	_begin() {
+		//L.current_order_type
+		G.active = [RUSSIA, FRANCE]
+
+		L.selected_leader = [-1, -1]
+		L.step = [-1, -1]
+
+		L.leaders_who_can_use_abilities = [[KUTUZOV, DE_TOLLY, BAGRATION, CHICHAGOV], [NAPOLEON, DAVOUT, SCHWARZENBERG]]
+
+		//Undo
+		L.leaders_who_have_used_abilities = [[], []]
+		L.switches = [[], []]
+		L.removed_orders = [[], []]
+		L.placed_orders = [[], []]
+		L.discarded_card = [-1, -1]
+		L.napoleon_action = -1
+	
+		for (let who = RUSSIA; who <= FRANCE; ++who)
+			L.leaders_who_can_use_abilities[who] = L.leaders_who_can_use_abilities[who].filter(leader => is_leader_on_map(leader) && can_switch_order(leader, L.current_order_type))
+	},
+	prompt() {
+		if (L.leaders_who_can_use_abilities[R].length > 0) {
+			switch(L.selected_leader[R]) {
+			case -1:
+				prompt(`You may use leader abilities to change orders (${join_array_with_or(L.leaders_who_can_use_abilities[R].map(leader => `L${leader}`))}).`)
+				for (let leader of L.leaders_who_can_use_abilities[R]) 
+					action("leader_button", leader)
+				button_pass()
+				break
+			case KUTUZOV:
+				this.prompt_change_order_to(RALLY)
+				break
+			case DE_TOLLY:
+				this.prompt_change_order_to(EVADE)
+				break
+			case BAGRATION:
+				this.prompt_change_order_to(DEFEND)
+				break
+			case CHICHAGOV:
+				this.prompt_discard_card_to_place(FORCED_MARCH)
+				break
+			case NAPOLEON:
+				if (L.step[R] === -1) {
+					prompt_leader(NAPOLEON, `Change an order at S${get_leader_location(NAPOLEON)} to any non-Dummy order.`)
+					for (let order of get_orders_at_area(R, get_leader_location(NAPOLEON)))
+						if (get_order_type(order) !== DUMMY_ORDER) 
+							action_order(order)
+				} else {
+					prompt_leader(NAPOLEON, `Pick a non-Dummy order from your pool to place at S${get_leader_location(NAPOLEON)}.`)
+					for (let order of get_orders_at_area(R, POOL))
+						if (get_order_type(order) > L.current_order_type) 
+							action_order(order)
+				}
+				break
+			case DAVOUT:
+				this.prompt_change_order_to(MARCH)
+				break
+			case SCHWARZENBERG:
+				this.prompt_discard_card_to_place(EVADE)
+				break
+			}
+		} else {
+			prompt(`No leader abilities can be triggered now.`)
+			button_done()
+		}
+		button_undo((L.leaders_who_have_used_abilities[R].length > 0) || (L.selected_leader[R] > -1))
+	},
+	undo() {
+		if (L.selected_leader[R] > -1) {
+			if (L.step[R] === -1) { //A leader is currently selected, but not an order
+				L.selected_leader[R] = -1
+			} else {
+				if ((L.selected_leader[R] === CHICHAGOV) || (L.selected_leader[R] === SCHWARZENBERG)) {
+					set_delete(get_discard(R), L.discarded_card[R])
+					get_hand(R).push(L.discarded_card[R])
+					L.discarded_card[R] = -1
+				} else if (L.selected_leader[R] === NAPOLEON) {
+					place_order(L.removed_orders[R].pop(), get_leader_location(NAPOLEON))
+				}
+				--L.step[R]
+			}
+		} else {
+			L.selected_leader[R]  = L.leaders_who_have_used_abilities[R].pop()
+
+			//Future note to self: Variables cannot be declared in case, which is why conditionals are used
+			//All leaders with a change order to TYPE ability
+			if ((L.selected_leader[R] === KUTUZOV) || (L.selected_leader[R] === DE_TOLLY) || (L.selected_leader[R] === BAGRATION) || (L.selected_leader[R] === DAVOUT) || ((L.selected_leader[R] === NAPOLEON) && (L.napoleon_action === 2))) {
+				let previous_switch = L.switches[R].pop()
+				let order_that_was_removed = previous_switch[0]
+				let order_that_was_placed = previous_switch[1]
+
+				remove_order(order_that_was_placed)
+				place_order(order_that_was_removed, get_leader_location(L.selected_leader[R]))
+			}
+			else if ((L.selected_leader[R] === CHICHAGOV) || (L.selected_leader[R] === SCHWARZENBERG) || ((L.selected_leader[R] === NAPOLEON) && (L.napoleon_action === 3))) {
+				let order_that_was_placed = L.placed_orders[R].pop()
+
+				remove_order(order_that_was_placed)
+				
+				L.step[R] = 0
+
+				if (L.selected_leader[R] === NAPOLEON) L.napoleon_action = 1
+			}
+
+			L.leaders_who_can_use_abilities[R].push(L.selected_leader[R])
+		}
+	},
+	leader_button(leader) {
+		L.selected_leader[R] = leader
+		L.step[R] = -1
+	},
+	card(card) {
+		discard_card(card)
+		L.discarded_card[R] = card
+		++L.step[R]
+	},
+	prompt_change_order_to(type) {
+		let leader_location = get_leader_location(L.selected_leader[R])
+		prompt_leader(L.selected_leader[R], `Change an order at S${leader_location} to '${get_order_type_name(type)}'.`)
+		if (L.current_order_type < type) {
+			for (let order of get_orders_at_area(R, leader_location))
+				if (get_order_type(order) === L.current_order_type) 
+					action_order(order)
+		} else {
+			for (let order of get_orders_at_area(R, leader_location))
+				if ((get_order_type(order) !== DUMMY_ORDER) && (get_order_type(order) !== type)) 
+					action_order(order)
+		}
+	},
+	prompt_discard_card_to_place(type) {
+		if (L.step[R] === -1) {
+			prompt_leader(L.selected_leader[R], `Discard a card in order to place '${get_order_type_name(type)}'.`)
+			for (let c of get_hand(R)) 
+				if (!is_card_dummy(c)) 
+					action_card(c)
+		} else {
+			let leader_location = get_leader_location(L.selected_leader[R])
+			prompt_leader(L.selected_leader[R], `Place a '${get_order_type_name(type)}' order at S${leader_location}.`)
+			for (let order of get_orders_at_area(R, POOL))
+				if (get_order_type(order) === type)
+					action_order(order)
+		}
+	},
+	order(order) {
+		switch(L.selected_leader[R]) {
+		case KUTUZOV:
+			this.switch_order(order, RALLY)
+			break
+		case DE_TOLLY:
+			this.switch_order(order, EVADE)
+			break
+		case BAGRATION:
+			this.switch_order(order, DEFEND)
+			break
+		case CHICHAGOV:
+			place_order(order, get_leader_location(CHICHAGOV))
+			L.placed_orders[R].push(order)
+			break
+		case NAPOLEON:
+			if (L.step[R] === -1) {
+				L.napoleon_action = 1
+				if (get_order_type(order) === L.current_order_type) {
+					remove_order(order)
+					L.removed_orders[R].push(order)
+					++L.step[R]
+					return
+				} else {
+					L.napoleon_action = 2
+					this.switch_order(order, L.current_order_type)
+					break
+				}
+			} else {
+				L.napoleon_action = 3
+				place_order(order, get_leader_location(NAPOLEON))
+				L.placed_orders[R].push(order)
+				break
+			}
+		case DAVOUT:
+			this.switch_order(order, MARCH)
+			break
+		case SCHWARZENBERG:
+			place_order(order, get_leader_location(SCHWARZENBERG))
+			L.placed_orders[R].push(order)
+		}
+		set_delete(L.leaders_who_can_use_abilities[R], L.selected_leader[R])
+		L.leaders_who_have_used_abilities[R].push(L.selected_leader[R])
+		L.selected_leader[R] = -1
+	},
+	switch_order(order, replacement_type) {
+		remove_order(order)
+		let replacement_order = add_order_of_type_from_pool(R, replacement_type, get_leader_location(L.selected_leader[R]))
+		L.switches[R].push([order, replacement_order]) 
+	},
+	pass() { this.done() },
+	done() {
+		set_delete(G.active, R)
+
+		if (G.active.length === 0) {
+			finish("WIP", "exit code 0")
+		}
+	}
+}
+
+
 //=== 5. EXECUTE FORCED MARCH ORDERS ===
+/*
+	Events:
+		RUSSIA
+			RU #4 	Evasive Maneuvers		- before determine_initiative
+			RU #6 	Bagration's Retreat		- when executing a Forced March with Bagration
+			RU #7 	Indecision				- France changes an order with Napoleon
+			RU #14 	Extreme Weather			- 1 fresh sp becomes exhausted after moving
+			RU #15	Pride and Hesitation	- Russia +1VP if 1+ french leaders leave moscow
+			RU #22	City Ablaze!			- when France gain control of a key city
+			RU #25	Exhausting March		- after France have executed a 'Forced March' order
+			RU #26 	Exhausting March		- same as #25
+			RU #48	Disorderly March		- France must stop after entering/exiting space
+
+		FRANCE
+			FR #1	Hard Marching			- 1 SP exhausted after moving; fight at X1
+			FR #2	Hard Marching			- same as #1
+			FR #46	Energetic Leadership	- when executing any type of orders
+			FR #53	Lethargic Pursuit		- may not enter areas with a french leader
+
+	Leader abilities
+		Napoleon	Can switch order
+		Kutuzov
+		Chichagov
+*/
+
+function get_placed_orders_of_type(type) {
+	return G.orders_by_type[type]
+}
+
+P.forced_march = script(`
+	log "@Execute Forced Marches"
+
+	if (get_placed_orders_of_type(FORCED_MARCH).length === 0) {
+		log "No forced march orders placed."
+	} else {
+		call determine_who_goes_first { order_type: FORCED_MARCH }
+		call switch_orders { current_order_type: FORCED_MARCH }
+		call execute_forced_marches { first_player: L.$ }
+		call end_forced_march
+	}
+`)
+
 
 //=== 6. EXECUTE CAVALRY PATROLS ORDERS ===
 
@@ -2606,7 +3068,7 @@ function calculate_distance_to_nearest_depot(who) {
 		}
 
 	}
-	
+
 	return distance
 }
 
@@ -3239,6 +3701,7 @@ P.event_19 = {
 }
 
 function is_area_in_supply(who, area) {
+	update_supply()
 	return G.supply[who][area] <= MAX_SUPPLY_DISTANCE
 }
 
@@ -3269,7 +3732,6 @@ P.event_24 = {
 					action_area(area)
 				}
 			}
-			button_pass()
 		}
 	},
 	leader(leader) {
@@ -3278,15 +3740,17 @@ P.event_24 = {
 	},
 	area(area) {
 		push_undo()
-		log("Moved")
+		log("Moved to S" + area)
 		move_leader(L.selected_leader, area)
 		set_delete(L.leaders_not_relocated, L.selected_leader)
 		L.selected_leader = -1
 	},
 	pass() {
+		push_undo()
 		end()
 	},
 	done() {
+		push_undo()
 		end()
 	}
 }
@@ -3378,15 +3842,16 @@ function get_order_location(order) {
 	return G.orders[order]
 }
 
-function get_orders_at_area(area) {
+function get_orders_at_area(who, area) {
 	let orders = []
-	for (let order = FIRST_ORDER; order <= LAST_ORDER; ++order)
+	for (let order = get_first_order(who); order <= get_last_order(who); ++order)
 		if (get_order_location(order) === area) set_add(orders, order)
 	return orders
 }
 
 function remove_order(id) {
 	G.orders[id] = POOL
+	set_delete(G.orders_by_type[get_order_type(id)], id)
 }
 
 // RU #48: Disorderly March
@@ -3447,7 +3912,7 @@ P.event_48 = {
 	confirm() {
 		clear_undo()
 		log(`France must remove all 'Defend', 'Forage', and 'Place Depot' orders at S${L.selected_area}.`)
-		L.orders_to_remove = get_orders_at_area(L.selected_area).filter(order => [DEFEND, FORAGE, PLACE_DEPOT].includes(get_order_type(order)))
+		L.orders_to_remove = get_orders_at_area(FRANCE, L.selected_area).filter(order => [DEFEND, FORAGE, PLACE_DEPOT].includes(get_order_type(order)))
 		++L.step
 		G.active = FRANCE
 	},
@@ -3766,6 +4231,10 @@ P.event_74 = {
 	}
 }
 
+function get_areas_with_french_orders() {
+	return [...new Set(G.orders.slice(get_first_order(FRANCE), get_last_order(FRANCE) + 1).filter(order => (order !== POOL) && (order !== OUT_OF_PLAY)))]
+}
+
 // FR #22: Poor Communications
 E.event_76 = {
 	confirm_prompt() {
@@ -3774,6 +4243,39 @@ E.event_76 = {
 	},
 	confirm_log() {
 		log("At the end of the 'Place Orders' phase, RU may designate 1 placed FR order to remove.")
+	}
+}
+
+//RULES MODIFICATION: Now the player selects a space and a random order is removed from it (as opposed to selecting an order).
+//This is to prevent information leak about the identity of the order.
+P.event_76 = {
+	_begin() {
+		L.selected_area = -1
+		log_box_begin(POOR_COMMUNICATIONS)
+	},
+	inactive: "execute C76",
+	prompt() {
+		if (L.selected_area > 0) {
+			prompt_card(POOR_COMMUNICATIONS, `A random French order was removed from S${L.selected_area}.`)
+			button_next()
+		} else {
+			prompt_card(POOR_COMMUNICATIONS, `Choose a space to remove a random placed French order. (CANNOT BE UNDONE)`)
+			for (let area of get_areas_with_french_orders()) {
+				action_area(area)
+			}
+		}
+	},
+	area(area) {
+		clear_undo()
+		L.selected_area = area
+		let orders_at_area = get_orders_at_area(FRANCE, area)
+		let order_to_remove = random(orders_at_area.length)
+		remove_order(orders_at_area[order_to_remove])
+		log(`Removed order from S${area}.`)
+	},
+	next() {
+		log_box_end()
+		end()
 	}
 }
 
