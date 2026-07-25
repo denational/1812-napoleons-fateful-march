@@ -6,10 +6,10 @@ const RUSSIA = 0
 const FRANCE = 1
 const ROLES = ["Russia", "France"]
 
-var G, L, R, V, P = {}
+var G, L, V, R, P = {}
 
 //=== CONSTANTS ===
-//French-allied nations
+/* ALLIED NATIONS */
 const PRUSSIA = 2
 const AUSTRIA = 3
 
@@ -346,10 +346,10 @@ const NUM_SPACES = 157
 const leaders = data.leaders
 const NUM_LEADERS = 14
 
-const first_ru_leader = 0
-const last_ru_leader = 7
-const first_fr_leader = 8
-const last_fr_leader = 13
+const first_russia_leader = 0
+const last_russia_leader = 7
+const first_france_leader = 8
+const last_france_leader = 13
 
 const ALEXANDER = 0
 const KUTUZOV = 1
@@ -368,13 +368,12 @@ const MURAT = 12
 const SCHWARZENBERG = 13
 
 /* ORDERS */
-const first_ru_order = 1
-const last_ru_order = 28
-const first_fr_order = 29
-const last_fr_order = 53
-
-//A dictionary of each order to look up its properties
 const orders = data.orders
+
+const first_russia_order = 1
+const last_russia_order = 28
+const first_france_order = 29
+const last_france_order = 53
 
 const FORCED_MARCH = 0
 const CAVALRY_PATROLS = 1
@@ -402,11 +401,17 @@ const EXHAUSTED_COSSACK = 5
 const FRESH_GUARD = 6
 const EXHAUSTED_GUARD = 7
 
+//Not types, but much easier to handle for activation this way
+const FRESH_PRUSSIAN_INFANTRY = 8
+const EXHAUSTED_PRUSSIAN_INFANTRY = 9
+const FRESH_AUSTRIAN_INFANTRY = 10
+const EXHAUSTED_AUSTRIAN_INFANTRY = 11
+
 /* DEPOTS */
 const NUM_DEPOTS_RU = 14
 const NUM_DEPOTS_FR = 7
 
-//=== DATA FUNCTIONS ===
+//=== DATA ACCESSORS ===
 /* NATIONS */
 function get_nation_name(nation) {
 	switch(nation) {
@@ -457,15 +462,6 @@ function is_permanent_removal_card(c) {
 	return cards[c].permanently_remove
 }
 
-function discard_or_remove_card(c) {
-	is_permanent_removal_card(c) ? remove_card(c) : discard_card(c)
-}
-
-function remove_card(c) {
-	let who = get_card_owner(c)
-	array_delete_item(get_hand(who), c)
-}
-
 function get_hand(who) {
 	return G.hand[who]
 }
@@ -478,10 +474,8 @@ function get_discard(who) {
 	return G.discard[who]
 }
 
-function discard_card(c) {
-	let card_owner = get_card_owner(c)
-	array_delete_item(get_hand(card_owner), c)
-	set_add(get_discard(card_owner), c)
+function get_removed(who) {
+	return G.removed[who]
 }
 
 function get_dummy(who) {
@@ -492,18 +486,7 @@ function count_non_dummy_cards_in_hand(who) {
 	return G.hand[who].includes(get_dummy(who)) ? G.hand[who].length - 1 : G.hand[who].length
 }
 
-function draw_card(who) {
-	let drawn_card = get_deck(who).pop()
-	get_hand(who).push(drawn_card)
-	log(`${ROLES[who]} drew a card.`)
-	return drawn_card
-}
-
-function return_dummy_to_hand(who) {
-	array_insert(get_hand(who), 0, get_dummy(who))
-}
-
-/* SPACES */
+/* AREAS */
 function get_area_name(a) {
 	return areas[a].name
 }
@@ -560,13 +543,12 @@ function is_french_off_map_area(a) {
 //is_fr_controlled, is_ru_controlled, 
 function is_fr_controlled(a) {
 	if (is_french_off_map_area(a)) return true
-	return has_troop(a) && has_friendly_troop_in_space(FRANCE, a) && !has_friendly_troop_in_space(RUSSIA, a)
+	return has_troop(a) && has_friendly_troop(FRANCE, a) && !has_friendly_troop(RUSSIA, a)
 }
 
 function is_ru_controlled(a) {
 	return !is_fr_controlled(a)
 }
-
 
 /* LEADERS */
 function get_leader_faction(leader) {
@@ -590,11 +572,11 @@ function get_leader_short_name(leader) {
 }
 
 function get_first_leader(who) {
-	return (who === RUSSIA) ? first_ru_leader : first_fr_leader
+	return (who === RUSSIA) ? first_russia_leader : first_france_leader
 }
 
 function get_last_leader(who) {
-	return (who === RUSSIA) ? first_ru_leader : last_ru_leader
+	return (who === RUSSIA) ? first_russia_leader : last_france_leader
 }
 
 function get_leader_location(leader) {
@@ -605,7 +587,7 @@ function is_leader_on_map(leader) {
 	return (get_leader_location(leader) !== POOL) && (get_leader_location(leader) !== OUT_OF_PLAY)
 }
 
-function set_leader(where, who) {
+function set_leader(who, where) { //TO REFACTOR
 	G.leaders[who] = where
 }
 
@@ -624,11 +606,11 @@ function get_order_type(order) {
 }
 
 function get_first_order(who) {
-	return (who === RUSSIA) ? first_ru_order : first_fr_order
+	return (who === RUSSIA) ? first_russia_order : first_france_order
 }
 
 function get_last_order(who) {
-	return (who === RUSSIA) ? last_ru_order : last_fr_order
+	return (who === RUSSIA) ? last_russia_order : last_france_order
 }
 
 function get_order_name(order) {
@@ -666,57 +648,32 @@ function get_order_type_name(type) {
 	Each entry follows the following format:
 
 	Player owner - 1 bit - Uses player mnemonics RUSSIA and FRANCE. Useful for activation and other situations when allies count as French.
-	Nation owner - 2 bits - corresponds to the 4 possible nations, RUSSIA, FRANCE, PRUSSIA, AUSTRIA.
-	Type - 3 bits - Corresponds to the 8 type constants defined in the "Troops" section of constants
+	Type - 4 bits - Corresponds to the 8 + 4 type constants defined in the "Troops" section of constants
 	Number of troops - 6 bits - Safe estimate since combining the starting French armies will go slightly over 31 fresh infantry.
+	0 1111 000000
+	| |||| ||||||
 
 	The convenient side-effect of using a set is that entries get sorted by nation.
 
 */
-const TROOP_ENTRY_PLAYER_SHIFT = 11
-const TROOP_ENTRY_NATION_SHIFT = 9
+const TROOP_ENTRY_WHO_SHIFT = 10
 const TROOP_ENTRY_TYPE_SHIFT = 6
 const TROOP_ENTRY_NUM_SHIFT = 0
 
-const TROOP_ENTRY_PLAYER_MASK = 2048
-const TROOP_ENTRY_NATION_MASK = 1536
-const TROOP_ENTRY_TYPE_MASK = 448
+const TROOP_ENTRY_WHO_MASK = 1024
+const TROOP_ENTRY_TYPE_MASK = 960
 const TROOP_ENTRY_NUM_MASK = 63
 
-function has_troop(a) {
-	return map_has(G.troops, a)
+function init_troop_entry(area) {
+	map_set(G.troops, area, [])
 }
 
-function has_friendly_troop_in_space(who, area) {
-	if (!has_troop(area)) { return false }
-	for (let entry of get_area_troop_set(area)) {
-		if (decode_troop_entry_player(entry) === who) return true
-	}
-	return false
+function delete_troop_entry(area) {
+	map_delete(G.troops, area)
 }
 
-function init_troop_entry(a) {
-	map_set(G.troops, a, [])
-}
-
-function get_area_troop_set(a, fallback) {
-	return map_get(G.troops, a, fallback)
-}
-
-function delete_troop_entry(a) {
-	map_delete(G.troops, a)
-}
-
-function get_troop_entry(nation, area, type, fallback) {
-	return get_area_troop_set(area, fallback)?.find(entry => (decode_troop_entry_nation(entry) === nation) && (decode_troop_entry_type(entry) === type)) ?? fallback
-}
-
-function decode_troop_entry_player(entry) {
-	return (entry & TROOP_ENTRY_PLAYER_MASK) >> TROOP_ENTRY_PLAYER_SHIFT
-}
-
-function decode_troop_entry_nation(entry) {
-	return (entry & TROOP_ENTRY_NATION_MASK) >> TROOP_ENTRY_NATION_SHIFT
+function decode_troop_entry_who(entry) {
+	return (entry & TROOP_ENTRY_WHO_MASK) >> TROOP_ENTRY_WHO_SHIFT
 }
 
 function decode_troop_entry_type(entry) {
@@ -727,67 +684,31 @@ function decode_troop_entry_num(entry) {
 	return entry & TROOP_ENTRY_NUM_MASK
 }
 
-function construct_troop_entry(nation, type, num) {
+function get_troop_entry(who, area, type, fallback) {
+	return get_area_troop_set(area, fallback)?.find(entry => (decode_troop_entry_who(entry) === who) && (decode_troop_entry_type(entry) === type)) ?? fallback
+}
+
+function has_troop(area) {
+	return map_has(G.troops, area)
+}
+
+function get_area_troop_set(area, fallback) {
+	return map_get(G.troops, area, fallback)
+}
+
+function construct_troop_entry(who, type, num) {
 	let entry = 0
-	entry += get_faction(nation) << TROOP_ENTRY_PLAYER_SHIFT
-	entry += nation << TROOP_ENTRY_NATION_SHIFT
+	entry += who << TROOP_ENTRY_WHO_SHIFT
 	entry += type << TROOP_ENTRY_TYPE_SHIFT
 	entry += num
 	return entry
 }
 
-function set_troop(nation, area, type, num) {
-	if (!has_troop(area)) { init_troop_entry(area) }
-
-	let entry = get_troop_entry(nation, area, type, null)
-	if (entry !== null) {
-		set_delete(get_area_troop_set(area), entry)
-	}
-
-	set_add(get_area_troop_set(area, null), construct_troop_entry(nation, type, num))
-}
-
-function add_troop(nation, area, type, num) {
-	if (!has_troop(area)) { init_troop_entry(area) }
-
-	let entry = get_troop_entry(nation, area, type, null)
-	if (entry !== null) {
-		let existing_troop_count = decode_troop_entry_num(entry)
-		set_delete(get_area_troop_set(area), entry)
-		set_add(get_area_troop_set(area), construct_troop_entry(nation, type, existing_troop_count + num))
-	} else {
-		set_add(get_area_troop_set(area), construct_troop_entry(nation, type, num))
-	}
-}
-
-function remove_troop(nation, area, type, num) {
-	let entry = get_troop_entry(nation, area, type, null)
-	if (entry !== null) {
-		let remaining_troop_count = decode_troop_entry_num(entry)
-
-		if (remaining_troop_count < num) {
-			throw new Error(`Need to remove ${num} troops of ${nation} ${type} at ${area}. Only ${remaining_troop_count} found.`)
-		}
-		set_delete(get_area_troop_set(area), entry)
-		
-		if (remaining_troop_count !== num) {
-			set_troop(nation, area, type, remaining_troop_count - num)
-		}
-
-		if (get_area_troop_set(area).length === 0 || get_area_troop_set(area).every(val => decode_troop_entry_num(val) === 0)) {
-			delete_troop_entry(area)
-		}
-	}
-}
-
-function move_troop(nation, from, to, type, num) {
-	remove_troop(nation, from, type, num)
-	add_troop(nation, to, type, num)
-}
-
-function rally_troop(nation, area, type, num = 1) {
-	remove_troop(nation, area, type, num)
-	add_troop(nation, area, type - 1, num)
+function has_friendly_troop(who, area) {
+	if (!has_troop(area)) return false
+	for (let entry of get_area_troop_set(area))
+		if (decode_troop_entry_who(entry) === who) return true
+	return false
 }
 
 function get_troop_types_at_area(area) {
@@ -803,12 +724,12 @@ function is_troop_type_exhausted(type) {
 	return !!(type & 1)
 }
 
-function has_troop_in_area(player, area) {
-	return get_area_troop_set(area, null)?.some(entry => decode_troop_entry_player(entry) === player) ?? false
+function has_troop_in_area(who, area) {
+	return get_area_troop_set(area, null)?.some(entry => decode_troop_entry_who(entry) === who) ?? false
 }
 
 function has_exhausted_sp(who, area) {
-	return get_area_troop_set(area, undefined)?.some(entry => (decode_troop_entry_player(entry) === who) && (is_troop_type_exhausted(decode_troop_entry_type(entry))))
+	return get_area_troop_set(area, undefined)?.some(entry => (decode_troop_entry_who(entry) === who) && (is_troop_type_exhausted(decode_troop_entry_type(entry))))
 }
 
 function get_troop_type_name(type) {
@@ -821,6 +742,10 @@ function get_troop_type_name(type) {
 	case EXHAUSTED_COSSACK: return "Exh. Cossack"
 	case FRESH_GUARD: return "Guard"
 	case EXHAUSTED_GUARD: return "Exh. Guard"
+	case FRESH_PRUSSIAN_INFANTRY: return "Pr. Infantry"
+	case EXHAUSTED_PRUSSIAN_INFANTRY: return "Exh. Pr. Infantry"
+	case FRESH_AUSTRIAN_INFANTRY: return "Au. Infantry"
+	case EXHAUSTED_AUSTRIAN_INFANTRY: return "Exh. Au. Infantry"
 	default:
 		return "unknown"
 	}
@@ -829,7 +754,7 @@ function get_troop_type_name(type) {
 function count_num_sps(who, area) {
 	let count = 0
 	for (let entry of get_area_troop_set(area))
-		if (decode_troop_entry_player(entry) === who)
+		if (decode_troop_entry_who(entry) === who)
 			count += decode_troop_entry_num(entry)
 	return count
 }
@@ -951,6 +876,89 @@ function get_devastated_areas_with_french_troops() {
 	return get_areas_with_devastation().filter(area => has_troop_in_area(FRANCE, area))
 }
 
+//=== STATE-MANIPULATING FUNCTIONS ===
+/* CARDS */
+function draw_card(who) {
+	let drawn_card = get_deck(who).pop()
+	get_hand(who).push(drawn_card)
+	log(`${ROLES[who]} drew a card.`)
+	return drawn_card
+}
+
+function discard_card(c) {
+	let card_owner = get_card_owner(c)
+	array_delete_item(get_hand(card_owner), c)
+	set_add(get_discard(card_owner), c)
+}
+
+function remove_card(c) {
+	let who = get_card_owner(c)
+	array_delete_item(get_hand(who), c)
+	set_add(get_removed(who), c)
+}
+
+function discard_or_remove_card(c) {
+	is_permanent_removal_card(c) ? remove_card(c) : discard_card(c)
+}
+
+function return_dummy_to_hand(who) {
+	array_insert(get_hand(who), 0, get_dummy(who))
+}
+
+/* TROOPS */
+//Sets the number of troops at a given area to a specific number.
+function set_troop(who, area, type, num) {
+	if (!has_troop(area)) init_troop_entry(area)
+
+	let entry = get_troop_entry(who, area, type, -1)
+	if (entry > -1)
+		set_delete(get_area_troop_set(area), entry)
+
+	set_add(get_area_troop_set(area, null), construct_troop_entry(who, type, num))
+}
+
+//Adds X troops of a specific type to a given area.
+function add_troop(who, area, type, num) {
+	if (!has_troop(area)) init_troop_entry(area)
+	
+	let entry = get_troop_entry(who, area, type, null)
+	if (entry !== null)
+		set_troop(who, area, type, decode_troop_entry_num(entry) + num)
+	else
+		set_troop(who, area, type, num)
+}
+
+function remove_troop(who, area, type, num) {
+	let entry = get_troop_entry(who, area, type, null)
+	if (entry !== null) {
+		let remaining_troop_count = decode_troop_entry_num(entry)
+
+		if (remaining_troop_count < num) {
+			throw new Error(`Need to remove ${num} troops of ${who} ${type} at ${area}. Only ${remaining_troop_count} found.`)
+		}
+		
+		set_delete(get_area_troop_set(area), entry)
+
+		if (remaining_troop_count !== num) {
+			set_troop(who, area, type, remaining_troop_count - num)
+		}
+
+		if (get_area_troop_set(area).length === 0 || get_area_troop_set(area).every(val => decode_troop_entry_num(val) === 0)) {
+			delete_troop_entry(area)
+		}
+	}
+}
+
+function move_troop(who, from, to, type, num) {
+	remove_troop(who, from, type, num)
+	add_troop(who, to, type, num)
+}
+
+function rally_troop(who, area, type, num = 1) {
+	remove_troop(who, area, type, num)
+	add_troop(who, area, type - 1, num)
+}
+
 //=== VIEW ===
 function on_view() {
 	V.active = G.active
@@ -970,7 +978,7 @@ function on_view() {
 	V.troops = G.troops
 	V.turn = G.turn
 	V.vp = G.vp
-	V.played_cards = G.played_cards
+	V.played_cards = G.played_cards ?? [[], []]
 	V.orders = G.orders.slice(get_first_order(R), get_last_order(R) + 1) ?? []
 	V.enemy_orders = G.orders.slice(get_first_order(enemy(R)), get_last_order(enemy(R)) + 1)?.filter(loc => loc !== POOL) ?? [] 
 	V.selected_orders = (G.selected_orders) ? G.selected_orders[R] : []
@@ -1057,12 +1065,12 @@ function setup_june() {
 	set_troop(RUSSIA, S_RIGA, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_DUNABURG, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_DUNABURG)
-	set_leader(S_KALTINENAI, WITTGENSTEIN)
+	set_leader(WITTGENSTEIN, S_KALTINENAI)
 	set_troop(RUSSIA, S_KALTINENAI, FRESH_INFANTRY, 3)
 	set_troop(RUSSIA, S_VILKOMIR, FRESH_CAVALRY, 2)
 	set_troop(RUSSIA, S_VILKOMIR, FRESH_INFANTRY, 2)
-	set_leader(S_VILNA, ALEXANDER)
-	set_leader(S_VILNA, DE_TOLLY)
+	set_leader(ALEXANDER, S_VILNA)
+	set_leader(DE_TOLLY, S_VILNA)
 	set_troop(RUSSIA, S_VILNA, FRESH_INFANTRY, 6)
 	add_depot(RUSSIA, S_VILNA)
 	set_troop(RUSSIA, S_SVENCIONYS, FRESH_INFANTRY, 3)
@@ -1071,16 +1079,16 @@ function setup_june() {
 	add_depot(RUSSIA, S_MINSK)
 	set_troop(RUSSIA, S_LIDA, FRESH_CAVALRY, 1)
 	set_troop(RUSSIA, S_LIDA, FRESH_INFANTRY, 2)
-	set_leader(S_GRODNO, PLATOV)
+	set_leader(PLATOV, S_GRODNO)
 	set_troop(RUSSIA, S_GRODNO, FRESH_COSSACK, 2)
 	set_troop(RUSSIA, S_BIALYSTOK, FRESH_CAVALRY, 1)
-	set_leader(S_VOLKOVYSK, BAGRATION)
+	set_leader(BAGRATION, S_VOLKOVYSK)
 	set_troop(RUSSIA, S_VOLKOVYSK, FRESH_INFANTRY, 4)
 	set_troop(RUSSIA, S_BREST, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_BREST)
 	set_troop(RUSSIA, S_KOVEL, FRESH_CAVALRY, 1)
 	set_troop(RUSSIA, S_KOVEL, EXHAUSTED_CAVALRY, 1)
-	set_leader(S_LUTSK, TORMASOV)
+	set_leader(TORMASOV, S_LUTSK)
 	set_troop(RUSSIA, S_LUTSK, FRESH_INFANTRY, 1)
 	set_troop(RUSSIA, S_LUTSK, EXHAUSTED_INFANTRY, 1)
 	add_depot(RUSSIA, S_LUTSK)
@@ -1110,23 +1118,23 @@ function setup_june() {
 	set_troop(RUSSIA, S_VORONEZH, FRESH_COSSACK, 1)
 
 	/* FRANCE */
-	set_troop(PRUSSIA, S_PRUSSIA_NORTH, FRESH_INFANTRY, 3)
-	set_leader(S_KALVARIJA, NAPOLEON)
-	set_leader(S_KALVARIJA, MURAT)
+	set_troop(FRANCE, S_PRUSSIA_NORTH, FRESH_PRUSSIAN_INFANTRY, 3)
+	set_leader(NAPOLEON, S_KALVARIJA)
+	set_leader(MURAT, S_KALVARIJA)
 	set_troop(FRANCE, S_KALVARIJA, FRESH_GUARD, 4)
 	set_troop(FRANCE, S_KALVARIJA, FRESH_CAVALRY, 5)
 	set_troop(FRANCE, S_KALVARIJA, FRESH_INFANTRY, 19)
-	set_leader(S_SUWALKI, DE_BEAUHARNAIS)
+	set_leader(DE_BEAUHARNAIS, S_SUWALKI)
 	set_troop(FRANCE, S_SUWALKI, FRESH_CAVALRY, 1)
 	set_troop(FRANCE, S_SUWALKI, FRESH_INFANTRY, 7)
-	set_leader(S_SZCZUCZY, JEROME)
+	set_leader(JEROME, S_SZCZUCZY)
 	set_troop(FRANCE, S_SZCZUCZY, FRESH_CAVALRY, 2)
 	set_troop(FRANCE, S_SZCZUCZY, FRESH_INFANTRY, 6)
 	set_troop(FRANCE, S_SUWALKI, FRESH_CAVALRY, 1)
 	set_troop(FRANCE, S_GRAND_DUCHY_OF_WARSAW_NORTH, FRESH_INFANTRY, 2)
-	set_leader(S_GRAND_DUCHY_OF_WARSAW_SOUTH, SCHWARZENBERG)
-	set_troop(AUSTRIA, S_GRAND_DUCHY_OF_WARSAW_SOUTH, FRESH_INFANTRY, 3)
-	set_troop(AUSTRIA, S_AUSTRIA, FRESH_INFANTRY, 1)
+	set_leader(SCHWARZENBERG, S_GRAND_DUCHY_OF_WARSAW_SOUTH)
+	set_troop(FRANCE, S_GRAND_DUCHY_OF_WARSAW_SOUTH, FRESH_AUSTRIAN_INFANTRY, 3)
+	set_troop(FRANCE, S_AUSTRIA, FRESH_AUSTRIAN_INFANTRY, 1)
 
 	set_devastation(S_KALVARIJA, 1)
 	set_devastation(S_SUWALKI, 1)
@@ -1139,29 +1147,29 @@ function setup_july() {
 	set_troop(RUSSIA, S_RIGA, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_DUNABURG, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_DUNABURG)
-	set_leader(S_SEVEZH, WITTGENSTEIN)
+	set_leader(WITTGENSTEIN, S_SEVEZH)
 	set_troop(RUSSIA, S_SEVEZH, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_SEVEZH, EXHAUSTED_INFANTRY, 1)
-	set_leader(S_VITEBSK, DE_TOLLY)
+	set_leader(DE_TOLLY, S_VITEBSK)
 	set_troop(RUSSIA, S_VITEBSK, FRESH_INFANTRY, 7)
 	set_troop(RUSSIA, S_VITEBSK, FRESH_CAVALRY, 2)
 	set_troop(RUSSIA, S_VITEBSK, EXHAUSTED_INFANTRY, 5)
 	set_troop(RUSSIA, S_VITEBSK, EXHAUSTED_CAVALRY, 1)
 	add_depot(RUSSIA, S_VITEBSK)
-	set_leader(S_BABINOVICHI, PLATOV)
+	set_leader(PLATOV, S_BABINOVICHI)
 	set_troop(RUSSIA, S_BABINOVICHI, FRESH_COSSACK, 1)
 	set_troop(RUSSIA, S_SMOLENSK, FRESH_INFANTRY, 2)
 	add_depot(RUSSIA, S_SMOLENSK)
 	set_troop(RUSSIA, S_DUKHOVSHCHINA, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_RAGOSTOV, FRESH_INFANTRY, 1)
 	set_troop(RUSSIA, S_RAGOSTOV, EXHAUSTED_INFANTRY, 1)
-	set_leader(S_UNNAMED_E4, BAGRATION)
+	set_leader(BAGRATION, S_UNNAMED_E4)
 	set_troop(RUSSIA, S_UNNAMED_E4, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_UNNAMED_E4, FRESH_CAVALRY, 1)
 	set_troop(RUSSIA, S_UNNAMED_E4, EXHAUSTED_INFANTRY, 1)
 	set_troop(RUSSIA, S_MSTISLAVL, FRESH_COSSACK, 1)
 
-	set_leader(S_BREST, TORMASOV)
+	set_leader(TORMASOV, S_BREST)
 	set_troop(RUSSIA, S_BREST, FRESH_INFANTRY, 1)
 	set_troop(RUSSIA, S_BREST, EXHAUSTED_INFANTRY, 1)
 	set_troop(RUSSIA, S_VLADIMIR_GALICIA, FRESH_INFANTRY, 1)
@@ -1185,15 +1193,15 @@ function setup_july() {
 	set_troop(RUSSIA, S_VORONEZH, FRESH_COSSACK, 2)
 
 	/* FRANCE */
-	set_troop(PRUSSIA, S_MITAU, FRESH_INFANTRY, 1)
-	set_troop(PRUSSIA, S_UNNAMED_B2, FRESH_INFANTRY, 2)
+	set_troop(FRANCE, S_MITAU, FRESH_PRUSSIAN_INFANTRY, 1)
+	set_troop(FRANCE, S_UNNAMED_B2, FRESH_PRUSSIAN_INFANTRY, 2)
 	set_troop(FRANCE, S_VIDZY, FRESH_INFANTRY, 1)
 	set_troop(FRANCE, S_DISNA, FRESH_INFANTRY, 1)
 	set_troop(FRANCE, S_POLOTSK, FRESH_INFANTRY, 2)
 	set_troop(FRANCE, S_POLOTSK, EXHAUSTED_INFANTRY, 1)
-	set_leader(S_KAMEN, NAPOLEON)
-	set_leader(S_KAMEN, MURAT)
-	set_leader(S_KAMEN, DE_BEAUHARNAIS)
+	set_leader(NAPOLEON, S_KAMEN)
+	set_leader(MURAT, S_KAMEN)
+	set_leader(DE_BEAUHARNAIS, S_KAMEN)
 	set_troop(FRANCE, S_KAMEN, FRESH_GUARD, 4)
 	set_troop(FRANCE, S_KAMEN, FRESH_CAVALRY, 3)
 	set_troop(FRANCE, S_KAMEN, FRESH_INFANTRY, 5)
@@ -1207,18 +1215,18 @@ function setup_july() {
 	add_depot(FRANCE, S_MINSK)
 	set_troop(FRANCE, S_BORISOV, FRESH_INFANTRY, 3)
 	set_troop(FRANCE, S_BORISOV, EXHAUSTED_INFANTRY, 1)
-	set_leader(S_MOGILEV, DAVOUT)
+	set_leader(DAVOUT, S_MOGILEV)
 	set_troop(FRANCE, S_MOGILEV, FRESH_INFANTRY, 2)
 	set_troop(FRANCE, S_MOGILEV, EXHAUSTED_INFANTRY, 1)
 	set_troop(FRANCE, S_KOKHANOVO, FRESH_INFANTRY, 3)
 	set_troop(FRANCE, S_KOKHANOVO, EXHAUSTED_INFANTRY, 1)
 	set_troop(FRANCE, S_ORSHA, FRESH_CAVALRY, 1)
-	set_leader(S_NESVICH, SCHWARZENBERG)
-	set_troop(AUSTRIA, S_NESVICH, FRESH_INFANTRY, 2)
-	set_troop(AUSTRIA, S_NESVICH, EXHAUSTED_INFANTRY, 1)
+	set_leader(SCHWARZENBERG, S_NESVICH)
+	set_troop(FRANCE, S_NESVICH, FRESH_AUSTRIAN_INFANTRY, 1)
+	set_troop(FRANCE, S_NESVICH, EXHAUSTED_AUSTRIAN_INFANTRY, 1)
 	set_troop(FRANCE, S_SLUTSK, FRESH_CAVALRY, 1)
 	set_troop(FRANCE, S_PRUZHANY, FRESH_INFANTRY, 2)
-	set_troop(AUSTRIA, S_ZAMOSC, FRESH_INFANTRY, 1)
+	set_troop(FRANCE, S_ZAMOSC, FRESH_AUSTRIAN_INFANTRY, 1)
 	set_troop(FRANCE, FRENCH_CASUALTIES, FRESH_INFANTRY, 6)
 	set_troop(FRANCE, FRENCH_CASUALTIES, FRESH_CAVALRY, 1)
 
@@ -1263,21 +1271,21 @@ function setup_aug() {
 	/* RUSSIA */
 	set_troop(RUSSIA, S_RIGA, FRESH_INFANTRY, 1)
 	set_troop(RUSSIA, S_MITAU, FRESH_INFANTRY, 1)
-	set_leader(S_SEVEZH, WITTGENSTEIN)
+	set_leader(WITTGENSTEIN, S_SEVEZH)
 	set_troop(RUSSIA, S_SEVEZH, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_SEVEZH, EXHAUSTED_INFANTRY, 1)
-	set_leader(S_SMOLENSK, DE_TOLLY)
+	set_leader(DE_TOLLY, S_SMOLENSK)
 	set_troop(RUSSIA, S_SMOLENSK, FRESH_INFANTRY, 8)
 	set_troop(RUSSIA, S_SMOLENSK, FRESH_CAVALRY, 2)
 	set_troop(RUSSIA, S_SMOLENSK, EXHAUSTED_INFANTRY, 5)
 	set_troop(RUSSIA, S_SMOLENSK, EXHAUSTED_CAVALRY, 1)
 	add_depot(RUSSIA, S_SMOLENSK)
-	set_leader(S_SVERSKOVO, BAGRATION)
+	set_leader(BAGRATION, S_SVERSKOVO)
 	set_troop(RUSSIA, S_SVERSKOVO, FRESH_INFANTRY, 3)
 	set_troop(RUSSIA, S_SVERSKOVO, FRESH_CAVALRY, 1)
 	set_troop(RUSSIA, S_SVERSKOVO, EXHAUSTED_INFANTRY, 2)
 	set_troop(RUSSIA, S_ROSLAVL, FRESH_COSSACK, 1)
-	set_leader(S_DUKHOVSHCHINA, PLATOV)
+	set_leader(PLATOV, S_DUKHOVSHCHINA)
 	set_troop(RUSSIA, S_DUKHOVSHCHINA, FRESH_COSSACK, 2)
 
 	set_troop(RUSSIA, S_MOSCOW, FRESH_INFANTRY, 3)
@@ -1289,7 +1297,7 @@ function setup_aug() {
 	add_depot(RUSSIA, S_OREL)
 	set_troop(RUSSIA, S_VORONEZH, FRESH_COSSACK, 2)
 
-	set_leader(S_KOBRYN, TORMASOV)
+	set_leader(TORMASOV, S_KOBRYN)
 	set_troop(RUSSIA, S_KOBRYN, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_KOBRYN, FRESH_CAVALRY, 2)
 	set_troop(RUSSIA, S_KOBRYN, EXHAUSTED_INFANTRY, 1)
@@ -1303,24 +1311,24 @@ function setup_aug() {
 	add_depot(RUSSIA, S_KIEV)
 
 	/* FRANCE */
-	set_troop(PRUSSIA, S_ECKAU, FRESH_INFANTRY, 1)
-	set_troop(PRUSSIA, S_JAKOBSTADT, FRESH_INFANTRY, 1)
-	set_troop(PRUSSIA, S_JAKOBSTADT, EXHAUSTED_INFANTRY, 1)
+	set_troop(FRANCE, S_ECKAU, FRESH_PRUSSIAN_INFANTRY, 1)
+	set_troop(FRANCE, S_JAKOBSTADT, FRESH_PRUSSIAN_INFANTRY, 1)
+	set_troop(FRANCE, S_JAKOBSTADT, EXHAUSTED_PRUSSIAN_INFANTRY, 1)
 	set_troop(FRANCE, S_DUNABURG, FRESH_INFANTRY, 1)
 	set_troop(FRANCE, S_DRISSA, FRESH_INFANTRY, 1)
 	set_troop(FRANCE, S_POLOTSK, FRESH_INFANTRY, 1)
 	set_troop(FRANCE, S_POLOTSK, EXHAUSTED_INFANTRY, 1)
 	add_depot(FRANCE, S_POLOTSK)
-	set_leader(S_VITEBSK, NAPOLEON)
+	set_leader(NAPOLEON, S_VITEBSK)
 	set_troop(FRANCE, S_VITEBSK, FRESH_GUARD, 3)
 	set_troop(FRANCE, S_VITEBSK, FRESH_INFANTRY, 3)
 	set_troop(FRANCE, S_VITEBSK, FRESH_CAVALRY, 1)
 	set_troop(FRANCE, S_VITEBSK, EXHAUSTED_INFANTRY, 2)
 	set_troop(FRANCE, S_VITEBSK, EXHAUSTED_GUARD, 1)
-	set_leader(S_PORECZIE, DE_BEAUHARNAIS)
+	set_leader(DE_BEAUHARNAIS, S_PORECZIE)
 	set_troop(FRANCE, S_PORECZIE, FRESH_INFANTRY, 3)
-	set_leader(S_BABINOVICHI, MURAT)
-	set_leader(S_BABINOVICHI, DAVOUT)
+	set_leader(MURAT, S_BABINOVICHI)
+	set_leader(DAVOUT, S_BABINOVICHI)
 	set_troop(FRANCE, S_BABINOVICHI, FRESH_INFANTRY, 7)
 	set_troop(FRANCE, S_BABINOVICHI, FRESH_CAVALRY, 2)
 	set_troop(FRANCE, S_BABINOVICHI, EXHAUSTED_INFANTRY, 3)
@@ -1336,11 +1344,11 @@ function setup_aug() {
 	set_troop(FRANCE, S_KOVNO, FRESH_INFANTRY, 2)
 	add_depot(FRANCE, S_KOVNO)
 	set_troop(FRANCE, S_MOLODECHNO, FRESH_INFANTRY, 1)
-	set_leader(S_PRUZHANY, SCHWARZENBERG)
-	set_troop(AUSTRIA, S_PRUZHANY, FRESH_INFANTRY, 2)
+	set_leader(SCHWARZENBERG, S_PRUZHANY)
+	set_troop(FRANCE, S_PRUZHANY, FRESH_AUSTRIAN_INFANTRY, 2)
 	set_troop(FRANCE, S_PRUZHANY, FRESH_INFANTRY, 2)
-	set_troop(AUSTRIA, S_PRUZHANY, EXHAUSTED_INFANTRY, 1)
-	set_troop(AUSTRIA, S_ZAMOSC, FRESH_INFANTRY, 1)
+	set_troop(FRANCE, S_PRUZHANY, EXHAUSTED_AUSTRIAN_INFANTRY, 1)
+	set_troop(FRANCE, S_ZAMOSC, FRESH_AUSTRIAN_INFANTRY, 1)
 	set_troop(FRANCE, FRENCH_CASUALTIES, FRESH_INFANTRY, 7)
 	set_troop(FRANCE, FRENCH_CASUALTIES, FRESH_CAVALRY, 1)
 
@@ -1392,13 +1400,13 @@ function setup_oct() {
 	/* RUSSIA */
 	set_troop(RUSSIA, S_RIGA, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_DRISSA, FRESH_INFANTRY, 1)
-	set_leader(S_SEVEZH, WITTGENSTEIN)
+	set_leader(WITTGENSTEIN, S_SEVEZH)
 	set_troop(RUSSIA, S_SEVEZH, FRESH_INFANTRY, 3)
 	set_troop(RUSSIA, S_SEVEZH, EXHAUSTED_INFANTRY, 1)
 	set_troop(RUSSIA, S_OSTROV, FRESH_INFANTRY, 1)
 
 	set_troop(RUSSIA, S_BRYANSK, FRESH_COSSACK, 1)
-	set_leader(S_KOSELYSK, PLATOV)
+	set_leader(PLATOV, S_KOSELYSK)
 	set_troop(RUSSIA, S_KOSELYSK, FRESH_COSSACK, 2)
 	set_troop(RUSSIA, S_OREL, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_OREL)
@@ -1406,8 +1414,8 @@ function setup_oct() {
 	set_troop(RUSSIA, S_MALOYAROSLAVET, FRESH_CAVALRY, 2)
 	set_troop(RUSSIA, S_MALOYAROSLAVET, FRESH_COSSACK, 1)
 	set_troop(RUSSIA, S_MALOYAROSLAVET, EXHAUSTED_INFANTRY, 1)
-	set_leader(S_KALUGA, KUTUZOV)
-	set_leader(S_KALUGA, TORMASOV)
+	set_leader(KUTUZOV, S_KALUGA)
+	set_leader(TORMASOV, S_KALUGA)
 	set_troop(RUSSIA, S_KALUGA, FRESH_INFANTRY, 7)
 	set_troop(RUSSIA, S_KALUGA, FRESH_CAVALRY, 1)
 	set_troop(RUSSIA, S_KALUGA, FRESH_COSSACK, 1)
@@ -1432,25 +1440,25 @@ function setup_oct() {
 	set_troop(RUSSIA, S_KIEV, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_KIEV)
 
-	set_leader(OUT_OF_PLAY, ALEXANDER)
-	set_leader(OUT_OF_PLAY, DE_TOLLY)
-	set_leader(OUT_OF_PLAY, BAGRATION)
+	set_leader(ALEXANDER, POOL)
+	set_leader(DE_TOLLY, POOL)
+	set_leader(BAGRATION, POOL)
 
 	/* FRANCE */
 	set_troop(FRANCE, S_PRUSSIA_SOUTH, FRESH_INFANTRY, 1)
-	set_troop(PRUSSIA, S_MITAU, FRESH_INFANTRY, 1)
+	set_troop(FRANCE, S_MITAU, FRESH_PRUSSIAN_INFANTRY, 1)
 	set_troop(FRANCE, S_KOVNO, FRESH_INFANTRY, 1)
 	add_depot(FRANCE, S_KOVNO)
-	set_leader(S_BIALYSTOK, SCHWARZENBERG)
-	set_troop(AUSTRIA, S_BIALYSTOK, FRESH_INFANTRY, 1)
+	set_leader(SCHWARZENBERG, S_BIALYSTOK)
+	set_troop(FRANCE, S_BIALYSTOK, FRESH_AUSTRIAN_INFANTRY, 1)
 	set_troop(FRANCE, S_BIALYSTOK, FRESH_INFANTRY, 1)
-	set_troop(AUSTRIA, S_BIALYSTOK, EXHAUSTED_INFANTRY, 1)
-	set_troop(AUSTRIA, S_ZAMOSC, FRESH_INFANTRY, 1)
+	set_troop(FRANCE, S_BIALYSTOK, EXHAUSTED_AUSTRIAN_INFANTRY, 1)
+	set_troop(FRANCE, S_ZAMOSC, FRESH_AUSTRIAN_INFANTRY, 1)
 	set_troop(FRANCE, S_VILNA, FRESH_INFANTRY, 5)
 	add_depot(FRANCE, S_VILNA)
 	set_troop(FRANCE, S_SVENCIONYS, FRESH_INFANTRY, 1)
-	set_troop(PRUSSIA, S_DUNABURG, FRESH_INFANTRY, 1)
-	set_troop(PRUSSIA, S_DUNABURG, EXHAUSTED_INFANTRY, 1)
+	set_troop(FRANCE, S_DUNABURG, FRESH_PRUSSIAN_INFANTRY, 1)
+	set_troop(FRANCE, S_DUNABURG, EXHAUSTED_PRUSSIAN_INFANTRY, 1)
 	set_troop(FRANCE, S_DOKSHITSY, FRESH_INFANTRY, 1)
 	set_troop(FRANCE, S_MINSK, FRESH_INFANTRY, 1)
 	set_troop(FRANCE, S_POLOTSK, FRESH_INFANTRY, 2)
@@ -1466,14 +1474,14 @@ function setup_oct() {
 	add_depot(FRANCE, S_DOROGOBUZH)
 	set_troop(FRANCE, S_VYAZMA, FRESH_INFANTRY, 1)
 	set_troop(FRANCE, S_MOZHAYSK, FRESH_INFANTRY, 1)
-	set_leader(S_TARUTINO, MURAT)
+	set_leader(MURAT, S_TARUTINO)
 	set_troop(FRANCE, S_TARUTINO, FRESH_INFANTRY, 2)
 	set_troop(FRANCE, S_TARUTINO, FRESH_CAVALRY, 1)
 	set_troop(FRANCE, S_TARUTINO, EXHAUSTED_INFANTRY, 1)
 	set_troop(FRANCE, S_TARUTINO, EXHAUSTED_CAVALRY, 1)
-	set_leader(S_MOSCOW, NAPOLEON)
-	set_leader(S_MOSCOW, DAVOUT)
-	set_leader(S_MOSCOW, DE_BEAUHARNAIS)
+	set_leader(NAPOLEON, S_MOSCOW)
+	set_leader(DAVOUT, S_MOSCOW)
+	set_leader(DE_BEAUHARNAIS, S_MOSCOW)
 	set_troop(FRANCE, S_MOSCOW, FRESH_GUARD, 3)
 	set_troop(FRANCE, S_MOSCOW, FRESH_INFANTRY, 4)
 	set_troop(FRANCE, S_MOSCOW, EXHAUSTED_GUARD, 1)
@@ -1535,7 +1543,6 @@ function setup_oct() {
 	set_devastation(S_TARUTINO, 3)
 	set_devastation(S_MOSCOW, 3)
 }
-
 P.setup_hand = { //TODO: clarification on whether discards are public, shuffle deck later
 	_begin() {
 		//L.scenario
@@ -1614,7 +1621,6 @@ P.setup_hand = { //TODO: clarification on whether discards are public, shuffle d
 				get_deck(RUSSIA).push(HOLY_MOTHER_RUSSIA_RU)
 				log(`C${HOLY_MOTHER_RUSSIA_RU} placed on top of the Russian deck.`)
 			}
-			test_card(NEW_POSTING)
 			call("begin_turn")
 		}
 	}
@@ -2017,7 +2023,7 @@ P.play_card_for_orders = {
 		if (is_card_dummy(L.played_card[R])) {
 			return_dummy_to_hand(R)
 		} else {
-			discard_card(R, L.played_card[R])
+			discard_card(L.played_card[R])
 		}
 
 		if (G.active.length === 0) {
@@ -2399,7 +2405,6 @@ P.select_orders = {
 			L.count[R] = L.num_orders[R]
 	}
 }
-
 //=== 4. PLACE ORDERS ===
 //TODO: Allow alternating placing orders (implementing simultaneous optional rule as default for expediency)
 P.place_orders = script(`
@@ -2479,7 +2484,7 @@ P.do_place_orders = {
 			}
 
 			for (let area = FIRST_AREA; area <= LAST_AREA; ++area)
-				if (has_friendly_troop_in_space(R, area)) 
+				if (has_friendly_troop(R, area)) 
 					action_area(area)
 		}
 
@@ -2553,6 +2558,7 @@ P.determine_who_goes_first = {
 				if (get_hand(RUSSIA).includes(EVASIVE_MANEUVERS)) {
 					prompt(`You may play C${EVASIVE_MANEUVERS}.`)
 					action_card(EVASIVE_MANEUVERS)
+					button_pass()
 				} else {
 					prompt(`You do not have C${EVASIVE_MANEUVERS} in hand.`)
 					button_pass()
@@ -2575,6 +2581,7 @@ P.determine_who_goes_first = {
 				if (get_hand(FRANCE).includes(ENERGETIC_LEADERSHIP)) {
 					prompt(`You may play C${ENERGETIC_LEADERSHIP}.`)
 					action_card(ENERGETIC_LEADERSHIP)
+					button_pass()
 				} else {
 					prompt(`You do not have C${ENERGETIC_LEADERSHIP}.`)
 					button_pass()
@@ -3032,7 +3039,7 @@ function is_in_supply(who, space) {
 }
 
 function has_enemy_sp(who, space) {
-	return (who === RUSSIA && has_friendly_troop_in_space(FRANCE, space)) || (who === FRANCE && has_friendly_troop_in_space(RUSSIA, space))
+	return (who === RUSSIA && has_friendly_troop(FRANCE, space)) || (who === FRANCE && has_friendly_troop(RUSSIA, space))
 }
 
 /* SUPPLY */
@@ -3307,7 +3314,7 @@ P.event_3 = {
 }
 
 function has_russian_sp(area) {
-	return has_friendly_troop_in_space(RUSSIA, area)
+	return has_friendly_troop(RUSSIA, area)
 }
 
 function has_russian_sp_adjacent(area) {
@@ -3835,7 +3842,7 @@ E.event_46 = {
 }
 
 function has_french_sp(area) {
-	return has_friendly_troop_in_space(FRANCE, area)
+	return has_friendly_troop(FRANCE, area)
 }
 
 function get_order_location(order) {

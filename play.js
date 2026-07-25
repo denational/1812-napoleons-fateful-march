@@ -153,24 +153,27 @@ const EXHAUSTED_COSSACK = 5
 const FRESH_GUARD = 6
 const EXHAUSTED_GUARD = 7
 
-const TROOP_ENTRY_PLAYER_SHIFT = 11
-const TROOP_ENTRY_NATION_SHIFT = 9
+const FRESH_PRUSSIAN_INFANTRY = 8
+const EXHAUSTED_PRUSSIAN_INFANTRY = 9
+const FRESH_AUSTRIAN_INFANTRY = 10
+const EXHAUSTED_AUSTRIAN_INFANTRY = 11
+
+const TROOP_ENTRY_WHO_SHIFT = 10
 const TROOP_ENTRY_TYPE_SHIFT = 6
 const TROOP_ENTRY_NUM_SHIFT = 0
 
-const TROOP_ENTRY_PLAYER_MASK = 2048
-const TROOP_ENTRY_NATION_MASK = 1536
-const TROOP_ENTRY_TYPE_MASK = 448
+const TROOP_ENTRY_WHO_MASK = 1024
+const TROOP_ENTRY_TYPE_MASK = 960
 const TROOP_ENTRY_NUM_MASK = 63
 
 const first_ru_inf = 0
 const last_ru_inf = 79
 const first_fr_inf = 80
 const last_fr_inf = 134
-const first_pr_inf = 135
-const last_pr_inf = 139
-const first_au_inf = 140
-const last_au_inf = 150
+const first_fr_pr_inf = 135
+const last_fr_pr_inf = 139
+const first_fr_au_inf = 140
+const last_fr_au_inf = 150
 
 const first_ru_cav = 151
 const last_ru_cav = 166
@@ -184,13 +187,13 @@ const first_fr_guard = 231
 const last_fr_guard = 240
 
 var used_troops = [
-	[first_ru_inf, first_fr_inf, first_pr_inf, first_au_inf],
+	[first_ru_inf, first_fr_inf, first_fr_pr_inf, first_fr_au_inf],
 	[first_ru_cav, first_fr_cav],
 	[first_ru_cossack, first_fr_guard],
 ]
 
 const last_troops = [
-	[last_ru_inf, last_fr_inf, last_pr_inf, last_au_inf],
+	[last_ru_inf, last_fr_inf, last_fr_pr_inf, last_fr_au_inf],
 	[last_ru_cav, last_fr_cav],
 	[last_ru_cossack, last_fr_guard],
 ]
@@ -203,6 +206,10 @@ function get_troop_name(type) {
 	switch(type) {
 	case FRESH_INFANTRY:
 	case EXHAUSTED_INFANTRY:
+	case FRESH_PRUSSIAN_INFANTRY:
+	case EXHAUSTED_PRUSSIAN_INFANTRY:
+	case FRESH_AUSTRIAN_INFANTRY:
+	case EXHAUSTED_AUSTRIAN_INFANTRY:
 		return "infantry"
 	case FRESH_CAVALRY:
 	case EXHAUSTED_CAVALRY:
@@ -224,6 +231,8 @@ function get_troop_bucket(type) {
 	case EXHAUSTED_INFANTRY:
 	case FRESH_CAVALRY:
 	case EXHAUSTED_CAVALRY:
+	case FRESH_PRUSSIAN_INFANTRY:
+	case FRESH_AUSTRIAN_INFANTRY:
 		return get_troop_name(type)
 	default:
 		return "special"
@@ -236,6 +245,8 @@ function is_fresh(type) {
 	case FRESH_CAVALRY:
 	case FRESH_COSSACK:
 	case FRESH_GUARD:
+	case FRESH_PRUSSIAN_INFANTRY:
+	case FRESH_AUSTRIAN_INFANTRY:
 		return true
 	}
 	return false
@@ -259,6 +270,12 @@ function get_used(who, type) {
 	case FRESH_GUARD:
 	case EXHAUSTED_GUARD:
 		return used_troops[SPECIAL][FRANCE]
+	case FRESH_PRUSSIAN_INFANTRY:
+	case EXHAUSTED_PRUSSIAN_INFANTRY:
+		return used_troops[INFANTRY][PRUSSIA]
+	case FRESH_AUSTRIAN_INFANTRY:
+	case EXHAUSTED_AUSTRIAN_INFANTRY:
+		return used_troops[INFANTRY][AUSTRIA]
 	}
 }
 
@@ -266,33 +283,35 @@ function incr_used(who, type) {
 	switch(type) {
 	case FRESH_INFANTRY:
 	case EXHAUSTED_INFANTRY:
-		return used_troops[INFANTRY][who]++; break
+		return used_troops[INFANTRY][who]++
 	case FRESH_CAVALRY:
 	case EXHAUSTED_CAVALRY:
-		return used_troops[CAVALRY][who]++; break
+		return used_troops[CAVALRY][who]++
 	case FRESH_COSSACK:
 	case EXHAUSTED_COSSACK:
-		return used_troops[SPECIAL][RUSSIA]++; break
+		return used_troops[SPECIAL][RUSSIA]++
 	case FRESH_GUARD:
 	case EXHAUSTED_GUARD:
-		return used_troops[SPECIAL][FRANCE]++; break
+		return used_troops[SPECIAL][FRANCE]++
+	case FRESH_PRUSSIAN_INFANTRY:
+	case EXHAUSTED_PRUSSIAN_INFANTRY:
+		return used_troops[INFANTRY][PRUSSIA]++
+	case FRESH_AUSTRIAN_INFANTRY:
+	case EXHAUSTED_AUSTRIAN_INFANTRY:
+		return used_troops[INFANTRY][AUSTRIA]++
 	}
 }
 
 function reset_used() {
 	used_troops = [
-		[first_ru_inf, first_fr_inf, first_pr_inf, first_au_inf],
+		[first_ru_inf, first_fr_inf, first_fr_pr_inf, first_fr_au_inf],
 		[first_ru_cav, first_fr_cav],
 		[first_ru_cossack, first_fr_guard],
 	]
 }
 
-function decode_troop_entry_player(entry) {
-	return (entry & TROOP_ENTRY_PLAYER_MASK) >> TROOP_ENTRY_PLAYER_SHIFT
-}
-
-function decode_troop_entry_nation(entry) {
-	return (entry & TROOP_ENTRY_NATION_MASK) >> TROOP_ENTRY_NATION_SHIFT
+function decode_troop_entry_who(entry) {
+	return (entry & TROOP_ENTRY_WHO_MASK) >> TROOP_ENTRY_WHO_SHIFT
 }
 
 function decode_troop_entry_type(entry) {
@@ -391,9 +410,9 @@ function on_init() {
 	}
 
 	define_troop_list("infantry", first_ru_inf, first_fr_inf - 1, "ru")
-	define_troop_list("infantry", first_fr_inf, first_pr_inf - 1, "fr")
-	define_troop_list("infantry", first_pr_inf, first_au_inf - 1, "pr")
-	define_troop_list("infantry", first_au_inf, 160, "au")
+	define_troop_list("infantry", first_fr_inf, first_fr_pr_inf - 1, "fr")
+	define_troop_list("infantry", first_fr_pr_inf, first_fr_au_inf - 1, "pr")
+	define_troop_list("infantry", first_fr_au_inf, 160, "au")
 
 	define_troop_list("cavalry", first_ru_cav, last_ru_cav, "ru")
 	define_troop_list("cavalry", first_fr_cav, last_fr_cav, "fr")
@@ -451,15 +470,6 @@ function on_update() {
 		populate("played", 0, "card", c)
 	}
 
-	action_button("done", "Done")
-	action_button("next", "Next")
-	action_button("draw", "Draw")
-	action_button("discard", "Discard")
-	action_button("confirm", "Confirm")
-
-	action_button("russia", "Russia")
-	action_button("france", "France")
-
 	for (let leader = 0; leader <= 13; ++leader) {
 		action_button_with_argument(`leader_button`, leader, get_leader_short_name(leader))
 	}
@@ -473,6 +483,15 @@ function on_update() {
 	action_button_with_argument("troop", FRESH_GUARD, "Guard")
 	action_button_with_argument("troop", EXHAUSTED_GUARD, "Exh. Guard")
 
+	action_button_with_argument("add_troop", FRESH_INFANTRY, "+ Infantry")
+	action_button_with_argument("add_troop", EXHAUSTED_INFANTRY, "+ Exh. Infantry")
+	action_button_with_argument("add_troop", FRESH_CAVALRY, "+ Cavalry")
+	action_button_with_argument("add_troop", EXHAUSTED_CAVALRY, "+ Exh. Cavalry")
+	action_button_with_argument("add_troop", FRESH_COSSACK, "+ Cossack")
+	action_button_with_argument("add_troop", EXHAUSTED_COSSACK, "+ Exh. Cossack")
+	action_button_with_argument("add_troop", FRESH_GUARD, "+ Guard")
+	action_button_with_argument("add_troop", EXHAUSTED_GUARD, "+ Exh. Guard")
+
 	action_button_with_argument("remove_troop", FRESH_INFANTRY, "- Infantry")
 	action_button_with_argument("remove_troop", EXHAUSTED_INFANTRY, "- Exh. Infantry")
 	action_button_with_argument("remove_troop", FRESH_CAVALRY, "- Cavalry")
@@ -482,6 +501,14 @@ function on_update() {
 	action_button_with_argument("remove_troop", FRESH_GUARD, "- Guard")
 	action_button_with_argument("remove_troop", EXHAUSTED_GUARD, "- Exh. Guard")
 
+	action_button("done", "Done")
+	action_button("next", "Next")
+	action_button("draw", "Draw")
+	action_button("discard", "Discard")
+	action_button("confirm", "Confirm")
+
+	action_button("russia", "Russia")
+	action_button("france", "France")
 	action_button("pass", "Pass")
 
 	action_button("undo", "Undo")
@@ -540,29 +567,28 @@ function update_troops() {
 
 		for (let entry of entries) {
 			//Unraveling bitmasks
-			let player = decode_troop_entry_player(entry)
-			let nation = decode_troop_entry_nation(entry)
+			let who = decode_troop_entry_who(entry)
 			let type = decode_troop_entry_type(entry)
 			let num = decode_troop_entry_num(entry)
 
 			//Updating the marker to its 'fresh' or 'exhausted' side
 			if (is_fresh(type)) {
-				update_keyword(get_troop_name(type), get_used(nation, type), "fresh")
+				update_keyword(get_troop_name(type), get_used(who, type), "fresh")
 			} else {
-				update_keyword(get_troop_name(type), get_used(nation, type), "exhausted")
+				update_keyword(get_troop_name(type), get_used(who, type), "exhausted")
 			}
 
 			//Populating the marker (without the number of troops)
-			if (has_friendly_leader(nation, area)) { //If there's a friendly leader in the area, put the troops on his mat
-				populate(`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader(nation, area), get_troop_name(type), get_used(nation, type))
+			if (has_friendly_leader(who, area)) { //If there's a friendly leader in the area, put the troops on his mat
+				populate(`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader(who, area), get_troop_name(type), get_used(who, type))
 			} else if (area === FRENCH_CASUALTIES) {
-				populate("fr_casualties", 0, get_troop_name(type), get_used(nation, type))
+				populate("fr_casualties", 0, get_troop_name(type), get_used(who, type))
 			} else { //Or else stack them on the map
-				populate("area_stack", area, get_troop_name(type), get_used(nation, type))
+				populate("area_stack", area, get_troop_name(type), get_used(who, type))
 			}
 
-			update_text("troop-text", get_used(nation, type), num)
-			incr_used(nation, type)
+			update_text("troop-text", get_used(who, type), num)
+			incr_used(who, type)
 		}
 	}
 }
