@@ -47,6 +47,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
 .area.highlight {
 	border-color: lime;
 	box-shadow: 0 0 0 1px black, inset 0 0 0 1px black;
+	z-index: 10;
 }
 
 /* LOGGING */
@@ -98,6 +99,10 @@ body.Russia header.your_turn {background-color: var(--russia);}
 
 	& .i {
 		text-indent: 12px;
+	}
+
+	& .ii {
+		text-indent: 24px;
 	}
 
 	& .tip {

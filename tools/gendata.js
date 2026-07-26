@@ -31,6 +31,7 @@ fs.createReadStream(names)
 			supply = false,
 			depot = false,
 			vp = 0,
+			zone,
 		} = row
 		data.areas.push({
 			id: Number(id),
@@ -44,6 +45,7 @@ fs.createReadStream(names)
 			track: [],
 			road: [],
 			bridge: [],
+			zone,
 		}) 
 	})
 	.on('end', () => {
@@ -261,18 +263,21 @@ fs.createReadStream(names)
 						for (let who = RUSSIA; who <= FRANCE; ++who) {
 							scenario_data.deck.push(non_dummy_cards[who].filter(c => (get_card_season(c) !== WINTER)))
 							scenario_data.removed.push(non_dummy_cards[who].filter(c => (get_card_season(c) === WINTER)))
+							scenario_data.set_aside = [[], []]
 						}
 						break
 					case THE_GRAND_CAMPAIGN:
 						for (let who = RUSSIA; who <= FRANCE; ++who) {
 							scenario_data.deck.push(non_dummy_cards[who].filter(c => (get_card_season(c) !== WINTER)))
 							scenario_data.set_aside.push(non_dummy_cards[who].filter(c => (get_card_season(c) === WINTER)))
+							scenario_data.removed = [[], []]
 						}
 						break
 					case HOLLOW_VICTORIES:
 						for (let who = RUSSIA; who <= FRANCE; ++who) {
 							scenario_data.deck.push(non_dummy_cards[who].filter(c => (get_card_season(c) !== WINTER) && !scenario_data.removed_cards[who].includes(c)))
 							scenario_data.removed.push(non_dummy_cards[who].filter(c => (get_card_season(c) === WINTER) || scenario_data.removed_cards[who].includes(c)))
+							scenario_data.set_aside = [[], []]
 						}
 						break
 					case BATTLE_OF_SMOLENSK_CAMPAIGN_START:
@@ -286,6 +291,7 @@ fs.createReadStream(names)
 						for (let who = RUSSIA; who <= FRANCE; ++who) {
 							scenario_data.deck.push(non_dummy_cards[who].filter(c => (get_card_season(c) !== SUMMER) && !scenario_data.removed_cards[who].includes(c)))
 							scenario_data.removed.push(non_dummy_cards[who].filter(c => (get_card_season(c) === SUMMER) || scenario_data.removed_cards[who].includes(c)))
+							scenario_data.set_aside = [[], []]
 						}
 						break
 					default: throw new Error(`Scenario ${name} not found!`)

@@ -21,7 +21,7 @@ const areas = data.areas
 const area_length = areas.length
 
 const POOL = 0
-const FRENCH_CASUALTIES = 156
+const FRENCH_CASUALTIES = 157
 const OUT_OF_PLAY = -1
 
 function get_area_name(area) {
@@ -483,23 +483,32 @@ function on_update() {
 	action_button_with_argument("troop", FRESH_GUARD, "Guard")
 	action_button_with_argument("troop", EXHAUSTED_GUARD, "Exh. Guard")
 
-	action_button_with_argument("add_troop", FRESH_INFANTRY, "+ Infantry")
-	action_button_with_argument("add_troop", EXHAUSTED_INFANTRY, "+ Exh. Infantry")
-	action_button_with_argument("add_troop", FRESH_CAVALRY, "+ Cavalry")
-	action_button_with_argument("add_troop", EXHAUSTED_CAVALRY, "+ Exh. Cavalry")
-	action_button_with_argument("add_troop", FRESH_COSSACK, "+ Cossack")
-	action_button_with_argument("add_troop", EXHAUSTED_COSSACK, "+ Exh. Cossack")
+	action_button_with_argument("add_troop", FRESH_INFANTRY, "+ Inf.")
+	action_button_with_argument("remove_troop", FRESH_INFANTRY, "- Inf.")
+	action_button_with_argument("add_troop", EXHAUSTED_INFANTRY, "+ Exh. Inf.")
+	action_button_with_argument("remove_troop", EXHAUSTED_INFANTRY, "- Exh. Inf.")
+	action_button_with_argument("add_troop", FRESH_CAVALRY, "+ Cav.")
+	action_button_with_argument("remove_troop", FRESH_CAVALRY, "- Cav.")
+	action_button_with_argument("add_troop", EXHAUSTED_CAVALRY, "+ Exh. Cav.")
+	action_button_with_argument("remove_troop", EXHAUSTED_CAVALRY, "- Exh. Cav.")
+	action_button_with_argument("add_troop", FRESH_COSSACK, "+ Coss.")
+	action_button_with_argument("remove_troop", FRESH_COSSACK, "- Coss.")
+	action_button_with_argument("add_troop", EXHAUSTED_COSSACK, "+ Exh. Coss.")
+	action_button_with_argument("remove_troop", EXHAUSTED_COSSACK, "- Exh. Coss.")
 	action_button_with_argument("add_troop", FRESH_GUARD, "+ Guard")
-	action_button_with_argument("add_troop", EXHAUSTED_GUARD, "+ Exh. Guard")
-
-	action_button_with_argument("remove_troop", FRESH_INFANTRY, "- Infantry")
-	action_button_with_argument("remove_troop", EXHAUSTED_INFANTRY, "- Exh. Infantry")
-	action_button_with_argument("remove_troop", FRESH_CAVALRY, "- Cavalry")
-	action_button_with_argument("remove_troop", EXHAUSTED_CAVALRY, "- Exh. Cavalry")
-	action_button_with_argument("remove_troop", FRESH_COSSACK, "- Cossack")
-	action_button_with_argument("remove_troop", EXHAUSTED_COSSACK, "- Exh. Cossack")
 	action_button_with_argument("remove_troop", FRESH_GUARD, "- Guard")
+	action_button_with_argument("add_troop", EXHAUSTED_GUARD, "+ Exh. Guard")
 	action_button_with_argument("remove_troop", EXHAUSTED_GUARD, "- Exh. Guard")
+	action_button_with_argument("add_troop", FRESH_PRUSSIAN_INFANTRY, "+ Pr. Inf.")
+	action_button_with_argument("remove_troop", FRESH_PRUSSIAN_INFANTRY, "- Pr. Inf.")
+	action_button_with_argument("add_troop", EXHAUSTED_PRUSSIAN_INFANTRY, "+ Exh. Pr. Inf.")
+	action_button_with_argument("remove_troop", EXHAUSTED_PRUSSIAN_INFANTRY, "- Exh. Pr. Inf.")
+	action_button_with_argument("add_troop", FRESH_AUSTRIAN_INFANTRY, "+ Au. Inf.")
+	action_button_with_argument("remove_troop", FRESH_AUSTRIAN_INFANTRY, "- Au. Inf.")
+	action_button_with_argument("add_troop", EXHAUSTED_AUSTRIAN_INFANTRY, "+ Exh. Au. Inf.")
+	action_button_with_argument("remove_troop", EXHAUSTED_AUSTRIAN_INFANTRY, "- Exh. Au. Inf.")
+
+	action_button("select_all", "Select All")
 
 	action_button("done", "Done")
 	action_button("next", "Next")
@@ -642,7 +651,7 @@ function escape_text(text) {
 	escape_html(text)
 	escape_typography(text)
 	text = escape_tip_class_sub(text, /C(\d+)/g, "tip", "card card_$1", data.cards.map(card => card.name))
-	text = escape_tip_light(text, /S(\d+)/g, "area-tip", "area", data.areas.map(s => s.name))
+	text = escape_tip_light(text, /S(\d+)/g, "area-tip", "area", data.areas.map(s => `${s.name} (${s.zone})`))
 	text = escape_tip_light(text, /L(\d+)/g, "tip", "leader", data.leaders.map(leader => leader.short_name))
 	return text
 }
@@ -677,6 +686,11 @@ function on_log(text, ix) {
 	case ">":
 		text = text.substring(1)
 		p.className = 'i'
+		break
+	case "<":
+		text = text.substring(1)
+		p.className = 'ii'
+		break
 	}
     
 	p.innerHTML = escape_text(text)

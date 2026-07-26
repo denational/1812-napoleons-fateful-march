@@ -18,7 +18,8 @@ const data = {
 			],
 			"bridge": [
 				2
-			]
+			],
+			"zone": "A2"
 		},
 		{
 			"id": 2,
@@ -41,7 +42,8 @@ const data = {
 				1,
 				3,
 				4
-			]
+			],
+			"zone": "A2"
 		},
 		{
 			"id": 3,
@@ -59,7 +61,8 @@ const data = {
 			],
 			"bridge": [
 				2
-			]
+			],
+			"zone": "A2"
 		},
 		{
 			"id": 4,
@@ -77,7 +80,8 @@ const data = {
 			"road": [],
 			"bridge": [
 				2
-			]
+			],
+			"zone": "A2"
 		},
 		{
 			"id": 5,
@@ -93,7 +97,8 @@ const data = {
 				2,
 				6
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "A3"
 		},
 		{
 			"id": 6,
@@ -114,7 +119,8 @@ const data = {
 			],
 			"bridge": [
 				29
-			]
+			],
+			"zone": "A3"
 		},
 		{
 			"id": 7,
@@ -135,7 +141,8 @@ const data = {
 			],
 			"bridge": [
 				9
-			]
+			],
+			"zone": "A3"
 		},
 		{
 			"id": 8,
@@ -151,7 +158,8 @@ const data = {
 				7
 			],
 			"road": [],
-			"bridge": []
+			"bridge": [],
+			"zone": "A3"
 		},
 		{
 			"id": 9,
@@ -171,7 +179,8 @@ const data = {
 			"bridge": [
 				7,
 				12
-			]
+			],
+			"zone": "A3"
 		},
 		{
 			"id": 10,
@@ -187,7 +196,8 @@ const data = {
 				7,
 				11
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "A4"
 		},
 		{
 			"id": 11,
@@ -203,7 +213,8 @@ const data = {
 				10,
 				12
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "A4"
 		},
 		{
 			"id": 12,
@@ -224,7 +235,8 @@ const data = {
 			],
 			"bridge": [
 				9
-			]
+			],
+			"zone": "A4"
 		},
 		{
 			"id": 13,
@@ -242,7 +254,8 @@ const data = {
 			"road": [],
 			"bridge": [
 				14
-			]
+			],
+			"zone": "A4"
 		},
 		{
 			"id": 14,
@@ -262,7 +275,8 @@ const data = {
 			],
 			"bridge": [
 				13
-			]
+			],
+			"zone": "A5"
 		},
 		{
 			"id": 15,
@@ -280,7 +294,8 @@ const data = {
 			],
 			"bridge": [
 				39
-			]
+			],
+			"zone": "A5"
 		},
 		{
 			"id": 16,
@@ -296,7 +311,8 @@ const data = {
 				14,
 				17
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "A5"
 		},
 		{
 			"id": 17,
@@ -312,7 +328,8 @@ const data = {
 				16,
 				18
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "A5"
 		},
 		{
 			"id": 18,
@@ -330,7 +347,8 @@ const data = {
 			],
 			"bridge": [
 				43
-			]
+			],
+			"zone": "A5"
 		},
 		{
 			"id": 19,
@@ -351,7 +369,8 @@ const data = {
 				20,
 				21,
 				22
-			]
+			],
+			"zone": "B1"
 		},
 		{
 			"id": 20,
@@ -369,7 +388,8 @@ const data = {
 			],
 			"bridge": [
 				19
-			]
+			],
+			"zone": "B1"
 		},
 		{
 			"id": 21,
@@ -387,7 +407,8 @@ const data = {
 			],
 			"bridge": [
 				19
-			]
+			],
+			"zone": "B1"
 		},
 		{
 			"id": 22,
@@ -407,7 +428,8 @@ const data = {
 			],
 			"bridge": [
 				19
-			]
+			],
+			"zone": "B1"
 		},
 		{
 			"id": 23,
@@ -424,7 +446,8 @@ const data = {
 				28
 			],
 			"road": [],
-			"bridge": []
+			"bridge": [],
+			"zone": "B1"
 		},
 		{
 			"id": 24,
@@ -444,7 +467,8 @@ const data = {
 				22,
 				26
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "B2"
 		},
 		{
 			"id": 25,
@@ -462,7 +486,8 @@ const data = {
 				27
 			],
 			"road": [],
-			"bridge": []
+			"bridge": [],
+			"zone": "B2"
 		},
 		{
 			"id": 26,
@@ -478,7 +503,8 @@ const data = {
 				24,
 				29
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "B2"
 		},
 		{
 			"id": 27,
@@ -496,7 +522,8 @@ const data = {
 				55
 			],
 			"road": [],
-			"bridge": []
+			"bridge": [],
+			"zone": "B2"
 		},
 		{
 			"id": 28,
@@ -518,7 +545,8 @@ const data = {
 			"bridge": [
 				49,
 				51
-			]
+			],
+			"zone": "B2"
 		},
 		{
 			"id": 29,
@@ -540,7 +568,8 @@ const data = {
 			],
 			"bridge": [
 				6
-			]
+			],
+			"zone": "B2"
 		},
 		{
 			"id": 30,
@@ -562,7 +591,8 @@ const data = {
 				55,
 				58
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "B3"
 		},
 		{
 			"id": 31,
@@ -581,7 +611,8 @@ const data = {
 			"road": [],
 			"bridge": [
 				33
-			]
+			],
+			"zone": "B3"
 		},
 		{
 			"id": 32,
@@ -601,7 +632,8 @@ const data = {
 			],
 			"bridge": [
 				34
-			]
+			],
+			"zone": "B3"
 		},
 		{
 			"id": 33,
@@ -623,7 +655,8 @@ const data = {
 			"bridge": [
 				31,
 				62
-			]
+			],
+			"zone": "B3"
 		},
 		{
 			"id": 34,
@@ -643,7 +676,8 @@ const data = {
 			"road": [],
 			"bridge": [
 				32
-			]
+			],
+			"zone": "B4"
 		},
 		{
 			"id": 35,
@@ -662,7 +696,8 @@ const data = {
 				62,
 				63
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "B4"
 		},
 		{
 			"id": 36,
@@ -678,7 +713,8 @@ const data = {
 				35,
 				38
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "B4"
 		},
 		{
 			"id": 37,
@@ -696,7 +732,8 @@ const data = {
 				12,
 				39
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "B4"
 		},
 		{
 			"id": 38,
@@ -717,7 +754,8 @@ const data = {
 			],
 			"bridge": [
 				42
-			]
+			],
+			"zone": "B5"
 		},
 		{
 			"id": 39,
@@ -737,7 +775,8 @@ const data = {
 			],
 			"bridge": [
 				15
-			]
+			],
+			"zone": "B5"
 		},
 		{
 			"id": 40,
@@ -757,7 +796,8 @@ const data = {
 			],
 			"bridge": [
 				41
-			]
+			],
+			"zone": "B5"
 		},
 		{
 			"id": 41,
@@ -776,7 +816,8 @@ const data = {
 			],
 			"bridge": [
 				40
-			]
+			],
+			"zone": "B5"
 		},
 		{
 			"id": 42,
@@ -797,7 +838,8 @@ const data = {
 			"bridge": [
 				38,
 				66
-			]
+			],
+			"zone": "B5"
 		},
 		{
 			"id": 43,
@@ -816,7 +858,8 @@ const data = {
 			],
 			"bridge": [
 				18
-			]
+			],
+			"zone": "B6"
 		},
 		{
 			"id": 44,
@@ -835,7 +878,8 @@ const data = {
 				45,
 				43
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "B6"
 		},
 		{
 			"id": 45,
@@ -852,7 +896,8 @@ const data = {
 				68,
 				69
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "B6"
 		},
 		{
 			"id": 46,
@@ -870,7 +915,8 @@ const data = {
 			"road": [
 				20
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "C1"
 		},
 		{
 			"id": 47,
@@ -890,7 +936,8 @@ const data = {
 				72,
 				73
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "C1"
 		},
 		{
 			"id": 48,
@@ -907,7 +954,8 @@ const data = {
 				47
 			],
 			"road": [],
-			"bridge": []
+			"bridge": [],
+			"zone": "C1"
 		},
 		{
 			"id": 49,
@@ -928,7 +976,8 @@ const data = {
 			],
 			"bridge": [
 				28
-			]
+			],
+			"zone": "C1"
 		},
 		{
 			"id": 50,
@@ -945,7 +994,8 @@ const data = {
 				47,
 				75
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "C1"
 		},
 		{
 			"id": 51,
@@ -969,7 +1019,8 @@ const data = {
 				28,
 				53,
 				52
-			]
+			],
+			"zone": "C1"
 		},
 		{
 			"id": 52,
@@ -993,7 +1044,8 @@ const data = {
 				51,
 				75,
 				77
-			]
+			],
+			"zone": "C2"
 		},
 		{
 			"id": 53,
@@ -1014,7 +1066,8 @@ const data = {
 			],
 			"bridge": [
 				51
-			]
+			],
+			"zone": "C2"
 		},
 		{
 			"id": 54,
@@ -1031,7 +1084,8 @@ const data = {
 				53
 			],
 			"road": [],
-			"bridge": []
+			"bridge": [],
+			"zone": "C2"
 		},
 		{
 			"id": 55,
@@ -1050,7 +1104,8 @@ const data = {
 				30,
 				53
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "C2"
 		},
 		{
 			"id": 56,
@@ -1070,7 +1125,8 @@ const data = {
 				78,
 				80
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "C3"
 		},
 		{
 			"id": 57,
@@ -1088,7 +1144,8 @@ const data = {
 			"road": [
 				56
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "C3"
 		},
 		{
 			"id": 58,
@@ -1107,7 +1164,8 @@ const data = {
 				30,
 				56
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "C3"
 		},
 		{
 			"id": 59,
@@ -1123,7 +1181,8 @@ const data = {
 				60
 			],
 			"road": [],
-			"bridge": []
+			"bridge": [],
+			"zone": "C3"
 		},
 		{
 			"id": 60,
@@ -1145,7 +1204,8 @@ const data = {
 			"bridge": [
 				63,
 				83
-			]
+			],
+			"zone": "C3"
 		},
 		{
 			"id": 61,
@@ -1165,7 +1225,8 @@ const data = {
 			"bridge": [
 				80,
 				83
-			]
+			],
+			"zone": "C3"
 		},
 		{
 			"id": 62,
@@ -1186,7 +1247,8 @@ const data = {
 			],
 			"bridge": [
 				33
-			]
+			],
+			"zone": "C4"
 		},
 		{
 			"id": 63,
@@ -1207,7 +1269,8 @@ const data = {
 			],
 			"bridge": [
 				60
-			]
+			],
+			"zone": "C4"
 		},
 		{
 			"id": 64,
@@ -1223,7 +1286,8 @@ const data = {
 				63,
 				85
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "C4"
 		},
 		{
 			"id": 65,
@@ -1239,7 +1303,8 @@ const data = {
 				63,
 				66
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "C4"
 		},
 		{
 			"id": 66,
@@ -1257,7 +1322,8 @@ const data = {
 			],
 			"bridge": [
 				42
-			]
+			],
+			"zone": "C5"
 		},
 		{
 			"id": 67,
@@ -1275,7 +1341,8 @@ const data = {
 				42,
 				68
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "C6"
 		},
 		{
 			"id": 68,
@@ -1292,7 +1359,8 @@ const data = {
 				45,
 				69
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "C6"
 		},
 		{
 			"id": 69,
@@ -1310,7 +1378,8 @@ const data = {
 				70,
 				71
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "C6"
 		},
 		{
 			"id": 70,
@@ -1326,7 +1395,8 @@ const data = {
 				69,
 				91
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "C6"
 		},
 		{
 			"id": 71,
@@ -1341,7 +1411,8 @@ const data = {
 			"road": [
 				69
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "C6"
 		},
 		{
 			"id": 72,
@@ -1357,7 +1428,8 @@ const data = {
 				47,
 				93
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "D1"
 		},
 		{
 			"id": 73,
@@ -1375,7 +1447,8 @@ const data = {
 				47,
 				75
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "D1"
 		},
 		{
 			"id": 74,
@@ -1391,7 +1464,8 @@ const data = {
 				76
 			],
 			"road": [],
-			"bridge": []
+			"bridge": [],
+			"zone": "D1"
 		},
 		{
 			"id": 75,
@@ -1411,7 +1485,8 @@ const data = {
 			],
 			"bridge": [
 				52
-			]
+			],
+			"zone": "D1"
 		},
 		{
 			"id": 76,
@@ -1431,7 +1506,8 @@ const data = {
 			"road": [],
 			"bridge": [
 				100
-			]
+			],
+			"zone": "D1"
 		},
 		{
 			"id": 77,
@@ -1457,7 +1533,8 @@ const data = {
 				78,
 				79,
 				100
-			]
+			],
+			"zone": "D2"
 		},
 		{
 			"id": 78,
@@ -1477,7 +1554,8 @@ const data = {
 			],
 			"bridge": [
 				77
-			]
+			],
+			"zone": "D2"
 		},
 		{
 			"id": 79,
@@ -1497,7 +1575,8 @@ const data = {
 			],
 			"bridge": [
 				77
-			]
+			],
+			"zone": "D2"
 		},
 		{
 			"id": 80,
@@ -1520,7 +1599,8 @@ const data = {
 			],
 			"bridge": [
 				61
-			]
+			],
+			"zone": "D3"
 		},
 		{
 			"id": 81,
@@ -1539,7 +1619,8 @@ const data = {
 			"road": [
 				82
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "D3"
 		},
 		{
 			"id": 82,
@@ -1561,7 +1642,8 @@ const data = {
 			],
 			"bridge": [
 				103
-			]
+			],
+			"zone": "D3"
 		},
 		{
 			"id": 83,
@@ -1583,7 +1665,8 @@ const data = {
 			"bridge": [
 				61,
 				60
-			]
+			],
+			"zone": "D3"
 		},
 		{
 			"id": 84,
@@ -1606,7 +1689,8 @@ const data = {
 			"bridge": [
 				104,
 				105
-			]
+			],
+			"zone": "D4"
 		},
 		{
 			"id": 85,
@@ -1624,7 +1708,8 @@ const data = {
 				84,
 				87
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "D4"
 		},
 		{
 			"id": 86,
@@ -1640,7 +1725,8 @@ const data = {
 				60,
 				85
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "D4"
 		},
 		{
 			"id": 87,
@@ -1663,7 +1749,8 @@ const data = {
 			"bridge": [
 				105,
 				108
-			]
+			],
+			"zone": "E4"
 		},
 		{
 			"id": 88,
@@ -1681,7 +1768,8 @@ const data = {
 			],
 			"bridge": [
 				109
-			]
+			],
+			"zone": "D5"
 		},
 		{
 			"id": 89,
@@ -1697,7 +1785,8 @@ const data = {
 				88,
 				90
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "D5"
 		},
 		{
 			"id": 90,
@@ -1713,7 +1802,8 @@ const data = {
 				89,
 				91
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "D6"
 		},
 		{
 			"id": 91,
@@ -1730,7 +1820,8 @@ const data = {
 				90,
 				92
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "D6"
 		},
 		{
 			"id": 92,
@@ -1750,7 +1841,8 @@ const data = {
 			"bridge": [
 				112,
 				113
-			]
+			],
+			"zone": "D6"
 		},
 		{
 			"id": 93,
@@ -1766,7 +1858,8 @@ const data = {
 				72,
 				94
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "E1"
 		},
 		{
 			"id": 94,
@@ -1784,7 +1877,8 @@ const data = {
 				93,
 				95
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "E1"
 		},
 		{
 			"id": 95,
@@ -1803,7 +1897,8 @@ const data = {
 				94,
 				97
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "E1"
 		},
 		{
 			"id": 96,
@@ -1820,7 +1915,8 @@ const data = {
 				114
 			],
 			"road": [],
-			"bridge": []
+			"bridge": [],
+			"zone": "E1"
 		},
 		{
 			"id": 97,
@@ -1840,7 +1936,8 @@ const data = {
 			"bridge": [
 				100,
 				99
-			]
+			],
+			"zone": "E2"
 		},
 		{
 			"id": 98,
@@ -1855,7 +1952,8 @@ const data = {
 				96
 			],
 			"road": [],
-			"bridge": []
+			"bridge": [],
+			"zone": "E2"
 		},
 		{
 			"id": 99,
@@ -1874,7 +1972,8 @@ const data = {
 			],
 			"bridge": [
 				97
-			]
+			],
+			"zone": "E2"
 		},
 		{
 			"id": 100,
@@ -1900,7 +1999,8 @@ const data = {
 				76,
 				77,
 				97
-			]
+			],
+			"zone": "E2"
 		},
 		{
 			"id": 101,
@@ -1923,7 +2023,8 @@ const data = {
 			"bridge": [
 				103,
 				120
-			]
+			],
+			"zone": "E2"
 		},
 		{
 			"id": 102,
@@ -1944,7 +2045,8 @@ const data = {
 			],
 			"bridge": [
 				103
-			]
+			],
+			"zone": "E3"
 		},
 		{
 			"id": 103,
@@ -1967,7 +2069,8 @@ const data = {
 				82,
 				102,
 				101
-			]
+			],
+			"zone": "E3"
 		},
 		{
 			"id": 104,
@@ -1987,7 +2090,8 @@ const data = {
 			"road": [],
 			"bridge": [
 				84
-			]
+			],
+			"zone": "E3"
 		},
 		{
 			"id": 105,
@@ -2008,7 +2112,8 @@ const data = {
 			"bridge": [
 				84,
 				87
-			]
+			],
+			"zone": "E4"
 		},
 		{
 			"id": 106,
@@ -2024,7 +2129,8 @@ const data = {
 				122
 			],
 			"road": [],
-			"bridge": []
+			"bridge": [],
+			"zone": "E4"
 		},
 		{
 			"id": 107,
@@ -2040,7 +2146,8 @@ const data = {
 				126
 			],
 			"road": [],
-			"bridge": []
+			"bridge": [],
+			"zone": "E4"
 		},
 		{
 			"id": 108,
@@ -2059,7 +2166,8 @@ const data = {
 			"bridge": [
 				87,
 				110
-			]
+			],
+			"zone": "E5"
 		},
 		{
 			"id": 109,
@@ -2078,7 +2186,8 @@ const data = {
 			],
 			"bridge": [
 				88
-			]
+			],
+			"zone": "E5"
 		},
 		{
 			"id": 110,
@@ -2099,7 +2208,8 @@ const data = {
 			"bridge": [
 				108,
 				129
-			]
+			],
+			"zone": "E5"
 		},
 		{
 			"id": 111,
@@ -2117,7 +2227,8 @@ const data = {
 				126,
 				129
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "E5"
 		},
 		{
 			"id": 112,
@@ -2137,7 +2248,8 @@ const data = {
 			],
 			"bridge": [
 				92
-			]
+			],
+			"zone": "E6"
 		},
 		{
 			"id": 113,
@@ -2154,7 +2266,8 @@ const data = {
 			],
 			"bridge": [
 				92
-			]
+			],
+			"zone": "E6"
 		},
 		{
 			"id": 114,
@@ -2171,7 +2284,8 @@ const data = {
 				117
 			],
 			"road": [],
-			"bridge": []
+			"bridge": [],
+			"zone": "F2"
 		},
 		{
 			"id": 115,
@@ -2191,7 +2305,8 @@ const data = {
 				101,
 				119
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "F2"
 		},
 		{
 			"id": 116,
@@ -2210,7 +2325,8 @@ const data = {
 			"road": [],
 			"bridge": [
 				133
-			]
+			],
+			"zone": "F2"
 		},
 		{
 			"id": 117,
@@ -2228,7 +2344,8 @@ const data = {
 				119
 			],
 			"road": [],
-			"bridge": []
+			"bridge": [],
+			"zone": "F2"
 		},
 		{
 			"id": 118,
@@ -2248,7 +2365,8 @@ const data = {
 				136,
 				141
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "F2"
 		},
 		{
 			"id": 119,
@@ -2269,7 +2387,8 @@ const data = {
 				118,
 				121
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "F3"
 		},
 		{
 			"id": 120,
@@ -2290,7 +2409,8 @@ const data = {
 			],
 			"bridge": [
 				101
-			]
+			],
+			"zone": "F3"
 		},
 		{
 			"id": 121,
@@ -2307,7 +2427,8 @@ const data = {
 				122,
 				141
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "F3"
 		},
 		{
 			"id": 122,
@@ -2327,7 +2448,8 @@ const data = {
 				123,
 				124
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "F3"
 		},
 		{
 			"id": 123,
@@ -2344,7 +2466,8 @@ const data = {
 				125,
 				146
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "F4"
 		},
 		{
 			"id": 124,
@@ -2360,7 +2483,8 @@ const data = {
 				122,
 				126
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "F4"
 		},
 		{
 			"id": 125,
@@ -2376,7 +2500,8 @@ const data = {
 				123,
 				127
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "F4"
 		},
 		{
 			"id": 126,
@@ -2395,7 +2520,8 @@ const data = {
 				111,
 				124
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "F4"
 		},
 		{
 			"id": 127,
@@ -2413,7 +2539,8 @@ const data = {
 				125,
 				128
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "F5"
 		},
 		{
 			"id": 128,
@@ -2431,7 +2558,8 @@ const data = {
 				127,
 				129
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "F5"
 		},
 		{
 			"id": 129,
@@ -2451,7 +2579,8 @@ const data = {
 			],
 			"bridge": [
 				110
-			]
+			],
+			"zone": "F6"
 		},
 		{
 			"id": 130,
@@ -2467,7 +2596,8 @@ const data = {
 				128
 			],
 			"road": [],
-			"bridge": []
+			"bridge": [],
+			"zone": "F6"
 		},
 		{
 			"id": 131,
@@ -2482,7 +2612,8 @@ const data = {
 			"road": [
 				132
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "G1"
 		},
 		{
 			"id": 132,
@@ -2504,7 +2635,8 @@ const data = {
 			"bridge": [
 				133,
 				135
-			]
+			],
+			"zone": "G1"
 		},
 		{
 			"id": 133,
@@ -2528,7 +2660,8 @@ const data = {
 				136,
 				132,
 				134
-			]
+			],
+			"zone": "G1"
 		},
 		{
 			"id": 134,
@@ -2547,7 +2680,8 @@ const data = {
 			"road": [],
 			"bridge": [
 				133
-			]
+			],
+			"zone": "G1"
 		},
 		{
 			"id": 135,
@@ -2565,7 +2699,8 @@ const data = {
 			],
 			"bridge": [
 				132
-			]
+			],
+			"zone": "G1"
 		},
 		{
 			"id": 136,
@@ -2588,7 +2723,8 @@ const data = {
 			],
 			"bridge": [
 				133
-			]
+			],
+			"zone": "G2"
 		},
 		{
 			"id": 137,
@@ -2607,7 +2743,8 @@ const data = {
 				136,
 				150
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "G2"
 		},
 		{
 			"id": 138,
@@ -2625,7 +2762,8 @@ const data = {
 				141
 			],
 			"road": [],
-			"bridge": []
+			"bridge": [],
+			"zone": "G2"
 		},
 		{
 			"id": 139,
@@ -2647,7 +2785,8 @@ const data = {
 				142,
 				150
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "G2"
 		},
 		{
 			"id": 140,
@@ -2664,7 +2803,8 @@ const data = {
 				142,
 				150
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "G2"
 		},
 		{
 			"id": 141,
@@ -2685,7 +2825,8 @@ const data = {
 				121,
 				142
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "G3"
 		},
 		{
 			"id": 142,
@@ -2704,7 +2845,8 @@ const data = {
 				143,
 				152
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "G3"
 		},
 		{
 			"id": 143,
@@ -2722,7 +2864,8 @@ const data = {
 				142,
 				144
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "G3"
 		},
 		{
 			"id": 144,
@@ -2738,7 +2881,8 @@ const data = {
 				143,
 				145
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "G4"
 		},
 		{
 			"id": 145,
@@ -2755,7 +2899,8 @@ const data = {
 				146,
 				156
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "G4"
 		},
 		{
 			"id": 146,
@@ -2772,7 +2917,8 @@ const data = {
 				145,
 				147
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "G4"
 		},
 		{
 			"id": 147,
@@ -2787,7 +2933,8 @@ const data = {
 			"road": [
 				146
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "H4"
 		},
 		{
 			"id": 148,
@@ -2802,7 +2949,8 @@ const data = {
 				132
 			],
 			"road": [],
-			"bridge": []
+			"bridge": [],
+			"zone": "H1"
 		},
 		{
 			"id": 149,
@@ -2817,7 +2965,8 @@ const data = {
 			"road": [
 				150
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "H1"
 		},
 		{
 			"id": 150,
@@ -2840,7 +2989,8 @@ const data = {
 				151,
 				152
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "H2"
 		},
 		{
 			"id": 151,
@@ -2855,7 +3005,8 @@ const data = {
 			"road": [
 				150
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "H2"
 		},
 		{
 			"id": 152,
@@ -2872,7 +3023,8 @@ const data = {
 				150,
 				154
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "H2"
 		},
 		{
 			"id": 153,
@@ -2887,7 +3039,8 @@ const data = {
 			"road": [
 				154
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "H3"
 		},
 		{
 			"id": 154,
@@ -2904,7 +3057,8 @@ const data = {
 				153,
 				155
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "H3"
 		},
 		{
 			"id": 155,
@@ -2920,7 +3074,8 @@ const data = {
 				154,
 				156
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "H3"
 		},
 		{
 			"id": 156,
@@ -2936,7 +3091,8 @@ const data = {
 				145,
 				155
 			],
-			"bridge": []
+			"bridge": [],
+			"zone": "H4"
 		}
 	],
 	"cards": [
@@ -4163,7 +4319,10 @@ const data = {
 					107
 				]
 			],
-			"set_aside": []
+			"set_aside": [
+				[],
+				[]
+			]
 		},
 		{
 			"id": 2,
@@ -4306,7 +4465,10 @@ const data = {
 					107
 				]
 			],
-			"set_aside": []
+			"set_aside": [
+				[],
+				[]
+			]
 		},
 		{
 			"id": 3,
@@ -4421,7 +4583,10 @@ const data = {
 					93
 				]
 			],
-			"removed": [],
+			"removed": [
+				[],
+				[]
+			],
 			"set_aside": [
 				[
 					46,
@@ -4602,7 +4767,10 @@ const data = {
 					107
 				]
 			],
-			"set_aside": []
+			"set_aside": [
+				[],
+				[]
+			]
 		},
 		{
 			"id": 5,
@@ -4920,7 +5088,10 @@ const data = {
 					88
 				]
 			],
-			"set_aside": []
+			"set_aside": [
+				[],
+				[]
+			]
 		}
 	],
 	"leaders": [
