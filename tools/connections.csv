@@ -61,7 +61,7 @@ id,space1,space2,type,bridge
 60,Venden,Livonia,road,0
 61,Friedrichstadt,Jakobstadt,road,0
 62,Unnamed B2,Jakobstadt,track,1
-63,Unnamed B2,Dünaburg,track,1
+63,Unnamed B2,Dunaburg,track,1
 64,Unnamed B2,Salakas,track,0
 65,Vilkomir,Salakas,track,0
 66,Vilkomir,Svencionys,track,0
@@ -80,11 +80,11 @@ id,space1,space2,type,bridge
 79,Livonia,Unnamed C1,track,0
 80,Jakobstadt,Unnamed C1,track,0
 81,Ostrov,Unnamed C1,track,0
-82,Jakobstadt,Dünaburg,road,0
-83,Dünaburg,Ludzha,road,0
+82,Jakobstadt,Dunaburg,road,0
+83,Dunaburg,Ludzha,road,0
 84,Ludzha,Ostrov,road,0
-85,Dünaburg,Vidzy,road,1
-86,Dünaburg,Drissa,road,1
+85,Dunaburg,Vidzy,road,1
+86,Dunaburg,Drissa,road,1
 87,Salakas,Vidzy,track,0
 88,Vidzy,Drissa,road,0
 89,Svencionys,Vidzy,road,0
@@ -256,3 +256,4 @@ id,space1,space2,type,bridge
 255,Tula,Unnamed H3,road,0
 256,Unnamed H3,Unnamed H4,road,0
 257,Lutsk,Vladimir (Galicia),road,0
+258,Molodechno,Minsk,road,0

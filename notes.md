@@ -9,14 +9,18 @@
 
 ## Known Bugs (to fix at a later time)
 1. can_play_event() is broken and always returns true - this is useful now for testing events, so I'll let it be
-2. seniority needs to be enforced
-3. attrition has not been done yet - as a events depending on attrition losses
-4. mark_already_moved() will overwrite - need to rewrite to add, not duplicate
+2. ~~seniority needs to be enforced~~
+3. attrition has not been done yet - as are events depending on attrition losses
+4. ~~mark_already_moved() will overwrite - need to rewrite to add, not duplicate~~
 5. nested log boxes break
 6. holy mother russia (fr) doesn't work entirely as expected
-7. remove order entries from areas that have only troops that have already executed a forced march/march order
-8. alexander ability not done yet: will do after asking designer
+7. ~~remove order entries from areas that have only troops that have already executed a forced march/march order~~
+8. ~~alexander ability not done yet: will do after asking designer~~
 9. platov ability (both) need to be implemented
 10. ~~new posting - fix alexander~~
-11. Molodechno is not adjacent to Minsk?
+11. ~~Molodechno is not adjacent to Minsk?~~
 12. energetic leadership is not enforced
+13. ~~move - update vp for vp cities~~
+14. new posting - check seniority for equal leaders
+15. ~~evasive maneuvers not implemented~~
+16. depot removed -> must discard card

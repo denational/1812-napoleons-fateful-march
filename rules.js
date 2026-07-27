@@ -515,6 +515,10 @@ function get_area_vp(a) {
 	return areas[a].vp           
 }
 
+function is_vp_area(a) {
+	return get_area_vp(a) > 0
+}
+
 function get_adjacent_areas_by_track(a) {
 	return areas[a].track
 }
@@ -977,6 +981,16 @@ function rally_troop(who, area, type, num = 1) {
 //=== VIEW ===
 function on_view() {
 	V.active = G.active
+
+	if (R !== RUSSIA) {
+		V.log = V.log.filter(entry => !entry.startsWith("HR"))
+	}
+	
+	if (R !== FRANCE) {
+		V.log = V.log.filter(entry => !entry.startsWith("HF"))
+	}
+
+	V.log = V.log.map(entry => (entry.startsWith("HR") || entry.startsWith("HF")) ? entry.substring(2) : entry)
 
 	V.depots = [...G.depots[RUSSIA], ...G.depots[FRANCE]]
 	V.devastation = G.devastation
@@ -2381,6 +2395,7 @@ P.select_orders = {
 		set_delete(G.active, R)
 		log(`${ROLES[R]} chose ${G.selected_orders[R].length} orders.`)
 		if (G.active.length === 0) {
+			log()
 			end()
 		}
 	},
@@ -2632,7 +2647,7 @@ P.determine_who_goes_first = {
 	card(card) {
 		push_undo()
 		L.played_card = true
-		log_box_begin(card)
+		card_box_begin(card)
 	},
 	next() {
 		push_undo()
@@ -2656,16 +2671,24 @@ P.determine_who_goes_first = {
 		++L.step
 	},
 	confirm() {
-		if (L.played_card) log_box_end()
+		if (L.played_card) {
+			log("Russia executes all 'Forced March' orders first this turn, but may not end moves in or adjacent to enemy-occupied areas.")
+			card_box_end()
+			if ((L.state === EVASIVE_MANEUVERS) || (L.state === ENERGETIC_LEADERSHIP)) add_persistent_event(L.state)
+		} else {
+			log(`${ROLES[G.active]} chose ${ROLES[L.first_player]} to go first.`)
+		}
 		L.L.$ = L.first_player
-		log(`${ROLES[G.active]} chose ${ROLES[L.first_player]} to go first.`)
+		
 		end()
 	},
 	russia() {
+		push_undo()
 		L.first_player = RUSSIA
 		++L.step
 	},
 	france() {
+		push_undo()
 		L.first_player = FRANCE
 		++L.step
 	}
@@ -2680,7 +2703,6 @@ P.determine_who_goes_first = {
 	de Tolly	- may change an order to 'Evade'
 	Bagration	- may change an order to 'Defend'
 	Chichagov	- may discard a card to place a 'Forced March' order during that step
-
 */
 
 function has_card_in_hand(who) {
@@ -2716,17 +2738,6 @@ function add_order_of_type_from_pool(who, type, where) {
 	place_order(id, where)
 	return id
 }
-
-/* 
-	to SWITCH from
-	has to have order of type in space
-	has to have a future non-dummmy order in pool
-	leader must be able to switch out of order
-
-	to switch TO
-	has to have a non-dummy order at space
-	has to have order of desired type in pool
-*/
 
 function can_change_order_to(leader, current_type, type_to, area) {
 	let side = get_leader_faction(leader)
@@ -3006,16 +3017,21 @@ P.forced_march = script(`
 P.execute_forced_marches = {
 	_begin() {
 		//L.first_player
-		G.active = L.first_player
-		L.has_passed = [false, false]
-		L.current_order = -1
-		L.has_executed_order = false
-		L.forced_march_orders = get_placed_orders_of_type(FORCED_MARCH)
-		L.orders_by_side = [L.forced_march_orders.filter(o => get_order_owner(o) === RUSSIA), L.forced_march_orders.filter(o => get_order_owner(o) === FRANCE)]
-		
-		for (let who = RUSSIA; who <= FRANCE; ++who) {
-			L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order)))
+		if (is_event_active(EVASIVE_MANEUVERS)) {
+			goto(`event_${EVASIVE_MANEUVERS}`)
+		} else {
+			G.active = L.first_player
+			L.has_passed = [false, false]
+			L.current_order = -1
+			L.has_executed_order = false
+			L.forced_march_orders = get_placed_orders_of_type(FORCED_MARCH)
+			L.orders_by_side = [L.forced_march_orders.filter(o => get_order_owner(o) === RUSSIA), L.forced_march_orders.filter(o => get_order_owner(o) === FRANCE)]
+			
+			for (let who = RUSSIA; who <= FRANCE; ++who) {
+				L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order)))
+			}
 		}
+		
 	},
 	prompt() {
 		if (L.orders_by_side[G.active].length === 0) {
@@ -3117,6 +3133,37 @@ function get_leaders_at_area(side, area) {
 	return leaders
 }
 
+function can_alexander_be_babysitted() {
+	if (G.active !== RUSSIA) return true
+	if (!set_has(L.leaders_at_area, ALEXANDER)) return true
+
+	//Alexander may not move alone if there are other leaders in the area
+	if (L.move.leaders.length === 1 && set_has(L.move.leaders, ALEXANDER) && L.leaders_at_area.length > 0)
+		return false
+	
+	//No leader may willingly leave Alexander behind
+	if ((L.leaders_at_area.length - L.move.leaders.length === 1) && !set_has(L.move.leaders, ALEXANDER))
+		return false
+
+	return true
+}
+
+function is_infantry(troop_type) {
+	return set_has([FRESH_INFANTRY, EXHAUSTED_INFANTRY, FRESH_PRUSSIAN_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, FRESH_AUSTRIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY], troop_type)
+}
+
+function is_cavalry(troop_type) {
+	return (troop_type === FRESH_CAVALRY) || (troop_type === EXHAUSTED_CAVALRY)
+}
+
+function is_cossack(troop_type) {
+	return (troop_type === FRESH_COSSACK) || (troop_type === EXHAUSTED_COSSACK)
+}
+
+function is_guard(troop_type) {
+	return (troop_type === FRESH_GUARD) || (troop_type === EXHAUSTED_GUARD)
+}
+
 //TODO: Pinning
 P.select_force = {
 	_begin() {
@@ -3137,7 +3184,7 @@ P.select_force = {
 		//Pinning
 		if (count_num_sps(enemy(G.active), L.area) > 0) {
 			L.move.pinned = true //Flag to indicate to the next state to avoid connections used by the attacker
-			L.max_troops_selectable = Math.min(count_num_sps(enemy(G.active), L.area), L.troops_at_area.reduce((a, b) => (a + b), 0))
+			L.max_troops_selectable = Math.max(L.troops_at_area.reduce((a, b) => (a + b), 0) - count_num_sps(enemy(G.active), L.area), 0)
 		} else {
 			L.max_troops_selectable = L.troops_at_area.reduce((a, b) => (a + b), 0)
 		}
@@ -3146,8 +3193,14 @@ P.select_force = {
 		log_h3(`S${L.area}`, G.active)
 	},
 	prompt() {
-		if (L.move.leaders.length > 0) {
+		if (L.max_troops_selectable === 0) {
+			prompt(`Pinned: May not move any SPs from S${L.area}.`)
+			button_pass()
+		} else if (L.move.leaders.length > 0) {
 			prompt(`Select any number of SPs to move from S${L.area}.`)
+
+			if (set_has(L.leaders_at_area, ALEXANDER) && L.leaders_at_area.length > 1) V.prompt += " Alexander may not be activated alone or left behind without another leader."
+			if (L.move.leaders.length === 1 && set_has(L.move.leaders, PLATOV)) V.prompt += " Platov may only command Cavalry and Cossack SPs."
 
 			if (L.leaders_at_area.length > L.move.leaders.length) {
 				for (let leader of L.leaders_at_area) {
@@ -3157,8 +3210,14 @@ P.select_force = {
 			}
 
 			for (let type of get_troop_types_at_area(G.active, L.area)) {
-				if ((L.move.troops[type] < L.troops_at_area[type]) && (L.num_troops_selected < L.max_troops_selectable))
-					action("add_troop", type)
+				if (L.move.leaders.length === 1 && set_has(L.move.leaders, PLATOV)) {
+					if ((L.move.troops[type] < L.troops_at_area[type]) && (L.num_troops_selected < L.max_troops_selectable) && (is_cavalry(type) || is_cossack(type)))
+						action("add_troop", type)
+				} else {
+					if ((L.move.troops[type] < L.troops_at_area[type]) && (L.num_troops_selected < L.max_troops_selectable))
+						action("add_troop", type)
+				}
+				
 				if (L.move.troops[type] > 0)
 					action("remove_troop", type)
 			}
@@ -3166,6 +3225,7 @@ P.select_force = {
 			if (L.num_troops_selected < L.max_troops_selectable)
 				button("select_all")
 
+			button_done(L.num_troops_selected >= 1 && can_alexander_be_babysitted())
 		} else {
 			prompt(`Select up to 4 SPs (at least 1) to move from S${L.area}.`)
 
@@ -3179,14 +3239,24 @@ P.select_force = {
 				if (L.move.troops[type] > 0)
 					action("remove_troop", type)
 			}
+
+			button_done(L.num_troops_selected >= 1 && can_alexander_be_babysitted())
 		}
 
 		//Alexander's ability (aka disability): He may not willingly move without a leader
-		button_done(L.num_troops_selected >= 1 || (set_has(L.move.leaders, ALEXANDER) && (L.move.leaders.length === 1) && (L.leaders_at_area.length > 1)))
+		
 	},
 	leader_button(leader) {
 		push_undo()
 		set_toggle(L.move.leaders, leader)
+		if (L.move.leaders.length === 1 && set_has(L.move.leaders, PLATOV)) {
+			for (let type = FRESH_INFANTRY; type <= EXHAUSTED_AUSTRIAN_INFANTRY; ++type) {
+				if (!is_cavalry(type) && !is_cossack(type)) {
+					L.num_troops_selected -= L.move.troops[type]
+					L.move.troops[type] = 0
+				}
+			}
+		}
 	},
 	add_troop(type) {
 		push_undo()
@@ -3210,6 +3280,12 @@ P.select_force = {
 	done() {
 		push_undo()
 		goto("move", { move: L.move })
+	},
+	pass() {
+		push_undo()
+		log("Pinned.")
+		log()
+		end()
 	}
 }
 
@@ -3223,6 +3299,10 @@ function calculate_move_allowance(move_type, troops) {
 	}
 	return allowance
 }
+
+function is_friendly_controlled(who, area) {
+	return (who === RUSSIA && is_ru_controlled(area)) || (who === FRANCE && is_fr_controlled(area))
+} 
 
 /*
 	Events:
@@ -3249,10 +3329,16 @@ P.move = {
 	_begin() {
 		//L.move
 		L.allowance = calculate_move_allowance(L.move.type, L.move.troops)
+		
 		L.current_area = L.move.path[L.move.path.length - 1]
 		log("Moved from S" + L.move.path[L.move.path.length - 1])
 		if (L.move.leaders.length > 0) {
 			logi(`L${L.move.leaders[0]}`) //Seniormost leader
+			for (let type = 0; type < L.move.troops.length; ++type) {
+				if (L.move.troops[type] > 0) {
+					log_only(G.active, "<" + L.move.troops[type] + " " + get_troop_type_name(type))
+				}
+			}
 		} else {
 			for (let type = 0; type < L.move.troops.length; ++type) {
 				if (L.move.troops[type] > 0) {
@@ -3269,8 +3355,13 @@ P.move = {
 		} else if (L.allowance > 0) {
 			prompt(`Select destination for move (${L.allowance} remaining MPs).`)
 			for (let area of get_all_adjacent_areas(L.move.path[L.move.path.length - 1])) {
-				if (can_enter_area(G.active, area))
-					action_area(area)
+				if (is_event_active(EVASIVE_MANEUVERS) && (G.active === RUSSIA)) {
+					if (!is_fr_controlled(area) && !get_all_adjacent_areas(area).some(a => is_fr_controlled(a)) && can_enter_area(G.active, area))
+						action_area(area)
+				} else {
+					if (can_enter_area(G.active, area))
+						action_area(area)
+				}
 			}
 			button_done()
 		} else {
@@ -3281,14 +3372,21 @@ P.move = {
 	area(area) {
 		push_undo()
 		logi("to S" + area)
+		if (is_vp_area(area) && !is_friendly_controlled(G.active, area) && !has_enemy_sp(G.active, area)) {
+			increase_vp(G.active, get_area_vp(area))
+		} 
+
+		if (has_enemy_depot(G.active, area)) {
+			remove_depot(enemy(G.active), area)
+		}
 
 		if ((L.current_area === S_MOSCOW) && is_event_active(PRIDE_AND_HESITATION) && (L.move.leaders.length > 0) && (G.active === FRANCE)) {
-			log(`C${PRIDE_AND_HESITATION}`)
+			log(`C${PRIDE_AND_HESITATION}.`)
 			increase_vp(RUSSIA)
 		}
 
 		if (is_event_active(HOLY_MOTHER_RUSSIA_FR) && (map_get(G.persistent_events, HOLY_MOTHER_RUSSIA_FR, -1).area === L.current_area) && (G.active === RUSSIA)) { //TO CHECK: Does this stack on the same move or only once per move?
-			log(`C${HOLY_MOTHER_RUSSIA_FR}`)
+			log(`C${HOLY_MOTHER_RUSSIA_FR}.`)
 			increase_vp(FRANCE)
 		}
 
@@ -3313,13 +3411,17 @@ P.move = {
 			move_formation(L.move.leaders, L.move.troops, L.move.path[L.move.path.length - 1], area)
 			L.move.path.push(area)
 			L.allowance = Math.max(--L.allowance, 0)
-			
-			if ((G.active === FRANCE) && is_key_city(area) && !has_troop(area)) { //If France just took an unnoccupied key city, Russia may play City Ablaze!
-				call(`russia_may_play_city_ablaze`, { area: area })
-			}
-		}
 
-		L.current_area = area
+			if (is_vp_area(L.current_area) && !is_friendly_controlled(G.active, L.current_area)) {
+				decrease_vp(G.active, get_area_vp(L.current_area))
+			}
+
+			L.current_area = area
+			
+			if ((G.active === FRANCE) && is_key_city(area) && !has_russian_sp(area)) { //If France just took an unnoccupied key city, Russia may play City Ablaze!
+				call(`russia_may_play_city_ablaze`, { area: area, who: FRANCE })
+			}
+		}	
 
 		if (determine_seniority.length > 0) call("determine_seniority", { leaders: determine_seniority })
 	}, 
@@ -3335,6 +3437,10 @@ P.move = {
 		end()
 	}
 } 
+
+function has_enemy_depot(who, area) {
+	return G.depots[enemy(who)].some(a => (a === area))
+}
 
 function has_friendly_leader(who, space) {
 	return G.leaders.slice(get_first_leader(who), get_last_leader(who) + 1).some(loc => loc === space)
@@ -3770,6 +3876,44 @@ function get_all_adjacent_areas(area) {
 
 function increase_devastation(area, amount = 1) {
 	G.devastation[area] = Math.min(3, G.devastation[area] + amount)
+}
+
+//RU #4: Evasive Maneuvers
+P.event_4 = {
+	_begin() {
+		G.active = RUSSIA
+		L.current_order = -1
+		L.has_executed_order = false
+		L.forced_march_orders = get_placed_orders_of_type(FORCED_MARCH)
+		L.orders_by_side = [L.forced_march_orders.filter(o => get_order_owner(o) === RUSSIA), L.forced_march_orders.filter(o => get_order_owner(o) === FRANCE)]
+
+		L.has_passed = [false, false]
+		
+		for (let who = RUSSIA; who <= FRANCE; ++who) {
+			L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order)))
+		}
+	},
+	prompt() {
+		P.execute_forced_marches.prompt()
+	},
+	order(order) {
+		P.execute_forced_marches.order(order)
+	},
+	confirm() {
+		push_undo()
+		set_delete(L.orders_by_side[G.active], L.current_order)
+		
+		L.has_executed_order = false
+		L.current_order = -1
+	},
+	done() {
+		P.execute_forced_marches.done()
+	},
+	_resume() {
+		L.has_executed_order = true
+		//Remove orders that cannot be executed now
+		L.orders_by_side[G.active] = L.orders_by_side[G.active].filter(order => has_friendly_troop(G.active, get_order_location(order)) && (get_all_movable_troops_in_area(G.active, get_order_location(order)).some(type => type > 0)))
+	},
 }
 
 //RU #6: Bagration's Retreat
@@ -4210,6 +4354,7 @@ P.may_play_city_ablaze = {
 		goto("event_22", { card: card, area: L.area })
 	},
 	pass() {
+		G.active = FRANCE
 		end()
 	}
 }
@@ -4275,6 +4420,7 @@ P.event_22 = {
 		++L.step
 	},
 	done() {
+		G.active = FRANCE
 		end()
 	}
 }
@@ -4311,6 +4457,10 @@ P.event_24 = {
 					action_area(area)
 				}
 			}
+		} 
+		else if ((get_leader_location(L.selected_leader) === get_leader_location(ALEXANDER)) && (get_leaders_at_area(RUSSIA, get_leader_location(L.selected_leader)).length === 2)) {
+			prompt_card(NEW_POSTING, `May not leave Alexander alone at S${get_leader_location(L.selected_leader)}.`)
+			button_confirm() //placeholder for now so that fuzzer doesn't throw
 		}
 		else {
 			prompt_card(NEW_POSTING, `Relocate L${L.selected_leader} to any in-supply space.`)
@@ -4340,6 +4490,9 @@ P.event_24 = {
 	done() {
 		push_undo()
 		end()
+	},
+	confirm() {
+		pop_undo()
 	}
 }
 
@@ -4701,11 +4854,19 @@ P.event_62 = {
 
 // FR #15: Peace Offer
 function increase_vp(who, amount = 1) {
-	log(`${ROLES[who]} gained +${amount} VP.`)
+	log(`${ROLES[who]} +${amount} VP.`)
 	if (who === RUSSIA)
 		G.vp -= amount
 	else
 		G.vp += amount
+}
+
+function decrease_vp(who, amount = 1) {
+	log(`${ROLES[who]} -${amount} VP.`)
+	if (who === RUSSIA)
+		G.vp += amount
+	else
+		G.vp -= amount
 }
 
 E.event_69 = {
@@ -5235,6 +5396,19 @@ function log_box_begin(text, who) {
 
 function log_box_end() {
 	log("}")
+}
+
+function log_only(who, text) {
+	if (who === RUSSIA) log_russia_only(text)
+	else if (who === FRANCE) log_france_only(text)
+}
+
+function log_russia_only(text) {
+	log("HR" + text)
+}
+
+function log_france_only(text) {
+	log("HF" + text)
 }
 
 //=== COMMON FRAMEWORK - DO NOT EDIT ===

@@ -303,6 +303,15 @@ function decode_troop_entry_num(entry) {
 	return entry & TROOP_ENTRY_NUM_MASK
 }
 
+
+function is_cavalry(troop_type) {
+	return (troop_type === FRESH_CAVALRY) || (troop_type === EXHAUSTED_CAVALRY)
+}
+
+function is_cossack(troop_type) {
+	return (troop_type === FRESH_COSSACK) || (troop_type === EXHAUSTED_COSSACK)
+}
+
 /* TIME */
 const JUNE_5 = 0
 const JULY_R = 1
@@ -447,9 +456,10 @@ function on_update() {
 		populate("hand", 0, "card", c)
 	}
 
-	for (let c of V.played_cards[R]) {
-		populate("played", 0, "card", c)
-	}
+	if (V.played_cards && V.played_cards[R])
+		for (let c of V.played_cards[R])
+			populate("played", 0, "card", c)
+
 
 	for (let leader = 0; leader <= 13; ++leader) {
 		action_button_with_argument(`leader_button`, leader, leaders[leader].log_name)
@@ -584,7 +594,7 @@ function update_troops() {
 			}
 
 			//Populating the marker (without the number of troops)
-			if (has_friendly_leader(who, area)) { //If there's a friendly leader in the area, put the troops on his mat
+			if (has_friendly_leader(who, area) && ((is_cavalry(type) || is_cossack(type)) || (get_seniormost_leader(who, area) !== PLATOV))) { //If there's a friendly leader in the area, put the troops on his mat
 				populate(`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader(who, area), get_troop_name(type), get_used(who, type))
 			} else if (area === FRENCH_CASUALTIES) {
 				populate("fr_casualties", 0, get_troop_name(type), get_used(who, type))
