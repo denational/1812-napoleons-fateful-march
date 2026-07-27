@@ -79,25 +79,6 @@ function has_friendly_leader(who, s) {
 	return get_seniormost_leader(who, s) !== -1
 }
 
-function is_seniormost_leader(who, area) {
-	let faction = get_leader_faction(who)
-	for (let leader = get_first_leader(faction); leader <= get_last_leader(faction); ++leader) {
-		if (get_leader_location(leader) === area) {
-			return (who === leader)
-		}
-	}
-	return false
-}
-
-function get_seniormost_leader(faction, area) {
-	for (let leader = get_first_leader(faction); leader <= get_last_leader(faction); ++leader) {
-		if (get_leader_location(leader) === area) {
-			return leader
-		}
-	}
-	return -1
-}
-
 /* ORDERS */
 const first_ru_order = 1
 const last_ru_order = 28
@@ -471,7 +452,7 @@ function on_update() {
 	}
 
 	for (let leader = 0; leader <= 13; ++leader) {
-		action_button_with_argument(`leader_button`, leader, get_leader_short_name(leader))
+		action_button_with_argument(`leader_button`, leader, leaders[leader].log_name)
 	}
 
 	action_button_with_argument("troop", FRESH_INFANTRY, "Infantry")
@@ -525,6 +506,19 @@ function on_update() {
 	end_update()
 }
 
+function is_seniormost_leader(leader, area) {
+	return get_seniormost_leader(get_leader_faction(leader), area) === leader
+}
+
+function get_seniormost_leader(who, area) {
+	for (let leader of V.seniority[who]) {
+		if (get_leader_location(leader) === area) {
+			return leader
+		}
+	}
+	return -1
+}
+
 function update_tracks() {
 	//Time
 	populate("track-time", V.turn, "time", 0)
@@ -557,6 +551,8 @@ function update_leaders() {
 			populate("fr_casualties", 0, "leader", leader); break
 		default:
 			if (is_seniormost_leader(leader, get_leader_location(leader))) {
+				console.log(V.leaders)
+				console.log(leader)
 				populate("area_stack", get_leader_location(leader), "leader", leader)
 				populate("leaders", get_leader_faction(leader), "leader_board", leader)
 			} else {
@@ -652,7 +648,7 @@ function escape_text(text) {
 	escape_typography(text)
 	text = escape_tip_class_sub(text, /C(\d+)/g, "tip", "card card_$1", data.cards.map(card => card.name))
 	text = escape_tip_light(text, /S(\d+)/g, "area-tip", "area", data.areas.map(s => `${s.name} (${s.zone})`))
-	text = escape_tip_light(text, /L(\d+)/g, "tip", "leader", data.leaders.map(leader => leader.short_name))
+	text = escape_tip_light(text, /L(\d+)/g, "tip", "leader", data.leaders.map(leader => leader.log_name))
 	return text
 }
 

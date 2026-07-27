@@ -311,25 +311,29 @@ fs.createReadStream(names)
 				//=== LEADERS ===
 				data.leaders = []
 
-				function def_leader(id, faction, name, seniority, vp, short_name) {
-					data.leaders.push({id, faction, name, seniority, vp, short_name})
+				//name: full name (as listed on leader screens)
+				//short_name: single word names for each of the leaders (for css)
+				//log_name: their names, for use in the log
+
+				function def_leader(id, faction, name, seniority, vp, short_name, log_name) {
+					data.leaders.push({id, faction, name, seniority, vp, short_name, log_name})
 				}
 
-				def_leader(0,  RUSSIA, "Tsar Alexander I",       4, 5, "Alexander")
-				def_leader(1,  RUSSIA, "Mikhail Kutuzov",        3, 2, "Kutuzov")
-				def_leader(2,  RUSSIA, "Barclay de Tolly",       2, 1, "Tolly")
-				def_leader(3,  RUSSIA, "Pyotr Bagration",        2, 1, "Bagration")
-				def_leader(4,  RUSSIA, "Alexander Tormasov",     2, 1, "Tormasov")
-				def_leader(5,  RUSSIA, "Peter Wittgenstein",     1, 1, "Wittgenstein")
-				def_leader(6,  RUSSIA, "Pavel Chichagov",        1, 1, "Chichagov")
-				def_leader(7,  RUSSIA, "Matvei Platov",          1, 0, "Platov")
+				def_leader(0,  RUSSIA, "Tsar Alexander I",       4, 5, "Alexander",		"Alexander I")
+				def_leader(1,  RUSSIA, "Mikhail Kutuzov",        3, 2, "Kutuzov",		"Kutuzov")
+				def_leader(2,  RUSSIA, "Barclay de Tolly",       2, 1, "Tolly",			"de Tolly")
+				def_leader(3,  RUSSIA, "Pyotr Bagration",        2, 1, "Bagration",		"Bagration")
+				def_leader(4,  RUSSIA, "Alexander Tormasov",     2, 1, "Tormasov",		"Tormasov")
+				def_leader(5,  RUSSIA, "Peter Wittgenstein",     1, 1, "Wittgenstein",	"Wittgenstein")
+				def_leader(6,  RUSSIA, "Pavel Chichagov",        1, 1, "Chichagov",		"Chichagov")
+				def_leader(7,  RUSSIA, "Matvei Platov",          1, 0, "Platov",		"Platov")
 
-				def_leader(8,  FRANCE, "Emperor Napoléon",       4, 10,"Napoleon")
-				def_leader(9,  FRANCE, "Jerome Bonaparte",       3, 3, "Jerome")
-				def_leader(10, FRANCE, "Eugene de Beauharnais",  3, 3, "Beauharnais")
-				def_leader(11, FRANCE, "Louis-Nicolas Davout",   2, 2, "Davout")
-				def_leader(12, FRANCE, "Joachim Murat",          1, 2, "Murat")
-				def_leader(13, FRANCE, "Karl von Schwarzenberg", 1, 1, "Schwarzenberg")
+				def_leader(8,  FRANCE, "Emperor Napoléon",       4, 10,"Napoleon",		"Napoléon")
+				def_leader(9,  FRANCE, "Jérôme Bonaparte",       3, 3, "Jerome",		"Jérôme")
+				def_leader(10, FRANCE, "Eugène de Beauharnais",  3, 3, "Beauharnais",	"de Beauharnais")
+				def_leader(11, FRANCE, "Louis-Nicolas Davout",   2, 2, "Davout",		"Davout")
+				def_leader(12, FRANCE, "Joachim Murat",          1, 2, "Murat",			"Murat")
+				def_leader(13, FRANCE, "Karl von Schwarzenberg", 1, 1, "Schwarzenberg",	"von Schwarzenberg")
 
 				//=== ORDERS ===
 				const FORCED_MARCH = 0

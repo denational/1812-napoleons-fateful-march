@@ -5101,7 +5101,8 @@ const data = {
 			"name": "Tsar Alexander I",
 			"seniority": 4,
 			"vp": 5,
-			"short_name": "Alexander"
+			"short_name": "Alexander",
+			"log_name": "Alexander I"
 		},
 		{
 			"id": 1,
@@ -5109,7 +5110,8 @@ const data = {
 			"name": "Mikhail Kutuzov",
 			"seniority": 3,
 			"vp": 2,
-			"short_name": "Kutuzov"
+			"short_name": "Kutuzov",
+			"log_name": "Kutuzov"
 		},
 		{
 			"id": 2,
@@ -5117,7 +5119,8 @@ const data = {
 			"name": "Barclay de Tolly",
 			"seniority": 2,
 			"vp": 1,
-			"short_name": "Tolly"
+			"short_name": "Tolly",
+			"log_name": "de Tolly"
 		},
 		{
 			"id": 3,
@@ -5125,7 +5128,8 @@ const data = {
 			"name": "Pyotr Bagration",
 			"seniority": 2,
 			"vp": 1,
-			"short_name": "Bagration"
+			"short_name": "Bagration",
+			"log_name": "Bagration"
 		},
 		{
 			"id": 4,
@@ -5133,7 +5137,8 @@ const data = {
 			"name": "Alexander Tormasov",
 			"seniority": 2,
 			"vp": 1,
-			"short_name": "Tormasov"
+			"short_name": "Tormasov",
+			"log_name": "Tormasov"
 		},
 		{
 			"id": 5,
@@ -5141,7 +5146,8 @@ const data = {
 			"name": "Peter Wittgenstein",
 			"seniority": 1,
 			"vp": 1,
-			"short_name": "Wittgenstein"
+			"short_name": "Wittgenstein",
+			"log_name": "Wittgenstein"
 		},
 		{
 			"id": 6,
@@ -5149,7 +5155,8 @@ const data = {
 			"name": "Pavel Chichagov",
 			"seniority": 1,
 			"vp": 1,
-			"short_name": "Chichagov"
+			"short_name": "Chichagov",
+			"log_name": "Chichagov"
 		},
 		{
 			"id": 7,
@@ -5157,7 +5164,8 @@ const data = {
 			"name": "Matvei Platov",
 			"seniority": 1,
 			"vp": 0,
-			"short_name": "Platov"
+			"short_name": "Platov",
+			"log_name": "Platov"
 		},
 		{
 			"id": 8,
@@ -5165,23 +5173,26 @@ const data = {
 			"name": "Emperor Napoléon",
 			"seniority": 4,
 			"vp": 10,
-			"short_name": "Napoleon"
+			"short_name": "Napoleon",
+			"log_name": "Napoléon"
 		},
 		{
 			"id": 9,
 			"faction": 1,
-			"name": "Jerome Bonaparte",
+			"name": "Jérôme Bonaparte",
 			"seniority": 3,
 			"vp": 3,
-			"short_name": "Jerome"
+			"short_name": "Jerome",
+			"log_name": "Jérôme"
 		},
 		{
 			"id": 10,
 			"faction": 1,
-			"name": "Eugene de Beauharnais",
+			"name": "Eugène de Beauharnais",
 			"seniority": 3,
 			"vp": 3,
-			"short_name": "Beauharnais"
+			"short_name": "Beauharnais",
+			"log_name": "de Beauharnais"
 		},
 		{
 			"id": 11,
@@ -5189,7 +5200,8 @@ const data = {
 			"name": "Louis-Nicolas Davout",
 			"seniority": 2,
 			"vp": 2,
-			"short_name": "Davout"
+			"short_name": "Davout",
+			"log_name": "Davout"
 		},
 		{
 			"id": 12,
@@ -5197,7 +5209,8 @@ const data = {
 			"name": "Joachim Murat",
 			"seniority": 1,
 			"vp": 2,
-			"short_name": "Murat"
+			"short_name": "Murat",
+			"log_name": "Murat"
 		},
 		{
 			"id": 13,
@@ -5205,7 +5218,8 @@ const data = {
 			"name": "Karl von Schwarzenberg",
 			"seniority": 1,
 			"vp": 1,
-			"short_name": "Schwarzenberg"
+			"short_name": "Schwarzenberg",
+			"log_name": "von Schwarzenberg"
 		}
 	],
 	"orders": [
