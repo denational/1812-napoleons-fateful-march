@@ -6,6 +6,7 @@
 2. New Posting: Added new requirement for relocation destination area, that the target area must have a Russian SP. 
     pg 5 - "Leaders are eliminated if they are ever in an area with no friendly SPs. "
 3. Are non-Russian key cities eligible for Holy Mother Russia (FR)
+4. Are cavalry patrols orders that are not executed because there are no enemy troops in the vicinity removed?
 
 ## Known Bugs (to fix at a later time)
 1. can_play_event() is broken and always returns true - this is useful now for testing events, so I'll let it be
@@ -24,3 +25,4 @@
 14. new posting - check seniority for equal leaders
 15. ~~evasive maneuvers not implemented~~
 16. depot removed -> must discard card
+17. bagration's retreat

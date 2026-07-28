@@ -98,11 +98,11 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	}
 
 	& .i {
-		text-indent: 12px;
+		text-indent: 14px;
 	}
 
 	& .ii {
-		text-indent: 24px;
+		text-indent: 28px;
 	}
 
 	& .tip {

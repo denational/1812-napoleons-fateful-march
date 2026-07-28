@@ -501,6 +501,9 @@ function on_update() {
 
 	action_button("select_all", "Select All")
 
+	action_button("place_order", "Place Order")
+	action_button("change_order", "Change Order")
+
 	action_button("done", "Done")
 	action_button("next", "Next")
 	action_button("draw", "Draw")
