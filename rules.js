@@ -841,17 +841,54 @@ function shift_initiative(in_favor_of, amount = 1) {
 }
 
 /* DEPOTS */
+const first_russia_depot = 0
+const last_russia_depot = 13
+const first_france_depot = 14
+const last_france_depot = 21
+
+function get_first_depot(who) {
+	return (who === RUSSIA) ? first_russia_depot : first_france_depot
+}
+
+function get_last_depot(who) {
+	return (who === RUSSIA) ? last_russia_depot : last_france_depot
+}
+
 function get_depots(who) {
-	return G.depots[who]
+	return G.depots.slice(get_first_depot(who), get_last_depot(who) + 1)
+}
+
+function get_depot_location(id) {
+	return G.depots[id]
+}
+
+function move_depot(id, where) {
+	G.depots[id] = where
+}
+
+function remove_depot(id, where) {
+	G.depots[id] = POOL
+	log("Removed depot from S" + where + ".")
+}
+
+function find_depot_at_location(who, area) {
+	for (let depot = get_first_depot(who); depot <= get_last_depot(who); ++depot) {
+		if (get_depot_location(depot) === area) return depot
+	}
+	return -1
+}
+
+function remove_depot_from_area(who, where) {
+	remove_depot(find_depot_at_location(who, where), where)
 }
 
 function add_depot(who, where) {
-	get_depots(who)[get_depots(who).lastIndexOf(POOL)] = where
-}
-
-function remove_depot(who, where) {
-	get_depots(who)[get_depots(who).indexOf(where)] = POOL
-	log("Removed depot from S" + where + ".")
+	for (let depot = get_first_depot(who); depot <= get_last_depot(who); ++depot) {
+		if (get_depot_location(depot) === POOL) {
+			move_depot(depot, where)
+			return
+		}
+	}
 }
 
 function get_areas_with_depots(who) {
@@ -992,7 +1029,7 @@ function on_view() {
 
 	V.log = V.log.map(entry => (entry.startsWith("HR") || entry.startsWith("HF")) ? entry.substring(2) : entry)
 
-	V.depots = [...G.depots[RUSSIA], ...G.depots[FRANCE]]
+	V.depots = G.depots
 	V.devastation = G.devastation
 	V.current_discard = G.discard[R] ?? []
 	V.french_logistic_preparations = G.french_logistic_preparations
@@ -1054,7 +1091,7 @@ function on_setup(scenario, options) {
 
 	G.troops = []
 	G.leaders = new Array(NUM_LEADERS).fill(POOL)
-	G.depots = [new Array(NUM_DEPOTS_RU).fill(POOL), new Array(NUM_DEPOTS_FR).fill(POOL)]
+	G.depots = new Array(NUM_DEPOTS_RU + NUM_DEPOTS_FR).fill(POOL)
 	G.devastation = new Array(NUM_SPACES).fill(0)
 
 	G.played_cards = [[], []]
@@ -1696,6 +1733,7 @@ P.turn = script(`
 	call place_orders
 	call forced_march
 	call cavalry_patrols
+	call march
 `)
 
 //=== 1. DRAW CARD TO HAND ===
@@ -1835,7 +1873,7 @@ P.draw_card_to_hand = {
 			}
 			return
 		case `event_${CHAOTIC_FOOD_DISTRIBUTION}`:
-			if (G.depots[FRANCE].some(depot => (depot !== POOL) && (depot !== OUT_OF_PLAY))) {
+			if (get_depots(FRANCE).some(depot => (depot !== POOL) && (depot !== OUT_OF_PLAY))) {
 				if (map_get(L.event_execution_status, CHAOTIC_FOOD_DISTRIBUTION, null) === -1) {
 					prompt_card(CHAOTIC_FOOD_DISTRIBUTION, "Remove a French depot from map.")
 					for (let area of get_areas_with_depots(FRANCE)) {
@@ -1929,12 +1967,12 @@ P.draw_card_to_hand = {
 			L.selected_area = a
 			return
 		case `event_${VULNERABLE_SUPPLY_LINES}`:
-			remove_depot(FRANCE, a)
+			remove_depot_from_area(FRANCE, a)
 			set_delete(L.depots_to_remove, a)
 			return
 		case `event_${CHAOTIC_FOOD_DISTRIBUTION}`:
 			L.selected_area = a
-			remove_depot(FRANCE, a)
+			remove_depot_from_area(FRANCE, a)
 			map_set(L.event_execution_status, CHAOTIC_FOOD_DISTRIBUTION, 0)
 			return
 		}
@@ -2773,7 +2811,7 @@ function can_change_order_to(leader, current_type, type_to, area) {
 	//If in the execution phase of the order the leader has the ability to switch to,
 	//there must be a non-dummy (since dummies don't count) order at the leader's location and an order of the type he can switch to in the pool.
 	if (current_type === type_to)
-		return (has_non_dummy_order_at_area(side, area) && has_order_of_type(side, type_to, POOL))
+		return get_orders_at_area(get_leader_faction(leader), area).some(order => (get_order_type(order) !== DUMMY_ORDER) && (get_order_type(order) !== current_type)) && has_order_of_type(side, type_to, POOL)
 
 	return false
 }
@@ -3304,7 +3342,10 @@ P.select_force = {
 	},
 	done() {
 		push_undo()
-		goto("move", { move: L.move })
+		if ((L.type === MARCH) && (G.active === FRANCE) && (get_hand(FRANCE).includes(PONIATOWSKIS_V_CORPS))) 
+			goto("may_play_poniatowskis_v_corps", { move: L.move })
+		else
+			goto("move", { move: L.move })
 	},
 	pass() {
 		push_undo()
@@ -3314,8 +3355,9 @@ P.select_force = {
 	}
 }
 
+function calculate_move_allowance(who, move_type, troops) {
+	if ((move_type === MARCH) && (who === FRANCE) && (is_event_active(FAST_MARCHING_1) || is_event_active(FAST_MARCHING_2))) return 2
 
-function calculate_move_allowance(move_type, troops) {
 	let allowance = (move_type === FORCED_MARCH) ? 3 : 2
 	for (let type = FRESH_INFANTRY; type <= EXHAUSTED_AUSTRIAN_INFANTRY; ++type) {
 		if (((type !== FRESH_CAVALRY) && (type !== FRESH_COSSACK)) && (troops[type] > 0)) {
@@ -3353,7 +3395,7 @@ function is_friendly_controlled(who, area) {
 P.move = {
 	_begin() {
 		//L.move
-		L.allowance = calculate_move_allowance(L.move.type, L.move.troops)
+		L.allowance = calculate_move_allowance(G.active, L.move.type, L.move.troops)
 		
 		L.current_area = L.move.path[L.move.path.length - 1]
 		log("Moved from S" + L.move.path[L.move.path.length - 1])
@@ -3380,7 +3422,7 @@ P.move = {
 		} else if (L.allowance > 0) {
 			prompt(`Select destination for move (${L.allowance} remaining MPs).`)
 			for (let area of get_all_adjacent_areas(L.move.path[L.move.path.length - 1])) {
-				if (is_event_active(EVASIVE_MANEUVERS) && (G.active === RUSSIA)) {
+				if ((L.move.type === FORCED_MARCH) && is_event_active(EVASIVE_MANEUVERS) && (G.active === RUSSIA)) {
 					if (!is_fr_controlled(area) && !get_all_adjacent_areas(area).some(a => is_fr_controlled(a)) && can_enter_area(G.active, area))
 						action_area(area)
 				} else {
@@ -3397,13 +3439,11 @@ P.move = {
 	area(area) {
 		push_undo()
 		logi("to S" + area)
+		let could_play_city_ablaze = ((G.active === FRANCE) && is_key_city(area) && !has_troop(area))
+
 		if (is_vp_area(area) && !is_friendly_controlled(G.active, area) && !has_enemy_sp(G.active, area)) {
 			increase_vp(G.active, get_area_vp(area))
 		} 
-
-		if (has_enemy_depot(G.active, area)) {
-			remove_depot(enemy(G.active), area)
-		}
 
 		if ((L.current_area === S_MOSCOW) && is_event_active(PRIDE_AND_HESITATION) && (L.move.leaders.length > 0) && (G.active === FRANCE)) {
 			log(`C${PRIDE_AND_HESITATION}.`)
@@ -3432,11 +3472,6 @@ P.move = {
 
 		if (has_enemy_sp(G.active, area)) {
 			L.confirm_battle = true
-
-			if (is_vp_area(L.current_area) && !is_friendly_controlled(G.active, L.current_area)) {
-				decrease_vp(G.active, get_area_vp(L.current_area))
-			}
-
 			L.current_area = area
 		} else {
 			move_formation(L.move.leaders, L.move.troops, L.move.path[L.move.path.length - 1], area)
@@ -3444,16 +3479,22 @@ P.move = {
 			L.allowance = Math.max(--L.allowance, 0)
 
 			if (is_vp_area(L.current_area) && !is_friendly_controlled(G.active, L.current_area)) {
+				log(`S${L.current_area} abandoned!`)
 				decrease_vp(G.active, get_area_vp(L.current_area))
 			}
 
 			L.current_area = area
 			
-			if ((G.active === FRANCE) && is_key_city(area) && !has_russian_sp(area)) { //If France just took an unnoccupied key city, Russia may play City Ablaze!
+			//https://boardgamegeek.com/thread/3347839/card-22-city-ablaze-russian-card
+			//Russia plays City Ablaze first, depots are checked after (In the case of City Ablaze + depot removal, the depot removal is called from the City Ablaze states)
+			if (could_play_city_ablaze) { //If France just took an unnoccupied key city, Russia may play City Ablaze!
 				call(`russia_may_play_city_ablaze`, { area: area, who: FRANCE })
+			} else if (!has_enemy_sp(G.active, area) && has_enemy_depot(G.active, area)) {
+				call(`confirm_remove_depot`, { area: area })
 			}
 		}	
 
+		//This is mutually exclusive from City Ablaze! and removing an enemy depot since those two require that the area has no troops
 		if (determine_seniority.length > 0) call("determine_seniority", { leaders: determine_seniority })
 	}, 
 	done() {
@@ -3462,15 +3503,79 @@ P.move = {
 		end()
 	},
 	confirm() {
-		move_formation(L.move.leaders, L.move.troops, L.move.path[L.move.path.length - 1], L.current_area)
+		let previous_area = L.move.path[L.move.path.length - 1]
+		move_formation(L.move.leaders, L.move.troops, previous_area, L.current_area)
 		L.move.path.push(L.current_area)
-		mark_already_moved(G.active, L.move.path[L.move.path.length - 1], L.move.leaders, L.move.troops)
+
+		if (is_vp_area(previous_area) && !is_friendly_controlled(G.active, previous_area)) {
+			log(`S${previous_area} abandoned!`)
+			decrease_vp(G.active, get_area_vp(previous_area))
+		}
+
+		mark_already_moved(G.active, previous_area, L.move.leaders, L.move.troops)
 		end()
 	}
-} 
+}
+
+P.confirm_remove_depot = {
+	//L.area
+	prompt() {
+		prompt(`${ROLES[enemy(G.active)]} needs to remove a depot from S${L.area}. Confirm move? (cannot be undone).`) 
+		button_confirm()
+	},
+	confirm() {
+		G.active = enemy(G.active)
+		goto("remove_depot", { area: L.area })
+	},
+}
+
+P.remove_depot = {
+	_begin() {
+		//L.area
+		L.has_removed_depot = false
+		L.has_discarded = false
+	},
+	prompt() {
+		if (!L.has_removed_depot) {
+			prompt(`Remove depot from S${L.area}.`)
+			action("depot", find_depot_at_location(G.active, L.area))
+		} else if (!L.has_discarded) {
+			if (count_non_dummy_cards_in_hand(G.active) > 0) {
+				prompt(`Discard a card from your hand.`)
+				for (let c of get_hand(G.active)) 
+					if (!is_card_dummy(c)) action_card(c)
+			} else {
+				prompt(`No cards in hand to discard.`)
+				button_pass()
+			}
+		} else {
+			prompt(`Remove depot: All done.`)
+			button_done()
+		}
+	},
+	depot(depot) {
+		push_undo()
+		remove_depot(depot, get_depot_location(depot))
+		L.has_removed_depot = true
+	},
+	card(card) {
+		push_undo()
+		discard_card(card)
+		log(`${ROLES[G.active]} discarded a card.`)
+		L.has_discarded = true
+	},
+	pass() {
+		push_undo()
+		L.has_discarded = true
+	},
+	done() {
+		G.active = enemy(G.active)
+		end()
+	}
+}
 
 function has_enemy_depot(who, area) {
-	return G.depots[enemy(who)].some(a => (a === area))
+	return get_depots(enemy(who)).some(a => (a === area))
 }
 
 function has_friendly_leader(who, space) {
@@ -3562,7 +3667,6 @@ P.cavalry_patrols = script(`
 		call execute_cavalry_patrols { first_player: L.$ }
 		set G.active FRANCE
 		call may_play_good_leadership
-		eval { finish("WIP", "exit code 0") }
 	}
 `)
 
@@ -3581,7 +3685,7 @@ P.execute_cavalry_patrols = {
 		L.orders_by_side = [L.forced_march_orders.filter(o => get_order_owner(o) === RUSSIA), L.forced_march_orders.filter(o => get_order_owner(o) === FRANCE)]
 
 		for (let who = RUSSIA; who <= FRANCE; ++who) {
-			L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order)) && has_troop_that_can_execute_cavalry_patrols(G.active, get_order_location(order)))
+			L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order)) && has_troop_that_can_execute_cavalry_patrols(who, get_order_location(order)))
 		}
 	},
 	prompt() {
@@ -3606,7 +3710,7 @@ P.execute_cavalry_patrols = {
 		log_h3(`S${area}`, G.active)
 		remove_order(order)
 		L.current_order = order
-		if (G.active === RUSSIA)
+		if ((G.active === RUSSIA) && get_hand(RUSSIA).includes(CONFUSED_RETREAT))
 			call("may_play_confused_retreat", { area })
 		else
 			call("do_cavalry_patrols", { area })
@@ -3681,7 +3785,6 @@ P.do_cavalry_patrols = {
 			if (decode_troop_entry_who(entry) === enemy(G.active))
 				log(`<${decode_troop_entry_num(entry)} ${get_troop_type_name(decode_troop_entry_type(entry))}`)
 		}
-		log()
 		logi("Orders")
 		if (get_orders_at_area(enemy(G.active), L.selected_area).length === 0)
 			log("<No orders.")
@@ -3704,6 +3807,96 @@ P.do_cavalry_patrols = {
 }
 
 //=== 7. EXECUTE MARCH ORDERS ===
+/*
+	RUSSIA
+		#14 Extreme Weather - 1 fresh SP becomes exhausted
+
+	FRANCE
+		#9 Fast Marching - Move 2, but one fresh SP becomes exhausted
+		#10 Fast Marching - Move 2, but one fresh SP becomes exhausted
+		#37 Poniatowski's V Corps - Immediately rally 2 exhausted Infantry SPs in the moving force
+		#42 Extreme Weather - 1 fresh SP becomes exhausted
+*/
+
+P.march = script(`
+	log "@Execute Marches"
+
+	if (get_placed_orders_of_type(MARCH).length === 0) {
+		log "No march orders placed."
+	} else {
+		call determine_who_goes_first { order_type: MARCH }
+		call switch_orders { current_order_type: MARCH }
+		call execute_marches { first_player: L.$ }
+		eval { finish("WIP", "exit code 0") }
+	}
+`)
+
+P.execute_marches = {
+	_begin() {
+		//L.first_player
+		G.active = L.first_player
+		L.has_passed = [false, false]
+		L.current_order = -1
+		L.has_executed_order = false
+		L.forced_march_orders = get_placed_orders_of_type(MARCH)
+		L.orders_by_side = [L.forced_march_orders.filter(o => get_order_owner(o) === RUSSIA), L.forced_march_orders.filter(o => get_order_owner(o) === FRANCE)]
+		
+		for (let who = RUSSIA; who <= FRANCE; ++who) {
+			L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order)))
+		}		
+	},
+	prompt() {
+		if (L.orders_by_side[G.active].length === 0) {
+			prompt(`Execute March orders: All done.`)
+			button_done()
+		} else {
+			if (L.has_executed_order) {
+				prompt(`Execute March order: All done.`)
+				button_confirm()
+			} else {
+				prompt(`Select a March order to execute: ${join_array_with_or(L.orders_by_side[G.active].map(order => `S${get_order_location(order)}`))}`)
+				for (let order of L.orders_by_side[G.active]) 
+					if (has_friendly_troop(G.active, get_order_location(order)))
+						action_order(order)
+			}
+		}
+	},
+	order(order) {
+		push_undo()
+		let area = get_order_location(order)
+		remove_order(order)
+		L.current_order = order
+		call("select_force", { type: MARCH, area: area})
+	},
+	_resume() {
+		L.has_executed_order = true
+		//Remove orders that cannot be executed now
+		L.orders_by_side[G.active] = L.orders_by_side[G.active].filter(order => has_friendly_troop(G.active, get_order_location(order)) && (get_all_movable_troops_in_area(G.active, get_order_location(order)).some(type => type > 0)))
+	},
+	confirm() {
+		push_undo()
+		set_delete(L.orders_by_side[G.active], L.current_order)
+		if (!L.has_passed[enemy(G.active)]) G.active = enemy(G.active)
+		
+		L.has_executed_order = false
+		L.current_order = -1
+	},
+	done() {
+		L.has_passed[G.active] = true
+		log(`${ROLES[G.active]} passed.`)
+
+		L.has_executed_order = false
+		L.current_order = -1
+
+		if (L.has_passed[RUSSIA] && L.has_passed[FRANCE]) {
+			log()
+			end()
+		} else {
+			G.active = enemy(G.active)
+		}
+	}
+}
+
 
 //=== 8. EXECUTE EVADE ORDERS ===
 
@@ -3749,8 +3942,8 @@ function get_supply_sources(who) {
 
 function get_supply_sources_and_depots(who) {
 	let sources = get_supply_sources(who)
-	for (let area of G.depots[who]) 
-		if (area !== POOL) 
+	for (let area of get_depots(who)) 
+		if ((area !== POOL) && (area !== OUT_OF_PLAY)) 
 			set_add(sources, area)
 	return sources
 }
@@ -3807,7 +4000,7 @@ function check_lines_of_communication(who) {
 	let sources = get_supply_sources(who) //Starting supply sources without depots
 
 	let depots = [] //Set of depot spaces for efficient lookup
-	for (let depot of G.depots[who].filter(s => s !== POOL)) {
+	for (let depot of get_depots(who).filter(s => (s !== POOL) && (s !== OUT_OF_PLAY))) {
 		set_add(depots, depot)
 	}
 
@@ -4704,8 +4897,12 @@ P.may_play_city_ablaze = {
 		goto("event_22", { card: card, area: L.area })
 	},
 	pass() {
-		G.active = FRANCE
-		end()
+		if (!has_friendly_troop(RUSSIA, L.area) && has_friendly_depot(RUSSIA, L.area)) {
+			goto("remove_depot", {area: L.area})
+		} else {
+			G.active = FRANCE
+			end()
+		}
 	}
 }
 
@@ -4770,9 +4967,17 @@ P.event_22 = {
 		++L.step
 	},
 	done() {
-		G.active = FRANCE
-		end()
+		if (!has_friendly_troop(RUSSIA, L.area) && has_friendly_depot(RUSSIA, L.area)) {
+			goto("remove_depot", {area: L.area})
+		} else {
+			G.active = FRANCE
+			end()
+		}
 	}
+}
+
+function has_friendly_depot(who, area) {
+	return get_depots(who).some(location => location === area)
 }
 
 function is_area_in_supply(who, area) {
@@ -5422,6 +5627,14 @@ P.may_play_good_leadership = {
 	}
 }
 
+function could_switch_order(who) {
+	for (let order = FIRST_ORDER; order <= LAST_ORDER; ++order) {
+		if ((get_order_type(order) !== DUMMY_ORDER) && (get_order_location(order) !== POOL) && (get_order_location(order) !== OUT_OF_PLAY) && (has_friendly_troop(FRANCE, get_order_location(order))))
+			return true
+	}
+	return false
+}
+
 P.event_79 = {
 	_begin() {
 		card_box_begin(GOOD_LEADERSHIP)
@@ -5448,7 +5661,7 @@ P.event_79 = {
 			} else {
 				prompt_card(GOOD_LEADERSHIP, "Select an order to change.")
 				for (let order = FIRST_ORDER; order <= LAST_ORDER; ++order) {
-					if ((get_order_location(order) !== POOL) && (get_order_location(order) !== OUT_OF_PLAY) && (has_friendly_troop(FRANCE, get_order_location(order))))
+					if ((get_order_type(order) !== DUMMY_ORDER) && (get_order_location(order) !== POOL) && (get_order_location(order) !== OUT_OF_PLAY) && (has_friendly_troop(FRANCE, get_order_location(order))))
 						action_order(order)
 				}
 			}
@@ -5484,6 +5697,7 @@ P.event_79 = {
 	place_order() {
 		push_undo()
 		L.choice = "place"
+		++L.step
 	},
 	change_order() {
 		push_undo()
@@ -5497,15 +5711,17 @@ P.event_79 = {
 				L.selected_order = order
 			} else {
 				L.switch_area = get_order_location(order)
-				remove_order(order)
 
 				log_only(FRANCE, "Changed")
 				log_only(FRANCE, `>S${get_order_location(order)}`)
 				log_only(FRANCE, "<" + get_order_name(order))
 				log_only(RUSSIA, `Changed an order at S${get_order_location(order)}.`)
+
+				remove_order(order)
 			}
 		} else {
 			place_order(order, L.switch_area)
+			log_only(FRANCE, `<to ${ get_order_name(order)}`)
 		}
 		++L.step
 	},
@@ -5537,6 +5753,92 @@ P.event_79 = {
 	done() {
 		card_box_end()
 		end()
+	}
+}
+
+function is_exhausted_infantry(type) {
+	return is_infantry(type) && is_troop_type_exhausted(type)
+}
+
+function count_num_exhausted_infantry(who, area) {
+	let count = 0
+	for (let entry of get_area_troop_set(area, null)) {
+		if ((decode_troop_entry_who(entry) === who) && is_exhausted_infantry(decode_troop_entry_type(entry)))
+			count += decode_troop_entry_num(entry)
+	}
+	return count
+}
+
+// FR #37: Poniatowski's V Corps
+P.may_play_poniatowskis_v_corps = {
+	inactive: "play C91",
+	prompt() {
+		if (get_hand(FRANCE).includes(PONIATOWSKIS_V_CORPS)) {
+			prompt(`You may play C${PONIATOWSKIS_V_CORPS}.`)
+			action_card(PONIATOWSKIS_V_CORPS)
+			button_pass()
+		} else {
+			prompt(`You do not have C${PONIATOWSKIS_V_CORPS}.`)
+			button_pass()
+		}
+	},
+	card(card) {
+		push_undo()
+		goto(`event_${card}`, { move: L.move })
+	},
+	pass() {
+		push_undo()
+		goto("move", { move: L.move })
+	}
+}
+
+
+P.event_91 = {
+	_begin() {
+		//L.move
+		L.has_exhausted_infantry_sp = [EXHAUSTED_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY].some(type => L.move.troops[type] > 0)
+		L.count = 0
+		for (let type of [EXHAUSTED_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY])
+			L.count += L.move.troops[type]
+		L.has_rallied = false
+		card_box_begin(PONIATOWSKIS_V_CORPS)
+	},
+	prompt() {
+		if (!L.has_exhausted_infantry_sp) {
+			prompt_card(PONIATOWSKIS_V_CORPS, "No exhausted infantry in the moving force to rally.")
+			button_pass()
+		} else if (L.count === 0) {
+			prompt_card(PONIATOWSKIS_V_CORPS, "All done.")
+			button_done()
+		} else {
+			prompt_card(PONIATOWSKIS_V_CORPS, `Rally exhausted infantry SPs in the moving force (${L.count} remaining).`)
+			for (let type of [EXHAUSTED_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY])
+				if (L.move.troops[type] > 0)
+					action("troop", type)
+		}
+	},
+	troop(type) {
+		push_undo()
+		rally_troop(G.active, L.move.path[L.move.path.length - 1], type)
+		--L.move.troops[type]
+		++L.move.troops[type - 1]
+		log("Rallied")
+		logi(`S${L.move.path[L.move.path.length -1]}`)
+		log("<1 Exh. Infantry")
+		--L.count
+	},
+	pass() {
+		push_undo()
+		log("No exhausted SPs to rally.")
+		card_box_end()
+		discard_or_remove_card(PONIATOWSKIS_V_CORPS)
+		goto("move", { move: L.move })
+	},
+	done() {
+		push_undo()
+		card_box_end()
+		discard_or_remove_card(PONIATOWSKIS_V_CORPS)
+		goto("move", { move: L.move })
 	}
 }
 
@@ -5592,7 +5894,7 @@ P.event_94 = {
 	},
 	area(area) {
 		push_undo()
-		remove_depot(G.active, area)
+		remove_depot_from_area(G.active, area)
 		logi(`S${area}`)
 	},
 	next() {
@@ -5653,7 +5955,7 @@ P.event_98 = {
 		L.selected_area = -1
 	},
 	prompt() {
-		if (G.depots[FRANCE].some(depot => (depot !== POOL) && (depot !== OUT_OF_PLAY))) {
+		if (get_depots(FRANCE).some(depot => (depot !== POOL) && (depot !== OUT_OF_PLAY))) {
 			if (L.step === -1) {
 				prompt_card(CHAOTIC_FOOD_DISTRIBUTION, "Remove a French depot from map.")
 				for (let area of get_areas_with_depots(FRANCE)) {
@@ -5686,7 +5988,7 @@ P.event_98 = {
 	area(area) {
 		push_undo()
 		L.selected_area = area
-		remove_depot(FRANCE, area)
+		remove_depot_from_area(FRANCE, area)
 		log("Removed depot")
 		logi(`S${area}`)
 		++L.step

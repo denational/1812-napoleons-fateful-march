@@ -7,6 +7,7 @@
     pg 5 - "Leaders are eliminated if they are ever in an area with no friendly SPs. "
 3. Are non-Russian key cities eligible for Holy Mother Russia (FR)
 4. Are cavalry patrols orders that are not executed because there are no enemy troops in the vicinity removed?
+5. Can you place Forced March/Cavalry Patrols with Good Leadership?
 
 ## Known Bugs (to fix at a later time)
 1. can_play_event() is broken and always returns true - this is useful now for testing events, so I'll let it be
@@ -22,7 +23,10 @@
 11. ~~Molodechno is not adjacent to Minsk?~~
 12. energetic leadership is not enforced
 13. ~~move - update vp for vp cities~~
-14. new posting - check seniority for equal leaders
+14. new posting/good leadership - check seniority for equal leaders
 15. ~~evasive maneuvers not implemented~~
 16. depot removed -> must discard card
 17. bagration's retreat
+18. leaders can be left behind alone
+19. ~~cavalry leader mat layout has same issue as special layout~~
+20. good leadership - no more actions select order if no orders executable

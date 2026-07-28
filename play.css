@@ -234,7 +234,10 @@ body.Russia header.your_turn {background-color: var(--russia);}
     z-index: 1;
 }
 
-.subordinate_special > .piece.guard, .subordinate_special > .piece.cossack {
+.leader_board > * > .piece.guard, 
+.leader_board > * > .piece.cossack, 
+.leader_board > * > .piece.infantry, 
+.leader_board > * > .piece.cavalry {
 	position: relative;
 }
 
