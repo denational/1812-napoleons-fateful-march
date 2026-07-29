@@ -13,6 +13,12 @@ function get_nation_id(nation) {
 	throw new Error (`Nation ${nation} not found!`)
 }
 
+function process_name(name) {
+	if (name === "Dunaburg") return "Dünaburg"
+	return name
+}
+
+
 //=== SPACES ===
 const names = 'names.csv'
 const connections = 'mapped_connections.csv'
@@ -35,7 +41,7 @@ fs.createReadStream(names)
 		} = row
 		data.areas.push({
 			id: Number(id),
-			name: (name === "Dunaburg") ? "Dünaburg" : name, //handling the umlaut here since the csv messes it up
+			name: process_name(name),
 			type,
 			fortress: ((Number(fortress) === 1) ? true : false),
 			nation: (nation === '') ? null : get_nation_id(nation),

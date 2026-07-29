@@ -328,6 +328,15 @@ const NOV_5 = 30
 var num_devastated = 0
 
 /* MISC FUNCTIONS */
+function process_area_name(name) {
+	name = name.replace(/(Grand Duchy of Warsaw|Prussia) (North|South)/, "$1")
+	name = name.replace(/^Unnamed\W.*/, "Unnamed")
+	name = name.replace(/^Vladimir\W.*/, "Vladimir")
+
+	return name
+}
+
+
 function get_pool_depots(side) {
 	return (side === RUSSIA) ? "ru_pool_depots" : "fr_pool_depots"
 }
@@ -348,7 +357,7 @@ function on_init() {
    
 	/* SPACES */
 	for (let s = 1; s < area_length; s++) {
-		define_space("area", s, layout[get_area_name(s)]).tooltip(get_area_name(s))
+		define_space("area", s, layout[get_area_name(s)]).tooltip(`${process_area_name(get_area_name(s))} (${areas[s].zone})`)
 		define_stack("area_stack", s, layout[get_area_name(s)], -20, -20, 0, -58, 0, 36, 1, 4, 0.5, 0.5)
 		define_stack("orders_stack", s, translate_right(layout[get_area_name(s)], 52), 0, -60, 0, -12)
 	}
@@ -568,8 +577,6 @@ function update_leaders() {
 			populate("fr_casualties", 0, "leader", leader); break
 		default:
 			if (is_seniormost_leader(leader, get_leader_location(leader))) {
-				console.log(V.leaders)
-				console.log(leader)
 				populate("area_stack", get_leader_location(leader), "leader", leader)
 				populate("leaders", get_leader_faction(leader), "leader_board", leader)
 			} else {
@@ -664,7 +671,7 @@ function escape_text(text) {
 	escape_html(text)
 	escape_typography(text)
 	text = escape_tip_class_sub(text, /C(\d+)/g, "tip", "card card_$1", data.cards.map(card => card.name))
-	text = escape_tip_light(text, /S(\d+)/g, "area-tip", "area", data.areas.map(s => `${s.name} (${s.zone})`))
+	text = escape_tip_light(text, /S(\d+)/g, "area-tip", "area", data.areas.map(s => `${process_area_name(s.name)} (${s.zone})`))
 	text = escape_tip_light(text, /L(\d+)/g, "tip", "leader", data.leaders.map(leader => leader.log_name))
 	return text
 }

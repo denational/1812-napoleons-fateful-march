@@ -10,7 +10,7 @@
 5. Can you place Forced March/Cavalry Patrols with Good Leadership?
 
 ## Known Bugs (to fix at a later time)
-1. can_play_event() is broken and always returns true - this is useful now for testing events, so I'll let it be
+1. ~~can_play_event() is broken and always returns true - this is useful now for testing events, so I'll let it be~~
 2. ~~seniority needs to be enforced~~
 3. attrition has not been done yet - as are events depending on attrition losses
 4. ~~mark_already_moved() will overwrite - need to rewrite to add, not duplicate~~
@@ -30,3 +30,4 @@
 18. leaders can be left behind alone
 19. ~~cavalry leader mat layout has same issue as special layout~~
 20. good leadership - no more actions select order if no orders executable
+21. hard marching, fast marching, exhausting march losses not yet applied
