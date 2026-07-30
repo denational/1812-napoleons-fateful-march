@@ -1149,12 +1149,9 @@ function add_troop(who, area, type, num) {
 }
 
 function remove_troop(who, area, type, num) {
-	console.log("here!")
 	let entry = get_troop_entry(who, area, type, null)
 	if (entry !== null) {
 		let remaining_troop_count = decode_troop_entry_num(entry)
-		console.log(remaining_troop_count)
-
 		if (remaining_troop_count < num) {
 			throw new Error(`Need to remove ${num} troops of ${who} ${type} at ${area}. Only ${remaining_troop_count} found.`)
 		}
@@ -1343,6 +1340,7 @@ function on_setup(scenario, options) {
 		shuffle(G.deck[who])
 	}
 
+	G.platov_order = -1
 	//G.supply = [calculate_distance_to_nearest_depot(RU), calculate_distance_to_nearest_depot(FR)]
 
 	G.active = [RUSSIA, FRANCE]
@@ -2542,15 +2540,15 @@ const STATE_SELECT_ORDERS_MAIN = 9
 
 const CHOOSE_ORDERS_STATE_TRANSITIONS = [
 	function(who) { return (who === RUSSIA) && is_leader_on_map(PLATOV) },
-	function(who) { return true },
-	function(who) { return true },
+	function() { return true },
+	function() { return true },
 	function(who) { return (who === FRANCE) && (get_current_turn() === JUNE_5) },
 	function(who) { return (who === RUSSIA) && is_event_active(SCORCHED_EARTH) },
 	function(who) { return (who === RUSSIA) && is_event_active(KUTUZOV_APPOINTED) },
 	function(who) { return (who === FRANCE) && is_event_active(HARD_MARCHING_1) },
 	function(who) { return (who === FRANCE) && is_event_active(HARD_MARCHING_2) },
 	function(who) { return (who === FRANCE) && false /*TODO is_increased_french_command_capability()*/ },
-	function(who) { return true },
+	function() { return true },
 ]
 
 P.select_orders = {
@@ -2637,6 +2635,10 @@ P.select_orders = {
 	order(order_id) {
 		G.selected_orders[R].push(order_id)
 		switch(L.state[R]) {
+		case STATE_SELECT_FREE_ORDER_PLATOV: //Saving Platov choice for enforcement in 'Place Orders'
+			G.platov_order = order_id
+			this.update_state(R)
+			return
 		case STATE_SELECT_DUMMY_ORDERS: //Change states only after all 4 Dummies are placed
 			if (--L.count[R] <= 0) this.update_state(R) 
 			return
@@ -2691,6 +2693,8 @@ P.select_orders = {
 			else if (L.state[R] === STATE_FRENCH_LOGISTIC_PREPARATIONS)
 				L.already_selected[R].pop()
 		}
+
+		if (L.state[R] === STATE_SELECT_FREE_ORDER_PLATOV) G.platov_order = -1
 	},
 	update_state(who) {
 		for (let state = L.state[who] + 1; state <= CHOOSE_ORDERS_STATE_TRANSITIONS.length; ++state) { //Pick the next state, in the order of states defined above that could be performed
@@ -2710,6 +2714,10 @@ P.select_orders = {
 }
 
 //=== 4. PLACE ORDERS ===
+/*
+	AIM: Finish events & refactor place orders
+*/
+
 //TODO: Allow alternating placing orders (implementing simultaneous optional rule as default for expediency)
 P.place_orders = script(`
 	log "@Place Orders"
@@ -2730,7 +2738,9 @@ P.place_orders = script(`
 	call place_orders_events { time: "end" }
 `)
 
-P.place_orders_events = {
+//Common state for events that could be played at the beginning of place orders or end of place orders
+//The structure is identical, just the list of events that could be played vary and the player taking actions (beginning: FRANCE, end: RUSSIA)
+P.place_orders_events = { 
 	_begin() {
 		//L.time
 		L.events = (L.time === "beginning") ? [INFIGHTING_AND_INTRIGUE, LETHARGIC_PURSUIT] : [NEW_POSTING, EXHAUSTED_HORSES, DISORDERLY_MARCH]
@@ -2740,7 +2750,8 @@ P.place_orders_events = {
 	prompt() {
 		if (L.events.length > 0) {
 			prompt(`You may play events (${L.events.map(card => `C${card}`).join(", ")}).`)
-			for (let c of L.events) action_card(c)
+			for (let c of L.events) 
+				action_card(c)
 			button_pass()
 		} else {
 			if (L.has_played_event)
@@ -2763,14 +2774,23 @@ P.place_orders_events = {
 //TODO: implement orders that must be placed on a specific spot (e.g. Platov, french optional rule)
 P.do_place_orders = {
 	_begin() {
-		L.orders_to_place = G.selected_orders.slice() //So that we can use the same client 'selected' code to highlight orders in this state
-		L.orders_placed = [[], []] //Local undo stack to pop last order back into orders_to_place
+		L.orders_to_place = G.selected_orders.slice() //Copy selected orders
+		L.selected_order = [-1, -1] //The order that each player has currently selected
 
-		L.selected_order = [-1, -1] //Who has what order currently selected
+		L.state = ["", ""]
+		L.state[RUSSIA] = is_leader_on_map(PLATOV) ? "place_platov_order" : "place_orders_main"
+		L.state[FRANCE] = false /*is_increased_french_command_capability()*/ ? "place_increased_french_command_capability_order" : "place_orders_main"
 
+		L.orders_placed = [[], []] //Undo stack
+
+		//Easier lookup for subsequent states (orders indexed by their type)
 		G.orders_by_type = []
-		for (let i = 0; i < NUM_ORDER_TYPES; ++i) G.orders_by_type.push([]) //Organized for easy lookup in subsequent states
-		G.selected_orders = [[], []] //Resetting the old selected orders container
+		for (let i = 0; i < NUM_ORDER_TYPES; ++i) G.orders_by_type.push([])
+
+		G.selected_orders = [[], []]
+	},
+	is_french_logistic_preparations() {
+		return (G.turn === JUNE_5) && (R === FRANCE) && (get_order_type(L.selected_order[R]) === PLACE_DEPOT)
 	},
 	prompt() {
 		if (L.orders_to_place[R].length === 0) {
@@ -2778,22 +2798,43 @@ P.do_place_orders = {
 			button_confirm()
 		}
 		else if (L.selected_order[R] === -1) {
-			prompt(`Select an order to place (${L.orders_to_place[R].length} remaining).`)
-			for (let order of L.orders_to_place[R]) action_order(order)
+			if (L.state[R] === "place_platov_order") {
+				prompt_leader(PLATOV, `Select a ${get_order_name(G.platov_order)} order.`)
+				for (let order of L.orders_to_place[R])
+					if (get_order_type(order) === get_order_type(G.platov_order))
+						action_order(order)
+			}
+			else if (L.state[R] === "place_increased_french_command_capability_order") {
+				prompt(`Increased French Command Capability: Select a Cavalry Patrols order.`)
+				for (let order of L.orders_to_place[R])
+					if (get_order_type(order) === CAVALRY_PATROLS)
+						action_order(order)
+			}
+			else {
+				prompt(`Select an order to place (${L.orders_to_place[R].length} remaining).`)
+				for (let order of L.orders_to_place[R]) action_order(order)
+			}
 		}
 		else {
-			if ((G.turn === JUNE_5) && (R === FRANCE) && (get_order_type(L.selected_order[R]) === PLACE_DEPOT)) { //French Logistic Preparations special rule
-				prompt(`Place ${get_order_name(L.selected_order[R])} in any area with friendly SPs, or Kovno.`)
-				action_area(S_KOVNO)
-			} else {
-				prompt(`Place ${get_order_name(L.selected_order[R])} in any area with friendly SPs.`)
+			if (L.state[R] === "place_platov_order") {
+				prompt_leader(PLATOV, `Place ${get_order_name(G.platov_order)} at S${get_leader_location(PLATOV)}.`)
+				action_area(get_leader_location(PLATOV))
 			}
+			else if (L.state[R] === "place_increased_french_command_capability_order") {
+				prompt(`Increased French Command Capability: Place a 'Cavalry Patrols' order at S${get_leader_location(NAPOLEON)}.`)
+				action_area(get_leader_location(NAPOLEON))
+			}
+			else {
+				if (this.is_french_logistic_preparations()) //French Logistic Preparations special rule
+					prompt(`French Logistic Preparations: Place ${get_order_name(L.selected_order[R])} in any area with friendly SPs, or Kovno.`)
+				else
+					prompt(`Place ${get_order_name(L.selected_order[R])} in any area with friendly SPs.`)
 
-			for (let area = FIRST_AREA; area <= LAST_AREA; ++area)
-				if (has_friendly_troop(R, area)) 
-					action_area(area)
+				for (let area = FIRST_AREA; area <= LAST_AREA; ++area)
+					if (has_friendly_troop(R, area) || (this.is_french_logistic_preparations() && (area === S_KOVNO)) )
+						action_area(area)
+			}
 		}
-
 		button_undo((L.orders_placed[R].length > 0) || (L.selected_order[R] !== -1))
 	},
 	order(order) {
@@ -2810,6 +2851,7 @@ P.do_place_orders = {
 		L.orders_placed[R].push(L.selected_order[R])
 
 		L.selected_order[R] = -1
+		if (L.state[R] !== "place_orders_main") L.state[R] = "place_orders_main"
 	},
 	undo() {
 		if (L.selected_order[R] > -1) { //i.e. has an order selected
@@ -2823,6 +2865,11 @@ P.do_place_orders = {
 			G.selected_orders[R].push(L.selected_order[R])
 
 			L.orders_to_place[R].push(L.selected_order[R])
+			if (L.orders_placed[R].length === 0)
+				if ((R === RUSSIA) && (is_leader_on_map(PLATOV)))
+					L.state[R] = "place_platov_order"
+				else if ((R === FRANCE) && (false /*is_increased_french_command_capability()*/ )) //TO REPLACE AFTER ADDING OPTIONAL RULES
+					L.state[R] = "place_increased_french_command_capability_order"
 		}
 	},
 	confirm() {
@@ -2849,7 +2896,7 @@ P.do_place_orders = {
 			})
 			log()
 
-			end()
+			finish("WIP", "exit code 0")
 		}
 	}
 }
