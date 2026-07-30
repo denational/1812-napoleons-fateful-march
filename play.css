@@ -116,6 +116,27 @@ body.Russia header.your_turn {background-color: var(--russia);}
     text-decoration: underline;
 }
 
+/* DICE */
+.dice.battle_fr, .dice.battle_ru {
+	background-size: contain;
+	border: none;
+	width: 14px;
+	height: 14px;
+}
+
+.dice.battle_fr.d1 {background-image: url(pieces/dice/fr_battle_1.png);}
+.dice.battle_fr.d2 {background-image: url(pieces/dice/fr_battle_2.png);}
+.dice.battle_fr.d3 {background-image: url(pieces/dice/fr_battle_3.png);}
+.dice.battle_fr.d4 {background-image: url(pieces/dice/fr_battle_4.png);}
+.dice.battle_fr.d5 {background-image: url(pieces/dice/fr_battle_5.png);}
+.dice.battle_fr.d6 {background-image: url(pieces/dice/fr_battle_6.png);}
+
+.dice.battle_ru.d1 {background-image: url(pieces/dice/ru_battle_1.png);}
+.dice.battle_ru.d2 {background-image: url(pieces/dice/ru_battle_2.png);}
+.dice.battle_ru.d3 {background-image: url(pieces/dice/ru_battle_3.png);}
+.dice.battle_ru.d4 {background-image: url(pieces/dice/ru_battle_4.png);}
+.dice.battle_ru.d5 {background-image: url(pieces/dice/ru_battle_5.png);}
+.dice.battle_ru.d6 {background-image: url(pieces/dice/ru_battle_6.png);}
 
 
 /* ORDER PLANNING MINIBOARD */

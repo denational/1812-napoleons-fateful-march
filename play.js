@@ -517,6 +517,9 @@ function on_update() {
 	action_button("place_order", "Place Order")
 	action_button("change_order", "Change Order")
 
+	action_button("roll", "Roll")
+	action_button("eliminate", "Eliminate")
+
 	action_button("done", "Done")
 	action_button("next", "Next")
 	action_button("draw", "Draw")
@@ -673,6 +676,8 @@ function escape_text(text) {
 	text = escape_tip_class_sub(text, /C(\d+)/g, "tip", "card card_$1", data.cards.map(card => card.name))
 	text = escape_tip_light(text, /S(\d+)/g, "area-tip", "area", data.areas.map(s => `${process_area_name(s.name)} (${s.zone})`))
 	text = escape_tip_light(text, /L(\d+)/g, "tip", "leader", data.leaders.map(leader => leader.log_name))
+
+	text = escape_dice(text, /\b(battle_fr|battle_ru)([0-6])\b/g)
 	return text
 }
 
