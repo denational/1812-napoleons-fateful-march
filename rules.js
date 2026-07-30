@@ -1952,6 +1952,7 @@ P.turn = script(`
 	call forced_march
 	call cavalry_patrols
 	call march
+	call evade
 	call resolve_battles
 `)
 
@@ -2896,7 +2897,7 @@ P.do_place_orders = {
 			})
 			log()
 
-			finish("WIP", "exit code 0")
+			end()
 		}
 	}
 }
@@ -3328,7 +3329,11 @@ P.forced_march = script(`
 	} else {
 		call determine_who_goes_first { order_type: FORCED_MARCH }
 		call switch_orders { current_order_type: FORCED_MARCH }
-		call execute_forced_marches { first_player: L.$ }
+		if (is_event_active(EVASIVE_MANEUVERS)) {
+			goto (event_ + EVASIVE_MANEUVERS)
+		} else {
+			call execute_forced_marches { first_player: L.$ }
+		}
 	}
 `)
 
@@ -3406,6 +3411,114 @@ P.execute_forced_marches = {
 	}
 }
 
+//=== 7. EXECUTE MARCH ORDERS ===
+/*
+	RUSSIA
+		RU #14 Extreme Weather 			- 1 fresh SP becomes exhausted
+
+	FRANCE
+		FR #9 Fast Marching				- Move 2, but one fresh SP becomes exhausted
+		FR #10 Fast Marching 			- same as #9
+		FR #37 Poniatowski's V Corps 	- Immediately rally 2 exhausted Infantry SPs in the moving force
+		FR #42 Extreme Weather 			- 1 fresh SP becomes exhausted
+*/
+
+P.march = script(`
+	log "@Execute Marches"
+
+	if (get_placed_orders_of_type(MARCH).length === 0) {
+		log "No march orders placed."
+	} else {
+		call determine_who_goes_first { order_type: MARCH }
+		call switch_orders { current_order_type: MARCH }
+		call execute_marches { first_player: L.$ }
+	}
+`)
+
+P.execute_marches = {
+	_begin() {
+		//L.first_player
+		G.active = L.first_player
+		L.has_passed = [false, false]
+		L.current_order = -1
+		L.has_executed_order = false
+		L.forced_march_orders = get_placed_orders_of_type(MARCH)
+		L.orders_by_side = [L.forced_march_orders.filter(o => get_order_owner(o) === RUSSIA), L.forced_march_orders.filter(o => get_order_owner(o) === FRANCE)]
+		
+		for (let who = RUSSIA; who <= FRANCE; ++who) {
+			L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order)))
+		}		
+	},
+	prompt() {
+		if (L.orders_by_side[G.active].length === 0) {
+			prompt(`Execute March orders: All done.`)
+			button_done()
+		} else {
+			if (L.has_executed_order) {
+				prompt(`Execute March order: All done.`)
+				button_confirm()
+			} else {
+				prompt(`Select a March order to execute: ${join_array_with_or(L.orders_by_side[G.active].map(order => `S${get_order_location(order)}`))}`)
+				for (let order of L.orders_by_side[G.active]) 
+					if (has_friendly_troop(G.active, get_order_location(order)))
+						action_order(order)
+			}
+		}
+	},
+	order(order) {
+		push_undo()
+		let area = get_order_location(order)
+		remove_order(order)
+		L.current_order = order
+		call("select_force", { type: MARCH, area: area})
+	},
+	_resume() {
+		L.has_executed_order = true
+		//Remove orders that cannot be executed now
+		L.orders_by_side[G.active] = L.orders_by_side[G.active].filter(order => has_friendly_troop(G.active, get_order_location(order)) && (get_all_movable_troops_in_area(G.active, get_order_location(order)).some(type => type > 0)))
+	},
+	confirm() {
+		push_undo()
+		set_delete(L.orders_by_side[G.active], L.current_order)
+		if (!L.has_passed[enemy(G.active)]) G.active = enemy(G.active)
+		
+		L.has_executed_order = false
+		L.current_order = -1
+	},
+	done() {
+		L.has_passed[G.active] = true
+		log(`${ROLES[G.active]} passed.`)
+
+		L.has_executed_order = false
+		L.current_order = -1
+
+		if (L.has_passed[RUSSIA] && L.has_passed[FRANCE]) {
+			log()
+			end()
+		} else {
+			G.active = enemy(G.active)
+		}
+	}
+}
+
+//=== MOVEMENT (COMMON TO FORCED MARCH AND MARCH) ===
+/*
+	Events:
+		RUSSIA
+			RU #15	Pride and Hesitation	- Russia +1VP if 1+ french leaders leave moscow
+			RU #22	City Ablaze!			- when France gain control of a key city
+			RU #48	Disorderly March		- France must stop after entering/exiting space
+
+		FRANCE
+			FR #1	Hard Marching			- 1 SP exhausted after moving; fight at X1
+			FR #2	Hard Marching			- same as #1
+			FR #4	Holy Mother Russia		- when a RU force exits the key city
+			FR #9 Fast Marching 			- Move 2, but one fresh SP becomes exhausted
+			FR #10 Fast Marching 			- Move 2, but one fresh SP becomes exhausted
+			FR #53	Lethargic Pursuit		- RU may not enter areas with a french leader
+*/
+
+/* SELECT FORCE */
 function get_all_movable_troops_in_area(who, area) {
 	let list = Array(NUM_TROOP_TYPES).fill(0)
 	if (!has_friendly_troop(who, area)) return list
@@ -3574,23 +3687,7 @@ P.select_force = {
 	}
 }
 
-//=== MOVEMENT (COMMON TO FORCED MARCH AND MARCH) ===
-/*
-	Events:
-		RUSSIA
-			RU #15	Pride and Hesitation	- Russia +1VP if 1+ french leaders leave moscow
-			RU #22	City Ablaze!			- when France gain control of a key city
-			RU #48	Disorderly March		- France must stop after entering/exiting space
-
-		FRANCE
-			FR #1	Hard Marching			- 1 SP exhausted after moving; fight at X1
-			FR #2	Hard Marching			- same as #1
-			FR #4	Holy Mother Russia		- when a RU force exits the key city
-			FR #9 Fast Marching 			- Move 2, but one fresh SP becomes exhausted
-			FR #10 Fast Marching 			- Move 2, but one fresh SP becomes exhausted
-			FR #53	Lethargic Pursuit		- RU may not enter areas with a french leader
-*/
-
+/* MOVE */
 function calculate_move_allowance(who, move_type, troops) {
 	if ((move_type === MARCH) && (who === FRANCE) && (is_event_active(FAST_MARCHING_1) || is_event_active(FAST_MARCHING_2))) return 2
 
@@ -3986,56 +4083,60 @@ P.do_cavalry_patrols = {
 	}
 }
 
-//=== 7. EXECUTE MARCH ORDERS ===
+//=== 8. EXECUTE EVADE ORDERS ===
 /*
+	Events
 	RUSSIA
-		RU #14 Extreme Weather 			- 1 fresh SP becomes exhausted
+		#1 	Well-Disciplined Retreat 						- no exhaustion with Evade orders
+		#27	Unexpected Retreat 			Before				- All Austrian SPs conduct an immediate 'Evade' in areas with Russian SPs. Schwarzenberg may accompany them.
+		#29	Cavalry Screening 			Before				- Place up to 2 'Evade' orders in areas with RU Cavalry/Cossack
 
 	FRANCE
-		FR #9 Fast Marching				- Move 2, but one fresh SP becomes exhausted
-		FR #10 Fast Marching 			- same as #9
-		FR #37 Poniatowski's V Corps 	- Immediately rally 2 exhausted Infantry SPs in the moving force
-		FR #42 Extreme Weather 			- 1 fresh SP becomes exhausted
+		#4 Holy Mother Russia 			During				- FR +1 VP for each RU army that evades from the selected city
+		#7 Unsuccessful Disengagement 	When RU executes	- Cancel all evade orders in one area.
+		#49 Tough Rearguard				When				- No exhaustion suffered, inflict one exhaustion in Russians
+
 */
 
-P.march = script(`
-	log "@Execute Marches"
+P.evade = script(`
+	log "@Execute Evade"
 
-	if (get_placed_orders_of_type(MARCH).length === 0) {
-		log "No march orders placed."
+	if (get_placed_orders_of_type(EVADE).length === 0) {
+		log "No evade placed by either side."
+		log ""
 	} else {
-		call determine_who_goes_first { order_type: MARCH }
-		call switch_orders { current_order_type: MARCH }
-		call execute_marches { first_player: L.$ }
+		call determine_who_goes_first { order_type: EVADE }
+		call switch_orders { current_order_type: EVADE }
+		call execute_evade { first_player: L.$ }
 	}
 `)
 
-P.execute_marches = {
+P.execute_evade = {
 	_begin() {
 		//L.first_player
 		G.active = L.first_player
 		L.has_passed = [false, false]
 		L.current_order = -1
 		L.has_executed_order = false
-		L.forced_march_orders = get_placed_orders_of_type(MARCH)
+		L.forced_march_orders = get_placed_orders_of_type(EVADE)
 		L.orders_by_side = [L.forced_march_orders.filter(o => get_order_owner(o) === RUSSIA), L.forced_march_orders.filter(o => get_order_owner(o) === FRANCE)]
-		
+
 		for (let who = RUSSIA; who <= FRANCE; ++who) {
 			L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order)))
-		}		
+		}
 	},
 	prompt() {
 		if (L.orders_by_side[G.active].length === 0) {
-			prompt(`Execute March orders: All done.`)
+			prompt(`Execute Evade orders: All done.`)
 			button_done()
 		} else {
 			if (L.has_executed_order) {
-				prompt(`Execute March order: All done.`)
+				prompt(`Execute Evade order: All done.`)
 				button_confirm()
 			} else {
-				prompt(`Select a March order to execute: ${join_array_with_or(L.orders_by_side[G.active].map(order => `S${get_order_location(order)}`))}`)
+				prompt(`Select a Evade order to execute: ${join_array_with_or(L.orders_by_side[G.active].map(order => `S${get_order_location(order)}`))}`)
 				for (let order of L.orders_by_side[G.active]) 
-					if (has_friendly_troop(G.active, get_order_location(order)))
+					if (has_troop(get_order_location(order)))
 						action_order(order)
 			}
 		}
@@ -4043,14 +4144,13 @@ P.execute_marches = {
 	order(order) {
 		push_undo()
 		let area = get_order_location(order)
+		log_h3(`S${area}`, G.active)
 		remove_order(order)
 		L.current_order = order
-		call("select_force", { type: MARCH, area: area})
+		call("do_evade", { area })
 	},
 	_resume() {
 		L.has_executed_order = true
-		//Remove orders that cannot be executed now
-		L.orders_by_side[G.active] = L.orders_by_side[G.active].filter(order => has_friendly_troop(G.active, get_order_location(order)) && (get_all_movable_troops_in_area(G.active, get_order_location(order)).some(type => type > 0)))
 	},
 	confirm() {
 		push_undo()
@@ -4063,33 +4163,16 @@ P.execute_marches = {
 	done() {
 		L.has_passed[G.active] = true
 		log(`${ROLES[G.active]} passed.`)
-
 		L.has_executed_order = false
 		L.current_order = -1
 
 		if (L.has_passed[RUSSIA] && L.has_passed[FRANCE]) {
-			log()
 			end()
 		} else {
 			G.active = enemy(G.active)
 		}
 	}
 }
-
-//=== 8. EXECUTE EVADE ORDERS ===
-/*
-	Events
-	RUSSIA
-		#1 	Well-Disciplined Retreat - no exhaustion with Evade orders
-		#27	Unexpected Retreat - All Austrian SPs conduct an immediate 'Evade' in areas with Russian SPs. Schwarzenberg may accompany them.
-		#29	Cavalry Screening - Place up to 2 'Evade' orders in areas with RU Cavalry/Cossack
-
-	FRANCE
-		#4 Holy Mother Russia - FR +1 VP for each RU army that evades from the selected city
-		#7 Unsuccessful Disengagement - Cancel all evade orders in one area.
-		#49 Tough Rearguard	- No exhaustion suffered, inflict one exhaustion in Russians
-
-*/
 
 //=== 9. BATTLE RESOLUTION ===
 /*
