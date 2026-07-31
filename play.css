@@ -144,7 +144,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	width: 750px;
 	height: 500px;
 	justify-self: center;
-	background-image: url(pieces/retreat_from_moscow.jpg);
+	/*background-image: url(pieces/retreat_from_moscow.jpg);*/
 }
 
 #plan_orders .panel-head {

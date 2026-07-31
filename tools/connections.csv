@@ -239,7 +239,7 @@ id,space1,space2,type,bridge
 238,Koselysk,Belev,road,0
 239,Belev,Orel,road,0
 240,Karachev,Orel,road,0
-241,Karachev,Voronezh,road,0
+241,Orel,Voronezh,road,0
 242,Tver,Kortseva,track,0
 243,Klin,Moscow,road,0
 244,Voskresentsk,Moscow,track,0
@@ -257,3 +257,6 @@ id,space1,space2,type,bridge
 256,Unnamed H3,Unnamed H4,road,0
 257,Lutsk,Vladimir (Galicia),road,0
 258,Molodechno,Minsk,road,0
+259,Disna,Kamen,track,0
+260,Kamen,Senno,track,0
+261,Kaltinenai,Nemaksciai,track,0

@@ -327,6 +327,12 @@ const NOV_5 = 30
 
 var num_devastated = 0
 
+const FIRST_AREA = 1
+const LAST_AREA = 156
+
+const FIRST_CONNECTION = 1
+const LAST_CONNECTION = 261
+
 /* MISC FUNCTIONS */
 function process_area_name(name) {
 	name = name.replace(/(Grand Duchy of Warsaw|Prussia) (North|South)/, "$1")
@@ -356,11 +362,18 @@ function on_init() {
 	define_panel("#fr_leaders", "leaders", FRANCE)
    
 	/* SPACES */
-	for (let s = 1; s < area_length; s++) {
-		define_space("area", s, layout[get_area_name(s)]).tooltip(`${process_area_name(get_area_name(s))} (${areas[s].zone})`)
-		define_stack("area_stack", s, layout[get_area_name(s)], -20, -20, 0, -58, 0, 36, 1, 4, 0.5, 0.5)
-		define_stack("orders_stack", s, translate_right(layout[get_area_name(s)], 52), 0, -60, 0, -12)
+	for (let area = FIRST_AREA; area <= LAST_AREA; ++area) {
+		define_space("area", area, layout[get_area_name(area)], areas[area].type)
+			.tooltip(`${process_area_name(get_area_name(area))} (${areas[area].zone})`)
+		
+		define_stack("area_stack", area, layout[get_area_name(area)], -20, -20, 0, -58, 0, 36, 1, 4, 0.5, 0.5)
+		define_stack("orders_stack", area, translate_right(layout[get_area_name(area)], 52), 0, -60, 0, -12)
 	}
+
+	for (let connection = FIRST_CONNECTION; connection <= LAST_CONNECTION; ++connection) {
+		define_stack("connection", connection, layout[`Connection${connection}`], -20, -20, 0, -58, 0, 36, 1, 4, 0.5, 0.5)
+	}
+
 	define_layout("ru_pool_depots", 0, layout["Russia Pool Depots"], "square")
 	define_layout("fr_pool_depots", 0, layout["France Pool Depots"], "square")
 	define_layout("ru_pool_leaders", 0, layout["Russia Pool Leaders"], "square")
@@ -570,33 +583,90 @@ function update_tracks() {
 	populate("track-initiative", Math.abs(V.initiative), "initiative", 0)
 }
 
+function has_battle(area) {
+	return map_has(V.battles, area)
+}
+
+function get_battle_entry(area, fallback) {
+	return map_get(G.battles, area, fallback)
+}
+
+function get_battle_attacker(area) {
+	return map_get(V.battles, area, null)?.attacker.who ?? -1
+}
+
+function get_battle_defender(area) {
+	return map_get(V.battles, area, null)?.defender.who ?? -1
+}
+
+function find_connection(a, b) {
+	return data.connections.findIndex(conn => (set_has(conn, a) && set_has(conn, b)))
+}
+
+function get_attacker_data(area) {
+	return get_battle_entry(area, null)?.attacker ?? null
+}
+
+function get_defender_data(area) {
+	return get_battle_entry(area, null)?.defender ?? null
+}
+
+function is_battle_attacker(who, area) {
+	return get_battle_attacker(area) === who
+}
+
+function is_battle_defender(who, area) {
+	return get_battle_defender(area) === who
+}
+
+function get_leader_battle_origin(leader, battle) {
+	let battle_data
+	if (get_battle_attacker(battle) === get_leader_faction(leader))
+		battle_data = get_attacker_data(battle)
+	else
+		battle_data = get_defender_data(battle)
+		
+	for (let entry of battle_data.forces) {
+		if (set_has(entry.leaders, leader)) return entry.from
+	}
+	return -1
+}
+
+function get_seniormost_leader_from_list(who, list) {
+	return V.seniority[who].find(leader => list.includes(leader))
+}
+
 function update_leaders() {
 	for (let leader = 0; leader < V.leaders.length; ++leader) {
-		switch(get_leader_location(leader)) {
+		let location = get_leader_location(leader)
+		switch(location) {
 		case OUT_OF_PLAY: continue
 		case POOL:
 			populate((get_leader_faction(leader) === RUSSIA) ? "ru_pool_leaders" : "fr_pool_leaders", 0, "leader", leader); break
 		case FRENCH_CASUALTIES:
 			populate("fr_casualties", 0, "leader", leader); break
 		default:
-			if (is_seniormost_leader(leader, get_leader_location(leader))) {
-				populate("area_stack", get_leader_location(leader), "leader", leader)
-				populate("leaders", get_leader_faction(leader), "leader_board", leader)
+			if (!has_battle(location) || is_battle_defender(get_leader_faction(leader), location)) {
+				if (is_seniormost_leader(leader, get_leader_location(leader)))
+					populate("area_stack", get_leader_location(leader), "leader", leader)
+				else 
+					populate("subordinate_leaders", get_seniormost_leader(get_leader_faction(leader), get_leader_location(leader)), "leader", leader)
 			} else {
-				populate("subordinate_leaders", get_seniormost_leader(get_leader_faction(leader), get_leader_location(leader)), "leader", leader)
+				for (let entry of get_attacker_data(location).forces) {
+					if (set_has(entry.leaders, leader))
+						if (get_seniormost_leader_from_list(get_leader_faction(leader), entry.leaders) === leader) 
+							populate("connection", find_connection(location, entry.from), "leader", leader)
+						else
+							populate("subordinate_leaders", get_seniormost_leader_from_list(get_leader_faction(leader), entry.leaders), "leader", leader)
+
+				}
 			}
 		}
 	}
 }
 
 function update_troops() {
-	//Currently the idea is to use a common pool of markers for each troop type (fresh/exhausted of same big category are considered identical for this purpose)
-	//The used global variable tracks how many markers are used, and also gives the next unused marker to be populated
-	//The number of troops are later added with js/css
-	for (let i = 0; i < V.troops.length; i += 2) { //Plain array map keyed by area
-		let area = V.troops[i]			//V.troops is keyed by area
-		let entries = V.troops[i + 1]
-
+	map_for_each(G.troops, (area, entries) => {
 		for (let entry of entries) {
 			//Unraveling bitmasks
 			let who = decode_troop_entry_who(entry)
@@ -613,16 +683,40 @@ function update_troops() {
 			//Populating the marker (without the number of troops)
 			if (has_friendly_leader(who, area) && ((is_cavalry(type) || is_cossack(type)) || (get_seniormost_leader(who, area) !== PLATOV))) { //If there's a friendly leader in the area, put the troops on his mat
 				populate(`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader(who, area), get_troop_name(type), get_used(who, type))
-			} else if (area === FRENCH_CASUALTIES) {
+			} 
+			else if (area === FRENCH_CASUALTIES) {
 				populate("fr_casualties", 0, get_troop_name(type), get_used(who, type))
-			} else { //Or else stack them on the map
+			} 
+			else if (has_battle(area) && is_battle_attacker(who, area)) {
+				let connection_split = [] //In order to correctly update the number of troops in case there are troops of the same type across multiple connections
+
+				for (let entry of get_attacker_data(area).forces) {
+					if (entry.troops[type] > 0) {
+						let connection = find_connection(area, entry.from)
+						if (entry.leaders.length === 0) {
+							populate("connection", connection, get_troop_name(type), get_used(who, type))
+						} else {
+							populate(`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader_from_list(who, entry.leaders), get_troop_name(type), get_used(who, type))
+						}
+						if (!map_has(connection_split, connection))
+							map_set(connection_split, connection, {id: get_used(who, type), amt: entry.troops[type]})
+						else
+							map_get(connection_split, connection, null).amt = map_get(connection_split, connection, null).amt + entry.troops[type]
+					}
+				}
+				map_for_each(connection_split, (connection, entry) => {
+					update_text("troop-text", entry.id, entry.amt)
+				})
+				incr_used(who, type)
+				continue
+			} else {
 				populate("area_stack", area, get_troop_name(type), get_used(who, type))
 			}
 
 			update_text("troop-text", get_used(who, type), num)
 			incr_used(who, type)
 		}
-	}
+	})
 }
 
 function update_depots() {
@@ -731,3 +825,117 @@ function on_prompt(text) {
 }
 
 scroll_with_middle_mouse("main")
+
+/* FRAMEWORK */
+function set_has(set, item) {
+	var a = 0
+	var b = set.length - 1
+	while (a <= b) {
+		var m = (a + b) >> 1
+		var x = set[m]
+		if (item < x)
+			b = m - 1
+		else if (item > x)
+			a = m + 1
+		else
+			return true
+	}
+	return false
+}
+
+// Map as plain sorted array of key/value pairs
+
+function array_delete_pair(array, index) {
+	var i, n = array.length
+	for (i = index + 2; i < n; ++i)
+		array[i - 2] = array[i]
+	array.length = n - 2
+}
+
+function array_insert_pair(array, index, key, value) {
+	for (var i = array.length; i > index; i -= 2) {
+		array[i] = array[i-2]
+		array[i+1] = array[i-1]
+	}
+	array[index] = key
+	array[index+1] = value
+}
+
+function map_has(map, key) {
+	var a = 0
+	var b = (map.length >> 1) - 1
+	while (a <= b) {
+		var m = (a + b) >> 1
+		var x = map[m<<1]
+		if (key < x)
+			b = m - 1
+		else if (key > x)
+			a = m + 1
+		else
+			return true
+	}
+	return false
+}
+
+function map_get(map, key, missing) {
+	var a = 0
+	var b = (map.length >> 1) - 1
+	while (a <= b) {
+		var m = (a + b) >> 1
+		var x = map[m<<1]
+		if (key < x)
+			b = m - 1
+		else if (key > x)
+			a = m + 1
+		else
+			return map[(m<<1)+1]
+	}
+	return missing
+}
+
+function map_set(map, key, value) {
+	var a = 0
+	var b = (map.length >> 1) - 1
+	while (a <= b) {
+		var m = (a + b) >> 1
+		var x = map[m<<1]
+		if (key < x)
+			b = m - 1
+		else if (key > x)
+			a = m + 1
+		else {
+			map[(m<<1)+1] = value
+			return
+		}
+	}
+	array_insert_pair(map, a<<1, key, value)
+}
+
+function map_delete(map, key) {
+	var a = 0
+	var b = (map.length >> 1) - 1
+	while (a <= b) {
+		var m = (a + b) >> 1
+		var x = map[m<<1]
+		if (key < x)
+			b = m - 1
+		else if (key > x)
+			a = m + 1
+		else {
+			array_delete_pair(map, m<<1)
+			return
+		}
+	}
+}
+
+function map_get_set(map, key) {
+	var set = map_get(map, key, null)
+	if (set === null)
+		map_set(map, key, (set = []))
+	return set
+}
+
+function map_for_each(map, f) {
+	for (var i = 0; i < map.length; i += 2)
+		f(map[i], map[i+1])
+}

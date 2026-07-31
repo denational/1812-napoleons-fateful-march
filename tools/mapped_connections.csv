@@ -239,7 +239,7 @@ id,space1,space2,type,bridge
 238,143,144,road,0
 239,144,145,road,0
 240,146,145,road,0
-241,146,147,road,0
+241,145,147,road,0
 242,132,148,track,0
 243,135,150,road,0
 244,134,150,track,0
@@ -257,3 +257,6 @@ id,space1,space2,type,bridge
 256,155,156,road,0
 257,44,43,road,0
 258,58,60,road,0
+259,78,79,track,0
+260,79,81,track,0
+261,3,4,track,0

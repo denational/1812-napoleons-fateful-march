@@ -8,6 +8,7 @@
 3. Are non-Russian key cities eligible for Holy Mother Russia (FR)
 4. Are cavalry patrols orders that are not executed because there are no enemy troops in the vicinity removed?
 5. Can you place Forced March/Cavalry Patrols with Good Leadership?
+6. Retreat/Evade without any depot markers
 
 ## Known Bugs (to fix at a later time)
 1. attrition has not been done yet - as are events depending on attrition losses

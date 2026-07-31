@@ -24,6 +24,7 @@ const names = 'names.csv'
 const connections = 'mapped_connections.csv'
 
 data.areas = [ {name: "Pool"} ]
+data.connections = [[]]
 
 fs.createReadStream(names)
 	.pipe(csv())
@@ -65,6 +66,8 @@ fs.createReadStream(names)
 					type,
 					bridge,
 				} = row
+				data.connections.push([Number(space1), Number(space2)])
+
 				switch(type) {
 				case "road":
 					data.areas[space1].road.push(Number(space2))
@@ -79,7 +82,6 @@ fs.createReadStream(names)
 					data.areas[space2].bridge.push(Number(space1))
 				}
 			})
-			.on('error', console.error)
 			.on('end', () => { //Not the most pretty way to do it, but it works
 				
 				//=== CARDS ===

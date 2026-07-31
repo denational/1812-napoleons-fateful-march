@@ -1047,8 +1047,18 @@ function add_depot(who, where) {
 	}
 }
 
+function is_depot_on_map(depot) {
+	return (get_depot_location(depot) !== POOL) && (get_depot_location(depot) !== OUT_OF_PLAY)
+}
+
 function get_areas_with_depots(who) {
-	return [...new Set(get_depots(who).filter(area => !(area === POOL || area === OUT_OF_PLAY)))]
+	let areas = []
+
+	for (let depot = get_first_depot(who); depot <= get_last_depot(who); ++depot) 
+		if (is_depot_on_map(depot))
+			set_add(areas, get_depot_location(depot))
+		
+	return areas
 }
 
 function count_num_french_depots_on_map() {
@@ -2831,9 +2841,10 @@ P.do_place_orders = {
 				else
 					prompt(`Place ${get_order_name(L.selected_order[R])} in any area with friendly SPs.`)
 
-				for (let area = FIRST_AREA; area <= LAST_AREA; ++area)
+				for (let area = FIRST_AREA; area <= LAST_AREA; ++area) {
 					if (has_friendly_troop(R, area) || (this.is_french_logistic_preparations() && (area === S_KOVNO)) )
 						action_area(area)
+				}
 			}
 		}
 		button_undo((L.orders_placed[R].length > 0) || (L.selected_order[R] !== -1))
@@ -3513,8 +3524,8 @@ P.execute_marches = {
 			FR #1	Hard Marching			- 1 SP exhausted after moving; fight at X1
 			FR #2	Hard Marching			- same as #1
 			FR #4	Holy Mother Russia		- when a RU force exits the key city
-			FR #9 Fast Marching 			- Move 2, but one fresh SP becomes exhausted
-			FR #10 Fast Marching 			- Move 2, but one fresh SP becomes exhausted
+			FR #9 	Fast Marching 			- Move 2, but one fresh SP becomes exhausted
+			FR #10 	Fast Marching 			- Move 2, but one fresh SP becomes exhausted
 			FR #53	Lethargic Pursuit		- RU may not enter areas with a french leader
 */
 
@@ -3947,7 +3958,7 @@ P.cavalry_patrols = script(`
 	}
 `)
 
-function has_troop_that_can_execute_cavalry_patrols(who, area) {
+function has_cavalry_or_cossack_in_area(who, area) {
 	return get_area_troop_set(area, null).some(entry => (decode_troop_entry_who(entry) === who) && (is_cavalry(decode_troop_entry_type(entry)) || is_cossack(decode_troop_entry_type(entry))))
 }
 
@@ -3962,7 +3973,7 @@ P.execute_cavalry_patrols = {
 		L.orders_by_side = [L.forced_march_orders.filter(o => get_order_owner(o) === RUSSIA), L.forced_march_orders.filter(o => get_order_owner(o) === FRANCE)]
 
 		for (let who = RUSSIA; who <= FRANCE; ++who) {
-			L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order)) && has_troop_that_can_execute_cavalry_patrols(who, get_order_location(order)))
+			L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order)) && has_cavalry_or_cossack_in_area(who, get_order_location(order)))
 		}
 	},
 	prompt() {
@@ -3976,7 +3987,7 @@ P.execute_cavalry_patrols = {
 			} else {
 				prompt(`Select a Cavalry Patrols order to execute: ${join_array_with_or(L.orders_by_side[G.active].map(order => `S${get_order_location(order)}`))}`)
 				for (let order of L.orders_by_side[G.active]) 
-					if (has_troop(get_order_location(order)) && has_troop_that_can_execute_cavalry_patrols(G.active, get_order_location(order)))
+					if (has_troop(get_order_location(order)) && has_cavalry_or_cossack_in_area(G.active, get_order_location(order)))
 						action_order(order)
 			}
 		}
@@ -4087,7 +4098,7 @@ P.do_cavalry_patrols = {
 /*
 	Events
 	RUSSIA
-		#1 	Well-Disciplined Retreat 						- no exhaustion with Evade orders
+		#1 	Well-Disciplined Retreat 	Apply effect		- no exhaustion with Evade orders
 		#27	Unexpected Retreat 			Before				- All Austrian SPs conduct an immediate 'Evade' in areas with Russian SPs. Schwarzenberg may accompany them.
 		#29	Cavalry Screening 			Before				- Place up to 2 'Evade' orders in areas with RU Cavalry/Cossack
 
@@ -4107,9 +4118,43 @@ P.evade = script(`
 	} else {
 		call determine_who_goes_first { order_type: EVADE }
 		call switch_orders { current_order_type: EVADE }
+		set G.active RUSSIA
+		call may_play_evade_events
 		call execute_evade { first_player: L.$ }
 	}
 `)
+
+//TODO: Unexpected Retreat
+P.may_play_evade_events = {
+	_begin() {
+		L.events = [UNEXPECTED_RETREAT, CAVALRY_SCREENING]
+		L.events_in_hand = L.events.filter(card => get_hand(RUSSIA).includes(card))
+		L.played_event = false
+	},
+	prompt() {
+		if ((L.events_in_hand.length === 0)) {
+			if (L.played_event) {
+				prompt(`Play Events: All done.`)
+				button_done()
+			} else {
+				prompt(`You do not have C${UNEXPECTED_RETREAT} or C${CAVALRY_SCREENING} in hand.`)
+				button_pass()
+			}
+		} else {
+			prompt(`You may play ${join_array_with_and(L.events_in_hand.map(card => `C${card}`))}.`)
+			button_pass()
+			for (let card of L.events_in_hand) action_card(card)
+		}
+	},
+	card(card) {
+		push_undo()
+		L.played_event = true
+		set_delete(L.events_in_hand, card)
+		call(`event_${card}`)
+	},
+	pass() { end() },
+	done() { end() }
+}
 
 P.execute_evade = {
 	_begin() {
@@ -4122,7 +4167,7 @@ P.execute_evade = {
 		L.orders_by_side = [L.forced_march_orders.filter(o => get_order_owner(o) === RUSSIA), L.forced_march_orders.filter(o => get_order_owner(o) === FRANCE)]
 
 		for (let who = RUSSIA; who <= FRANCE; ++who) {
-			L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order)))
+			L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order)) && has_battle(get_order_location(order)) && (find_retreat_destinations(who, get_order_location(order)).length > 0))
 		}
 	},
 	prompt() {
@@ -4174,6 +4219,138 @@ P.execute_evade = {
 	}
 }
 
+P.do_evade = {
+	_begin() {
+		//L.area
+		L.retreat_destinations = find_retreat_destinations(G.active, L.area)
+		L.selected_area = -1
+		L.has_finished = false
+	},
+	prompt() {
+		if (L.selected_area === -1) {
+			prompt(`Select destination to evade (${join_array_with_or(L.retreat_destinations.map(area => `S${area}`))}).`)
+			for (let area of L.retreat_destinations) {
+				action_area(area)
+			}
+		}
+	},
+	area(area) {
+		push_undo()
+		L.selected_area = area
+		call("select_evade_force", { area: L.area })
+	}
+}
+
+P.select_evade_force = {
+
+}
+
+function find_retreat_destinations(who, area) {
+	let closest_depots = find_closest_depot_for_retreat(who, area)
+	let retreat_destinations = []
+	let best_distance = 999
+
+	for (let depot of closest_depots) {
+		let distances = []
+		for (let neighbor of get_all_adjacent_areas(area)) {
+			let distance = find_path_distance(neighbor, depot)
+
+			if (distance < 999) {
+				if (!map_has(distances, distance)) map_set(distances, distance, [])
+				set_add(map_get(distances,  distance, null), neighbor)
+			}
+		}
+
+		if (distances.length > 0 && (distances[0] <= best_distance)) {
+			retreat_destinations = (distances.length > 0) ? distances[1].slice() : []
+			best_distance = distances[0]
+		}
+	}
+
+	return retreat_destinations.filter(dest => !has_enemy_sp(who, dest) && !set_has(get_connections_used_in_battle(enemy(who), area), dest))
+}
+
+function find_path_distance(a, b) {
+	let queue = [ a ]
+	let distance = []
+	let visited = []
+
+	map_set(distance, a, 0)
+
+	function get_distance(area, fallback = 999) { return map_get(distance, area, fallback)}
+
+	while (queue.length > 0) {
+		let current = queue.shift()
+
+		if (current === b) return get_distance(current)
+
+		if (set_has(visited, current)) {
+			continue
+		}
+
+		set_add(visited, current)
+
+		let current_distance = get_distance(current)
+		for (let neighbor of get_all_adjacent_areas(current)) {
+			if (!map_has(distance, neighbor)) {
+    			map_set(distance, neighbor, current_distance + 1)
+    			queue.push(neighbor)
+			}
+		}
+	}
+
+	return 999
+}
+
+//Returns a set of depots that are closest to an area (for retreat purposes)
+function find_closest_depot_for_retreat(who, area) {
+	let depots = get_areas_with_depots(who)
+
+	let visited = []
+	set_add(visited, area) //Depots that are in the area are excluded for retreat purposes
+
+	let distance = []
+	map_set(distance, area, 0)
+
+	function get_distance(loc, fallback = 999) { return map_get(distance, loc, fallback) }
+
+	let queue = []
+	for (let loc of get_all_adjacent_areas(area)) {
+		queue.push(loc)
+		map_set(distance, loc, 1)
+	}
+
+	let closest_depots = []
+
+	while (queue.length > 0) {
+		let current = queue.shift()
+
+		if (closest_depots.some(loc => get_distance(loc) < get_distance(current))) {
+			return closest_depots
+		}
+
+		if (set_has(visited, current)) {
+			continue
+		}
+		set_add(visited, current)
+
+		if (set_has(depots, current)) { 
+			set_add(closest_depots, current)
+		}
+
+		if (has_enemy_sp(who, current)) continue //The closest depot area might be contested, so continue after checking
+
+		let new_distance = get_distance(current) + 1
+		for (let loc of get_all_adjacent_areas(current)) {
+			if (!set_has(visited, loc)) queue.push(loc)
+			if (!map_has(distance, loc) || (get_distance(loc) > new_distance))
+				map_set(distance, loc, get_distance(current) + 1)
+		} 
+	}
+
+	return closest_depots
+}
+
 //=== 9. BATTLE RESOLUTION ===
 /*
 	Events
@@ -4222,9 +4399,9 @@ P.execute_evade = {
 		#30	Stubborn Rearguard		After losing											- Cancel any losses from pursuit in this battle
 		#31	The Imperial Guard		If Napoleon is present.									- The combat value of all Imperial Guard are X3 instead of X1,5. If RU win, FR must discard a random card and Russia +2VP.
 		#32	Delayed Forces			If RU forces entered the battle from >1 connection		- All RU Sps across 1 connection fight at X0. Cancels 'Outflanking'.
-		#33	Napoleon's Marshals		If an FR leader is present								- Rally 1 exhausted SP before determining losses. Draw a card if you win the battle.
-		#34	Fierce Fighting			If an FR leader is present								- FR losses +1, Russia losses +2, 1 RU eliminates 1 leader if present.
-		#35	Ney's III Corps			If an FR leader is present								- up to 3 FR Infantry fight at X2, rally one exhuated SP after battle.
+		#33	Napoleon's Marshals		If a FR leader is present								- Rally 1 exhausted SP before determining losses. Draw a card if you win the battle.
+		#34	Fierce Fighting			If a FR leader is present								- FR losses +1, Russia losses +2, 1 RU eliminates 1 leader if present.
+		#35	Ney's III Corps			If a FR leader is present								- up to 3 FR Infantry fight at X2, rally one exhuated SP after battle.
 		#36	Eugene's IV Corps		If Eugene de Beauharnais is present						- up to 3 FR Infantry fight at X2
 		#38	Inferior Gunpowder		If defending											- Halve the combat value of up to 8 RU Infantry SPs
 		#47	Inferior Musketry		If defending											- Reduce FR losses by 1
@@ -4314,6 +4491,26 @@ function add_defender_to_battle(who, from, area, move_type, leaders, troops) {
 	})
 
 	battle.defender.defend_order = false
+}
+
+function get_connections_used_by_attacker(area) {
+	if (!has_battle(area)) return []
+	let areas = []
+	for (let entry of get_attacker_data(area).forces)
+		set_add(areas, entry.from)
+	return areas
+}
+
+function get_connections_used_by_defender(area) {
+	if (!has_battle(area)) return []
+	let areas = []
+	for (let entry of get_defender_data(area).forces)
+		set_add(areas, entry.from)
+	return areas
+}
+
+function get_connections_used_in_battle(who, area) {
+	return is_battle_attacker(who, area) ? get_connections_used_by_attacker(area) : get_connections_used_by_defender(area)
 }
 
 function get_defender_data(area) {
@@ -5341,7 +5538,7 @@ function has_russian_sp_adjacent(area) {
 }
 
 function get_all_adjacent_areas(area) {
-	return [...get_adjacent_areas_by_track(area), ...get_adjacent_areas_by_road(area)]
+	return [...get_all_adjacent_areas_of_connection_type(area, TRACK), ...get_all_adjacent_areas_of_connection_type(area, ROAD)]
 }
 
 function increase_devastation(area, amount = 1) {
@@ -6085,6 +6282,37 @@ P.event_24 = {
 	},
 	confirm() {
 		pop_undo()
+	}
+}
+
+//RU #29: Cavalry Screening
+P.event_29 = {
+	_begin() {
+		card_box_begin(CAVALRY_PATROLS)
+		L.count = Math.min(2, array_count(get_orders_at_area(G.active, POOL), order => get_order_type(order) === EVADE))
+	},
+	inactive: "retreat under cover of their cavalry",
+	prompt() {
+		if (L.count > 0) {
+			prompt_card(CAVALRY_SCREENING, `Place Evade orders on areas containing RU Cavalry and/or Cossack SPs (${L.count} remaining).`)
+			for (let area = FIRST_AREA; area <= LAST_AREA; ++area)
+				if (has_cavalry_or_cossack_in_area(G.active, area)) 
+					action_area(area)
+		} else {
+			prompt_card(CAVALRY_SCREENING, "All done.")
+			button_done()
+		}
+	},
+	area(area) {
+		push_undo()
+		add_order_of_type_from_pool(G.active, EVADE, area)
+		--L.count
+	},
+	done() { 
+		push_undo()
+		card_box_end()
+		discard_or_remove_card(CAVALRY_PATROLS)
+		end() 
 	}
 }
 
