@@ -501,6 +501,10 @@ function on_update() {
 	action_button_with_argument("troop", FRESH_AUSTRIAN_INFANTRY, "Au. Infantry")
 	action_button_with_argument("troop", EXHAUSTED_AUSTRIAN_INFANTRY, "Exh. Infantry")
 
+	action_button_with_argument("troop_2x", FRESH_PRUSSIAN_INFANTRY, "2x Exh. Infantry")
+	action_button_with_argument("troop_2x", EXHAUSTED_PRUSSIAN_INFANTRY, "2x Exh. Pr. Infantry")
+	action_button_with_argument("troop_2x", FRESH_AUSTRIAN_INFANTRY, "2x Exh. Au. Infantry")
+
 	action_button_with_argument("add_troop", FRESH_INFANTRY, "+ Inf.")
 	action_button_with_argument("remove_troop", FRESH_INFANTRY, "- Inf.")
 	action_button_with_argument("add_troop", EXHAUSTED_INFANTRY, "+ Exh. Inf.")

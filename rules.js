@@ -1957,7 +1957,6 @@ P.begin_turn = function() {
 
 P.turn = script(`
 	eval { log_h1(get_month_name(G.turn) + " " + get_turn_name(G.turn))}
-
 	call draw_card_to_hand
 	call play_card_for_additional_orders
 	call select_orders
@@ -1966,7 +1965,12 @@ P.turn = script(`
 	call cavalry_patrols
 	call march
 	call evade
-	call resolve_battles
+	call rally
+	call cossack_raid
+	call place_depot
+	call attrition
+	call lines_of_communications
+	goto end_turn
 `)
 
 //=== 1. DRAW CARD TO HAND ===
@@ -3411,7 +3415,6 @@ P.execute_forced_marches = {
 	},
 	done() {
 		L.has_passed[G.active] = true
-		log(`${ROLES[G.active]} passed.`)
 
 		L.has_executed_order = false
 		L.current_order = -1
@@ -3501,7 +3504,6 @@ P.execute_marches = {
 	},
 	done() {
 		L.has_passed[G.active] = true
-		log(`${ROLES[G.active]} passed.`)
 
 		L.has_executed_order = false
 		L.current_order = -1
@@ -4025,7 +4027,6 @@ P.execute_cavalry_patrols = {
 	},
 	done() {
 		L.has_passed[G.active] = true
-		log(`${ROLES[G.active]} passed.`)
 		L.has_executed_order = false
 		L.current_order = -1
 
@@ -4205,6 +4206,7 @@ P.execute_evade = {
 	},
 	_resume() {
 		L.has_executed_order = true
+		L.orders_by_side[G.active] = L.orders_by_side[G.active].filter(order => has_friendly_troop(G.active, get_order_location(order)))
 	},
 	confirm() {
 		push_undo()
@@ -4216,12 +4218,11 @@ P.execute_evade = {
 	},
 	done() {
 		L.has_passed[G.active] = true
-		log(`${ROLES[G.active]} passed.`)
 		L.has_executed_order = false
 		L.current_order = -1
 
 		if (L.has_passed[RUSSIA] && L.has_passed[FRANCE]) {
-			finish("WIP", "exit code 0")
+			end()
 		} else {
 			G.active = enemy(G.active)
 		}
@@ -5402,8 +5403,275 @@ P.end_battle = function() {
 }
 
 //=== 10. EXECUTE RALLY ORDERS ===
+P.rally = script(`
+	log "@Execute Rally"
+
+	if (get_placed_orders_of_type(RALLY).length === 0) {
+		log "No forced march orders placed."
+	} else {
+		call determine_who_goes_first { order_type: RALLY }
+		call switch_orders { current_order_type: RALLY }
+		call execute_rally { first_player: L.$ }
+	}
+`)
+
+P.execute_rally = {
+	_begin() {
+		//L.first_player
+		G.active = L.first_player
+		L.has_passed = [false, false]
+		L.current_order = -1
+		L.has_executed_order = false
+		L.rally_orders = get_placed_orders_of_type(RALLY)
+		L.orders_by_side = [L.rally_orders.filter(o => get_order_owner(o) === RUSSIA), L.forced_march_orders.filter(o => get_order_owner(o) === FRANCE)]
+
+		for (let who = RUSSIA; who <= FRANCE; ++who) {
+			L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order)))
+		}
+	},
+	prompt() {
+		if (L.orders_by_side[G.active].length === 0) {
+			prompt(`Execute Rally orders: All done.`)
+			button_done()
+		} else {
+			if (L.has_executed_order) {
+				prompt(`Execute Rally order: All done.`)
+				button_confirm()
+			} else {
+				prompt(`Select a Rally order to execute: ${join_array_with_or(L.orders_by_side[G.active].map(order => `S${get_order_location(order)}`))}`)
+				for (let order of L.orders_by_side[G.active]) 
+					if (has_troop(get_order_location(order)))
+						action_order(order)
+			}
+		}
+	},
+	order(order) {
+		push_undo()
+		let area = get_order_location(order)
+		log_h3(`S${area}`, G.active)
+		remove_order(order)
+		L.current_order = order
+		call("do_rally", { area })
+	},
+	_resume() {
+		L.has_executed_order = true
+	},
+	confirm() {
+		push_undo()
+		set_delete(L.orders_by_side[G.active], L.current_order)
+		if (!L.has_passed[enemy(G.active)]) G.active = enemy(G.active)
+		
+		L.has_executed_order = false
+		L.current_order = -1
+	},
+	done() {
+		L.has_passed[G.active] = true
+		L.has_executed_order = false
+		L.current_order = -1
+
+		if (L.has_passed[RUSSIA] && L.has_passed[FRANCE]) {
+			end()
+		} else {
+			G.active = enemy(G.active)
+		}
+	}
+}
+
+P.do_rally = {
+	_begin() {
+		//L.area
+		L.has_rallied = false
+	},
+	prompt() {
+		if (!L.has_rallied) {
+			if (!has_exhausted_sp(G.active, L.area)) {
+				prompt(`No exhausted SPs at S${L.area} to rally.`)
+				button_confirm()
+			} else {
+				if (has_friendly_depot(G.active, L.area)) {
+					prompt(`You may flip back one for your exhausted troops back to its fresh side (2 if Infantry).`)
+					for (let type of get_troop_types_at_area(G.active, L.area)) {
+						if (is_exhausted_infantry(type) && (count_num_sps_of_type(G.active, type, L.area) >= 2))
+							action("troop_2x", type)
+					}
+				} else {
+					prompt(`You may flip back one for your exhausted troops back to its fresh side.`)
+				}
+				for (let type of get_troop_types_at_area(G.active, L.area)) {
+					if (!has_friendly_depot(G.active, L.area) || is_exhausted_infantry(type)) {
+						action("troop", type)
+					}
+				}
+			}
+		} else {
+			prompt(`Execute Rally order: All done.`)
+			button_done()
+		}
+	},
+	troop(type) {
+		push_undo()
+		rally_troop(G.active, L.area, type)
+	},
+	troop_2x(type) {
+		push_undo()
+		rally_troop(G.active, L.area, type, 2)
+	},
+	confirm() {
+		push_undo()
+		log("No exhausted SPs to Rally.")
+		end()
+	},
+	done() {
+		push_undo()
+		end()
+	}
+
+}
 
 //=== 11. EXECUTE COSSACK RAID ORDERS ===
+P.cossack_raid = script(`
+	log "@Execute Cossack Raid"
+
+	if (get_placed_orders_of_type(COSSACK_RAID).length === 0) {
+		log "No cossack raid orders placed."
+	} else {
+		call execute_cossack_raid
+	}
+`)
+
+P.execute_cossack_raid = {
+	_begin() {
+		G.active = RUSSIA
+		L.current_order = -1
+		L.has_executed_order = false
+		L.cossack_raid_orders = get_placed_orders_of_type(COSSACK_RAID).filter(order => has_cossack_sp(get_order_location(order)))
+	},
+	prompt() {
+		if (L.cossack_raid_orders.length === 0) {
+			prompt(`Execute Cossack Raid orders: All done.`)
+			button_done()
+		} else {
+			if (L.has_executed_order) {
+				prompt(`Execute Cossack order: All done.`)
+				button_confirm()
+			} else {
+				prompt(`Select a Cossack Raid order to execute: ${join_array_with_or(L.cossack_raid_orders.map(order => `S${get_order_location(order)}`))}`)
+				for (let order of L.cossack_raid_orders) 
+					action_order(order)
+			}
+		}
+	},
+	order(order) {
+		push_undo()
+		let area = get_order_location(order)
+		log_h3(`S${area}`, G.active)
+		remove_order(order)
+		L.current_order = order
+		call("do_cossack_raid", { area })
+	},
+	confirm() {
+		push_undo()
+		let area = get_order_location(L.current_order)
+		set_delete(L.cossack_raid_orders, L.current_order)
+		if (L.cossack_raid_orders.some(order => get_order_location(order) === area) && (count_num_cossack(L.area) < 2))	
+			L.cossack_raid_orders.length = 0	
+		L.has_executed_order = false
+		L.current_order = -1
+	},
+	done() {
+		end()
+	}
+}
+
+function count_num_cossack(area) {
+	let count = 0
+	for (let entry of get_area_troop_set(area, null)) {
+		if (is_cossack(decode_troop_entry_type(entry)))
+			count += decode_troop_entry_num(entry)
+	}
+	return count
+}
+
+function has_french_order(area) {
+	return get_orders_at_area(FRANCE, area).length > 0
+}
+
+P.do_cossack_raid = {
+	_begin() {
+		//L.area
+		L.has_raided = false
+	},
+	prompt() {
+		if (!L.has_raided) {
+			prompt(`Select a target for the Cossack Raid (Cannot be undone).`)
+			for (let area of get_all_adjacent_areas(L.area)) {
+				if (has_french_order(area) || has_friendly_troop(FRANCE, area)) {
+					action_area(area)
+				}
+			}
+		} else {
+			prompt(`Cossack Raid: All done.`)
+			button_done()
+		}
+	},
+	area(area) {
+		push_undo()
+		G.active = FRANCE
+		call("apply_cossack_raid", area)
+	}
+}
+
+P.apply_cossack_raid = {
+	_begin() {
+		//L.area
+		L.orders_to_remove = get_orders_at_area(FRANCE, L.area).filter(order => get_order_type(order) === FORAGE)
+		L.step = -1
+	},
+	prompt() {
+		if (L.step === -1) {
+			if (L.orders_to_remove.length > 0) {
+				prompt(`Remove Forage orders from S${L.area}.`)
+				for (let order of L.orders_to_remove) action_order(order)
+			} else {
+				prompt(`No Forage orders at S${L.area}.`)
+				button_next()
+			}
+		} else if (L.step === 0) {
+			if (has_exhausted_sp(FRANCE, L.area)) {
+				prompt(`Eliminate 1 Exhausted SP from S${L.area}.`)
+				for (let type of get_troop_types_at_area(FRANCE, L.area)) {
+					if (is_troop_type_exhausted(type)) action("troop", type)
+				}
+			} else {
+				prompt(`No exhausted SPs at S${L.area}.`)
+				button_next()
+			}
+		} else {
+			prompt("Apply Cossack Raid: All done (Cannot be undone).")
+			button_done()
+		}
+	},
+	order(order) {
+		push_undo()
+		remove_order(order)
+		set_delete(L.orders_to_remove, order)
+		if (L.orders_to_remove.length === 0) ++L.step
+	},
+	troop(type) {
+		push_undo()
+		eliminate_troop(FRANCE, L.area, type)
+		++L.step
+	},
+	next() {
+		if (L.step === -1) log(`No Forage orders to remove.`)
+		else log(`No exhausted SPs to eliminate.`)
+		++L.step
+	},
+	done() {
+		G.active = RUSSIA
+		end()
+	}
+}
 
 //=== 12. EXECUTE PLACE DEPOT ORDERS ===
 
@@ -6557,7 +6825,7 @@ P.event_24 = {
 //RU #29: Cavalry Screening
 P.event_29 = {
 	_begin() {
-		card_box_begin(CAVALRY_PATROLS)
+		card_box_begin(CAVALRY_SCREENING)
 		L.count = Math.min(2, array_count(get_orders_at_area(G.active, POOL), order => get_order_type(order) === EVADE))
 	},
 	inactive: "retreat under cover of their cavalry",
@@ -6576,6 +6844,7 @@ P.event_29 = {
 		push_undo()
 		add_order_of_type_from_pool(G.active, EVADE, area)
 		--L.count
+		log("Placed 'Evade' at S" + area + ".")
 	},
 	done() { 
 		push_undo()
