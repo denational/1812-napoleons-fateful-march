@@ -152,14 +152,14 @@ body.Russia header.your_turn {background-color: var(--russia);}
 }
 
 /* SPACES */
-.area {
+.area, .connection {
 	box-sizing: border-box;
 	position: absolute;
 	border: 3px solid transparent;
 	border-radius: 50% 50% 50% 50%;
 }
 
-.area.action {
+.area.action, .connection.action {
 	border-color: yellow;
 	z-index: 20;
 }

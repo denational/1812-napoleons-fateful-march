@@ -371,7 +371,8 @@ function on_init() {
 	}
 
 	for (let connection = FIRST_CONNECTION; connection <= LAST_CONNECTION; ++connection) {
-		define_stack("connection", connection, layout[`Connection${connection}`], -20, -20, 0, -58, 0, 36, 1, 4, 0.5, 0.5)
+		define_space("connection", connection, layout[`Connection${connection}`])
+		define_stack("connection_stack", connection, layout[`Connection${connection}`], -20, -20, 0, -58, 0, 36, 1, 4, 0.5, 0.5)
 	}
 
 	define_layout("ru_pool_depots", 0, layout["Russia Pool Depots"], "square")
@@ -619,6 +620,17 @@ function is_battle_defender(who, area) {
 	return get_battle_defender(area) === who
 }
 
+function get_leaders_on_connection(who, area, from) {
+	let leaders = []
+	let battle_data = is_battle_attacker(who, area) ? get_attacker_data(area) : get_defender_data(area)
+	for (let entry of battle_data.forces) {
+		if ((entry.from === from) && (entry.leaders.length > 0)) {
+			for (let leader of entry.leaders) set_add(leaders, leader)
+		} 
+	}
+	return leaders
+}
+
 function get_leader_battle_origin(leader, battle) {
 	let battle_data
 	if (get_battle_attacker(battle) === get_leader_faction(leader))
@@ -647,18 +659,19 @@ function update_leaders() {
 			populate("fr_casualties", 0, "leader", leader); break
 		default:
 			if (!has_battle(location) || is_battle_defender(get_leader_faction(leader), location)) {
-				if (is_seniormost_leader(leader, get_leader_location(leader)))
+				if (is_seniormost_leader(leader, get_leader_location(leader))) {
 					populate("area_stack", get_leader_location(leader), "leader", leader)
-				else 
+					populate("leaders", get_leader_faction(leader), "leader_board", leader)
+				} else 
 					populate("subordinate_leaders", get_seniormost_leader(get_leader_faction(leader), get_leader_location(leader)), "leader", leader)
 			} else {
 				for (let entry of get_attacker_data(location).forces) {
 					if (set_has(entry.leaders, leader))
-						if (get_seniormost_leader_from_list(get_leader_faction(leader), entry.leaders) === leader) 
-							populate("connection", find_connection(location, entry.from), "leader", leader)
-						else
+						if (get_seniormost_leader_from_list(get_leader_faction(leader), get_leaders_on_connection(get_leader_faction(leader), location, entry.from)) === leader) {
+							populate("connection_stack", find_connection(location, entry.from), "leader", leader)
+							populate("leaders", get_leader_faction(leader), "leader_board", leader)
+						} else
 							populate("subordinate_leaders", get_seniormost_leader_from_list(get_leader_faction(leader), entry.leaders), "leader", leader)
-
 				}
 			}
 		}
@@ -694,7 +707,7 @@ function update_troops() {
 					if (entry.troops[type] > 0) {
 						let connection = find_connection(area, entry.from)
 						if (entry.leaders.length === 0) {
-							populate("connection", connection, get_troop_name(type), get_used(who, type))
+							populate("connection_stack", connection, get_troop_name(type), get_used(who, type))
 						} else {
 							populate(`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader_from_list(who, entry.leaders), get_troop_name(type), get_used(who, type))
 						}
@@ -827,6 +840,34 @@ function on_prompt(text) {
 scroll_with_middle_mouse("main")
 
 /* FRAMEWORK */
+
+function array_insert(array, index, item) {
+	for (var i = array.length; i > index; --i)
+		array[i] = array[i - 1]
+	array[index] = item
+}
+
+function set_add(set, item) {
+	var a = 0
+	var b = set.length - 1
+	// optimize fast case of appending items in order
+	if (item > set[b]) {
+		set[b+1] = item
+		return
+	}
+	while (a <= b) {
+		var m = (a + b) >> 1
+		var x = set[m]
+		if (item < x)
+			b = m - 1
+		else if (item > x)
+			a = m + 1
+		else
+			return
+	}
+	array_insert(set, a, item)
+}
+
 function set_has(set, item) {
 	var a = 0
 	var b = set.length - 1
