@@ -4546,7 +4546,7 @@ function find_retreat_destinations(who, area) {
 	return retreat_destinations.filter(dest => !has_enemy_sp(who, dest) && !set_has(get_connections_used_in_battle(enemy(who), area), dest))
 }
 
-function find_path_distance(a, b) {
+function find_path_distance(a, b, connection_type = -1) {
 	let queue = [ a ]
 	let distance = []
 	let visited = []
@@ -4567,7 +4567,8 @@ function find_path_distance(a, b) {
 		set_add(visited, current)
 
 		let current_distance = get_distance(current)
-		for (let neighbor of get_all_adjacent_areas(current)) {
+		let adjacencies = (connection_type === ROAD) ? get_adjacent_areas_by_road(current) : get_all_adjacent_areas(current)
+		for (let neighbor of adjacencies) {
 			if (!map_has(distance, neighbor)) {
     			map_set(distance, neighbor, current_distance + 1)
     			queue.push(neighbor)
@@ -5423,7 +5424,7 @@ P.execute_rally = {
 		L.current_order = -1
 		L.has_executed_order = false
 		L.rally_orders = get_placed_orders_of_type(RALLY)
-		L.orders_by_side = [L.rally_orders.filter(o => get_order_owner(o) === RUSSIA), L.forced_march_orders.filter(o => get_order_owner(o) === FRANCE)]
+		L.orders_by_side = [L.rally_orders.filter(o => get_order_owner(o) === RUSSIA), L.rally_orders.filter(o => get_order_owner(o) === FRANCE)]
 
 		for (let who = RUSSIA; who <= FRANCE; ++who) {
 			L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order)))
@@ -5674,6 +5675,141 @@ P.apply_cossack_raid = {
 }
 
 //=== 12. EXECUTE PLACE DEPOT ORDERS ===
+P.place_depot = script(`
+	log "@Execute Place Depot"
+
+	if (get_placed_orders_of_type(PLACE_DEPOT).length === 0) {
+		log "No place depot orders placed."
+	} else {
+		call determine_who_goes_first { order_type: PLACE_DEPOT }
+		call switch_orders { current_order_type: PLACE_DEPOT }
+		call execute_place_depot { first_player: L.$ }
+	}
+`)
+
+P.execute_place_depot = {
+	_begin() {
+		//L.first_player
+		G.active = L.first_player
+		L.has_passed = [false, false]
+		L.current_order = -1
+		L.has_executed_order = false
+		L.place_depot_orders = get_placed_orders_of_type(PLACE_DEPOT)
+		L.orders_by_side = [L.place_depot_orders.filter(o => get_order_owner(o) === RUSSIA), L.place_depot_orders.filter(o => get_order_owner(o) === FRANCE)]
+
+		for (let who = RUSSIA; who <= FRANCE; ++who) {
+			L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order)) && is_depot_town(get_order_location(order)))
+		}
+	},
+	prompt() {
+		if (L.orders_by_side[G.active].length === 0) {
+			prompt(`Execute Place Depot orders: All done. You may remove friendly depot markers.`)
+			button_done()
+		} else {
+			if (L.has_executed_order) {
+				prompt(`Execute Place Depot order: All done.`)
+				button_confirm()
+			} else {
+				prompt(`Select a Place Depot order to execute (${join_array_with_or(L.orders_by_side[G.active].map(order => `S${get_order_location(order)}`))}), or remove friendly depot markers.`)
+				for (let order of L.orders_by_side[G.active]) 
+					if (has_troop(get_order_location(order)))
+						action_order(order)
+			}
+		}
+		for (let depot = get_first_depot(G.active); depot <= get_last_depot(G.active); ++depot) {
+			if (is_depot_on_map(depot)) action("depot", depot)
+		}
+	},
+	order(order) {
+		push_undo()
+		let area = get_order_location(order)
+		log_h3(`S${area}`, G.active)
+		remove_order(order)
+		L.current_order = order
+		call("do_place_depot", { area })
+	},
+	_resume() {
+		L.has_executed_order = true
+	},
+	confirm() {
+		push_undo()
+		set_delete(L.orders_by_side[G.active], L.current_order)
+		if (!L.has_passed[enemy(G.active)]) G.active = enemy(G.active)
+		
+		L.has_executed_order = false
+		L.current_order = -1
+	},
+	done() {
+		L.has_passed[G.active] = true
+		L.has_executed_order = false
+		L.current_order = -1
+
+		if (L.has_passed[RUSSIA] && L.has_passed[FRANCE]) {
+			end()
+		} else {
+			G.active = enemy(G.active)
+		}
+	},
+	depot(depot) {
+		push_undo()
+		log_h3(`S${get_depot_location(depot)}`, G.active)
+		remove_depot(depot, get_depot_location(depot))
+	},
+}
+
+function has_depot_in_pool(who) {
+	return has_friendly_depot(who, POOL)
+}
+
+P.do_place_depot = {
+	_begin() {
+		//L.area
+		L.has_friendly_depot_in_range = false
+		for (let depot of get_supply_sources_and_depots(G.active)) {
+			if (find_path_distance(depot, L.area, ROAD) <= 4) {
+				L.has_friendly_depot_in_range = true
+				break
+			}
+		}
+	},
+	prompt() {
+		if (L.has_friendly_depot_in_range) {
+			if (has_depot_in_pool(G.active)) {
+				prompt(`Place a Depot at S${L.area}.`)
+				action_area(L.area)
+			} else {
+				prompt(`No depots in pool. You may remove other depots in order to place one at S${L.area}.`)
+				button_pass()
+			}
+		} else {
+			prompt(`S${L.area} cannot trace a path of 4 or less road connections to another friendly depot.`)
+			button_confirm()
+		}
+		for (let depot = get_first_depot(G.active); depot <= get_last_depot(G.active); ++depot) {
+			if (is_depot_on_map(depot)) action("depot", depot)
+		}
+	},
+	area(area) {
+		push_undo()
+		add_depot(G.active, area)
+		log("Placed depot")
+		logi(`S${area}`)
+		end()
+	},
+	depot(depot) {
+		push_undo()
+		log_h3(`S${get_depot_location(depot)}`, G.active)
+		remove_depot(depot, get_depot_location(depot))
+	},
+	confirm() {
+		log("Cannot trace a line of 4 or less road connections to another depot.")
+		end()
+	},
+	pass() {
+		log("No depots in pool.")
+		end()
+	}
+}
 
 //=== SUPPLY, LINES OF COMMUNICATION & ATTRITION ===
 const MAX_SUPPLY_DISTANCE = 5

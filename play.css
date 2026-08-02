@@ -456,6 +456,14 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	left: -40px;
 }
 
+.marker.depot.action {
+	filter:
+		drop-shadow(0 -2px 0 yellow)
+		drop-shadow(0 2px 0 yellow)
+		drop-shadow(-2px 0 0 yellow)
+		drop-shadow(2px 0 0 yellow)
+}
+
 .marker.depot.ru { background-image: url(pieces/green_cube.svg);}
 .marker.depot.fr { background-image: url(pieces/blue_cube.svg);}
 
