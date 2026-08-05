@@ -1965,6 +1965,7 @@ P.turn = script(`
 	call cavalry_patrols
 	call march
 	call evade
+	call battle
 	call rally
 	call cossack_raid
 	call place_depot
@@ -3341,12 +3342,11 @@ function get_placed_orders_of_type(type) {
 
 P.forced_march = script(`
 	log "@Execute Forced Marches"
-
+	call switch_orders { current_order_type: FORCED_MARCH }
 	if (get_placed_orders_of_type(FORCED_MARCH).length === 0) {
 		log "No forced march orders placed."
 	} else {
 		call determine_who_goes_first { order_type: FORCED_MARCH }
-		call switch_orders { current_order_type: FORCED_MARCH }
 		if (is_event_active(EVASIVE_MANEUVERS)) {
 			goto ("event_" + EVASIVE_MANEUVERS)
 		} else {
@@ -3463,7 +3463,7 @@ P.execute_marches = {
 		L.orders_by_side = [L.forced_march_orders.filter(o => get_order_owner(o) === RUSSIA), L.forced_march_orders.filter(o => get_order_owner(o) === FRANCE)]
 		
 		for (let who = RUSSIA; who <= FRANCE; ++who) {
-			L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order) && (get_all_movable_troops_in_area(G.active, get_order_location(order)).some(type => type > 0))))
+			L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order)))
 		}		
 	},
 	prompt() {
@@ -4925,6 +4925,11 @@ function is_fresh_cavalry(troop_type) {
 
 */
 
+P.battle = (`
+	call switch_orders { order_type: DEFEND }
+	call resolve_battles
+`)
+
 const BATTLES_WITHOUT_LEADERS = 0
 const BATTLES_WHERE_ONE_SIDE_HAS_LEADER = 1
 const BATTLES_WHERE_BOTH_SIDES_HAVE_LEADERS = 2
@@ -4989,15 +4994,18 @@ P.resolve_battles = {
 		clear_undo()
 		G.current_battle = area
 		log_h3(`S${area}`, get_battle_attacker(area))
-		call("battle", { area: area, attacker: get_battle_attacker(area), defender: get_battle_defender(area) })
+		call("do_battle", { area: area, attacker: get_battle_attacker(area), defender: get_battle_defender(area) })
 	},
 	_resume() {
 		set_delete(L.battles_by_type[L.current_battle_type], G.current_battle)
+		if (L.battles_by_type[L.current_battle_type].length === 0)
+			if (L.current_battle_type < BATTLES_WHERE_BOTH_SIDES_HAVE_LEADERS)
+				++L.current_battle_type
 		G.current_battle = -1
 	}
 }
 
-P.battle = script(`
+P.do_battle = script(`
 	set G.active L.defender
 	call defend { area: L.area }
 
@@ -5130,7 +5138,7 @@ P.calculate_combat_value = script(`
 	set G.active [RUSSIA, FRANCE]
 	call roll_battle_die { combat_value: L.$ }
 	call determine_hits { attacker: L.attacker, defender: L.defender, combat_value: L.$ }
-	goto assign_losses { attacker: L.attacker, defender: L.defender, losses: L.$ }
+	goto assign_losses { attacker: L.attacker, defender: L.defender, losses: L.hits }
 `)
 
 P.do_combat_value_calculations = function() {
@@ -5234,6 +5242,18 @@ function get_exhausted_strength(who, battle_data, area) {
 	return strength
 }
 
+function modify_battle_roll(who, roll) {
+	switch(get_seniormost_leader(who, G.current_battle)) {
+	case ALEXANDER: return roll - 1
+	case KUTUZOV: return 1
+	case BAGRATION: return is_battle_defender(who, G.current_battle) ? roll + 1 : roll
+	case NAPOLEON: return roll + 1
+	case JEROME: return roll - 1
+	case DAVOUT: return roll + 1
+	default: return roll
+	}
+}
+
 P.roll_battle_die = {
 	_begin() {
 		//L.combat_value
@@ -5256,6 +5276,9 @@ P.roll_battle_die = {
 			L.battle_roll[FRANCE] = roll_france_battle_die()
 		else
 			L.battle_roll[RUSSIA] = roll_russia_battle_die()
+
+		L.battle_roll[RUSSIA] = modify_battle_roll(RUSSIA, L.battle_roll[RUSSIA])
+		L.battle_roll[FRANCE] = modify_battle_roll(FRANCE, L.battle_roll[FRANCE])
 
 		L.combat_value[R] += L.battle_roll[R]
 		L.has_rolled_battle_die[R] = true
@@ -5280,7 +5303,11 @@ P.determine_hits = function() {
 	if (battle_has_defend_order(G.current_battle))
 		L.hits[L.defender] = Math.max(0, --L.hits[L.defender])
 
-	L.L.$ = L.hits
+	log()
+	for (let who = RUSSIA; who <= FRANCE; ++who)
+		log(`${ROLES[who]} inflicted ${L.hits[who]} hits.`)
+
+	L.L.hits = L.hits.reverse()
 	end()
 }
 
@@ -5330,19 +5357,21 @@ function count_num_sps_of_type(who, type, area) {
 P.assign_losses = {
 	_begin() {
 		//L.losses, L.attacker, L.defender
+		console.log(L.losses)
 		log_h3("Assign Losses", 2)
 		G.active = [RUSSIA, FRANCE]
 
-		L.count = 0
+		L.count = [0, 0]
+		console.log(L.count)
 		L.has_assigned_cavalry_loss = [false, false]
 	},
 	prompt() {
 		if (L.losses[R] > 0) {
 			if (count_num_fresh_sps(R, G.current_battle) > 0) {
-				if (L.count % 3 === 2 && (count_num_cavalry(R, G.current_battle) > 0) && !L.has_assigned_cavalry_loss[R]) {
+				if (L.count[R] % 3 === 2 && (count_num_cavalry(R, G.current_battle) > 0) && !L.has_assigned_cavalry_loss[R]) {
 					prompt(`Assign a loss to a fresh Cavalry SP.`)
 					action("troop", FRESH_CAVALRY)
-				} else if (L.count % 2 === 0) {
+				} else if (L.count[R] % 2 === 0) {
 					prompt(`Select an SP to exhaust.`)
 					for (let type of get_all_fresh_sp_types(R, G.current_battle)) {
 						action("troop", type)
@@ -5354,7 +5383,7 @@ P.assign_losses = {
 					}
 				}
 			} else {
-				if (has_exhausted_sp(R, G.current_battle)) {
+				if (has_exhausted_sp(R, G.current_battle) && has_fresh_sp(enemy(R), G.current_battle)) {
 					prompt(`No more fresh SPs: Eliminate all exhausted SPs at S${G.current_battle}.`)
 					button("eliminate")
 				} else {
@@ -5371,36 +5400,139 @@ P.assign_losses = {
 		if (type === FRESH_CAVALRY)
 			L.has_assigned_cavalry_loss[R] = true
 
-		if (L.count % 2 === 0) {
+		if (L.count[R] % 2 === 0) {
 			exhaust_troop(R, G.current_battle, type)
 		} else {
 			eliminate_troop(R, G.current_battle, type)
 		}
 
-		++L.count
+		++L.count[R]
 		--L.losses[R]
 	},
 	eliminate() {
 		for (let type of get_all_exhausted_sp_types(R, G.current_battle)) {
 			eliminate_troop(R, G.current_battle, type, count_num_sps_of_type(R, type, G.current_battle))
 		}
+		log(`${ROLES[R]} has no more fresh SPs.`)
 		log(`${ROLES[R]} eliminated!`)
 	},
 	done() {
 		set_delete(G.active, R)
 		if (G.active.length === 0)
-			if (!has_friendly_troop(RUSSIA, G.current_battle) && !has_friendly_troop(FRANCE, G.current_battle))
+			if (!has_friendly_troop(RUSSIA, G.current_battle) || !has_friendly_troop(FRANCE, G.current_battle)) {
 				goto("end_battle")
-			else
-				finish("WIP", "exit code 0")
+			} else if (L.count[RUSSIA] === L.count[FRANCE]) {
+				log(`${ROLES[RUSSIA]} inflicted ${L.count[RUSSIA]} losses.`)
+				log(`${ROLES[FRANCE]} inflicted ${L.count[FRANCE]} losses.`)
+				log("Battle tied.")
+				goto("drawn_battle")
+			} else {
+				log(`${ROLES[RUSSIA]} inflicted ${L.count[FRANCE]} losses.`)
+				log(`${ROLES[FRANCE]} inflicted ${L.count[RUSSIA]} losses.`)
+				log(`${ROLES[get_battle_winner(L.count)]} won!`)
+				goto("pursuit", { winner: get_battle_winner(L.count) })
+			}
+	}
+}
+
+function has_fresh_sp(who, area) {
+	return get_area_troop_set(area, null)?.some(entry => decode_troop_entry_who(entry) === who && is_troop_type_fresh(decode_troop_entry_type(entry))) ?? false
+}
+
+function get_battle_winner(count) {
+	return (count[RUSSIA] > count[FRANCE]) ? FRANCE : RUSSIA
+}
+
+function count_pursuit_cavalry(who, area) {
+	if (who === RUSSIA)
+		return count_num_cavalry(who, area) + (2 * count_num_cossack(area))
+	else
+		return count_num_cavalry(who, area)
+}
+
+P.pursuit = {
+	_begin() {
+		//L.winner
+		log_h3("Pursuit", NONE)
+		G.active = [RUSSIA, FRANCE]
+		L.pursuit_cavalry = [count_pursuit_cavalry(RUSSIA, G.current_battle), count_pursuit_cavalry(FRANCE, G.current_battle)]
+	
+		//Murat's ability: counts as cavalry SP for pursuit purposes
+		if (get_leader_location(MURAT) === G.current_battle)
+			++L.pursuit_cavalry[FRANCE]
+
+	},
+	prompt() {
+		prompt(`Pursuit: reveal strength (1x Cavalry + 2x Cossack) - ${L.pursuit_cavalry[R]}.`)
+		button_confirm()
+	},
+	confirm() {
+		set_delete(G.active, R)
+		if (G.active.length === 0) {
+			log(`${ROLES[L.winner]}`)
+			logi(`${L.pursuit_cavalry[L.winner]} strength`)
+			if (get_leader_location(MURAT) === G.current_battle && L.winner === FRANCE) { log("<+1 Murat") }
+
+			log(`${ROLES[enemy(L.winner)]}`)
+			logi(`${L.pursuit_cavalry[enemy(L.winner)]} strength`)
+			if (get_leader_location(MURAT) === G.current_battle && L.winner !== FRANCE) { log("<+1 Murat") }
+			log()
+			if (L.pursuit_cavalry[L.winner] > L.pursuit_cavalry[enemy(L.winner)]) {
+				let difference = L.pursuit_cavalry[L.winner] - L.pursuit_cavalry[enemy(L.winner)]
+				log(`${ROLES[L.winner]} won the pursuit.`)
+				log(`${ROLES[enemy(L.winner)]} must take ${difference} more losses.`)
+				goto("assign_pursuit_losses", { loser: enemy(L.winner), difference })
+			} else {
+				log(`Pursuit inconclusive!`)
+				goto("end_battle")
+			}
+		}
+	}
+}
+
+P.assign_pursuit_losses = {
+	_begin() {
+		//L.loser, L.difference
+		G.active = L.loser
+		L.has_finished = false
+	},
+	prompt() {
+		if (L.has_finished) {
+			prompt(`Assign pursuit losses: All done.`)
+			button_done()
+		} else if (count_num_fresh_sps(G.active, G.current_battle) === 0) {
+			prompt(`No more fresh SPs: eliminate all SPs at S${G.current_battle}.`)
+			button("eliminate")
+		} else {
+			prompt(`Pursuit: Eliminate ${L.difference} SPs at S${G.current_battle}.`)
+			for (let type of get_troop_types_at_area(G.active, G.current_battle))
+				action("troop", type)
+		} 
+	},
+	eliminate() {
+		push_undo()
+		for (let type of get_all_exhausted_sp_types(R, G.current_battle)) {
+			eliminate_troop(R, G.current_battle, type, count_num_sps_of_type(R, type, G.current_battle))
+		}
+		log(`${ROLES[R]} has no more fresh SP.`)
+		log(`${ROLES[R]} eliminated!`)
+
+		L.has_finished = true
+	},
+	troop(type) {
+		push_undo()
+		eliminate_troop(G.active, G.current_battle, type)
+		if (--L.difference === 0) L.has_finished = true
+	},
+	done() {
+		goto("end_battle")
 	}
 }
 
 P.end_battle = function() {
 	map_delete(G.battles, G.current_battle)
-	G.current_battle = -1
 	if (G.battles.length > 0) { G.active = get_who_has_initiative() }
-	else { finish("WIP", "exit code 0")}
+	end()
 }
 
 //=== 10. EXECUTE RALLY ORDERS ===

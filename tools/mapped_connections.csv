@@ -163,7 +163,7 @@ id,space1,space2,type,bridge
 162,96,98,track,0
 163,100,97,road,1
 164,100,99,road,0
-165,101,99,road ,0
+165,101,99,road,0
 166,100,102,road,0
 167,101,102,track,0
 168,97,99,road,1

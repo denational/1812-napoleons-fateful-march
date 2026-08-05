@@ -18,6 +18,33 @@ function process_name(name) {
 	return name
 }
 
+function array_insert(array, index, item) {
+	for (var i = array.length; i > index; --i)
+		array[i] = array[i - 1]
+	array[index] = item
+}
+
+function set_add(set, item) {
+	var a = 0
+	var b = set.length - 1
+	// optimize fast case of appending items in order
+	if (item > set[b]) {
+		set[b+1] = item
+		return
+	}
+	while (a <= b) {
+		var m = (a + b) >> 1
+		var x = set[m]
+		if (item < x)
+			b = m - 1
+		else if (item > x)
+			a = m + 1
+		else
+			return
+	}
+	array_insert(set, a, item)
+}
+
 
 //=== SPACES ===
 const names = 'names.csv'
@@ -66,7 +93,10 @@ fs.createReadStream(names)
 					type,
 					bridge,
 				} = row
-				data.connections.push([Number(space1), Number(space2)])
+				let connection = []
+				set_add(connection, Number(space1))
+				set_add(connection, Number(space2))
+				data.connections.push(connection)
 
 				switch(type) {
 				case "road":
