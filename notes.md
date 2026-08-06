@@ -21,3 +21,8 @@
 8. leaders can be left behind alone
 9. good leadership - no more actions select order if no orders executable
 10. hard marching, fast marching, exhausting march losses not yet applied
+11. evade remove depot
+12. not applied - onl taken hits count
+13. retreat with no valid path not handled yet (not enough test cases yet)
+14. display bug - prussian troops exhausted on connection disappear (battle of riga)
+15. combine forces in battle step

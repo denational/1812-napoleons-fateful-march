@@ -3011,7 +3011,7 @@ P.determine_who_goes_first = {
 	},
 	draw() {
 		clear_undo()
-
+		++L.step
 		let drawn_card = draw_card(G.active)
 		if (is_must_play_event(drawn_card)) {
 			call("must_play_event", { card: drawn_card })
@@ -3024,8 +3024,14 @@ P.determine_who_goes_first = {
 		if (L.played_card) {
 			log("Russia executes all 'Forced March' orders first this turn, but may not end moves in or adjacent to enemy-occupied areas.")
 			card_box_end()
-			if ((L.state === EVASIVE_MANEUVERS) || (L.state === ENERGETIC_LEADERSHIP)) add_persistent_event(L.state)
-			if (L.state === ENERGETIC_LEADERSHIP) L.first_player = FRANCE
+			if ((L.state === EVASIVE_MANEUVERS) || (L.state === ENERGETIC_LEADERSHIP)) {
+				add_persistent_event(L.state)
+				discard_card(L.state)
+			} 
+			
+			if (L.state === ENERGETIC_LEADERSHIP) {
+				L.first_player = FRANCE
+			}
 		} else {
 			log(`${ROLES[G.active]} chose ${ROLES[L.first_player]} to go first.`)
 		}
@@ -3607,7 +3613,10 @@ P.select_force = {
 		log_h3(`S${L.area}`, G.active)
 	},
 	prompt() {
-		if (L.move.pinned && (L.max_troops_selectable === 0)) {
+		if (L.troops_at_area.every(num_troops_of_type => num_troops_of_type === 0)) {
+			prompt(`No movable SPs at S${L.area}.`)
+			button_pass()
+		} else if (L.move.pinned && (L.max_troops_selectable === 0)) {
 			prompt(`Pinned: May not move any SPs from S${L.area}.`)
 			button_pass()
 		} else if (L.move.leaders.length > 0) {
@@ -3697,7 +3706,12 @@ P.select_force = {
 	},
 	pass() {
 		push_undo()
-		log("Pinned.")
+
+		if (L.move.pinned && (L.max_troops_selectable === 0))
+			log("Pinned.")
+		else 
+			log("No movable SPs.")
+		
 		log()
 		end()
 	}
@@ -4514,14 +4528,14 @@ function get_other_area(connection, area) {
 	return data.connections[connection].find(loc => loc !== area)
 }
 
-function find_retreat_destinations(who, area) {
+function find_retreat_destinations(who, area, among = get_all_adjacent_areas(area)) {
 	let closest_depots = find_closest_depot_for_retreat(who, area)
 	let retreat_destinations = []
 	let best_distance = 999
 
 	for (let depot of closest_depots) {
 		let distances = []
-		for (let neighbor of get_all_adjacent_areas(area)) {
+		for (let neighbor of among) {
 			let distance = find_path_distance(neighbor, depot)
 
 			if (distance < 999) {
@@ -4706,7 +4720,7 @@ function find_closest_depot_for_retreat(who, area) {
 */
 
 function init_battle_entry(area) {
-	map_set(G.battles, area, {attacker: {who: -1, forces: []}, defender: {who: -1, forces: []}, events: []})
+	map_set(G.battles, area, {attacker: {who: -1, forces: [], losses: 0, num_eliminated: 0,}, defender: {who: -1, forces: [], losses: 0, num_eliminated: 0,}, events: []})
 }
 
 function has_battle(area) {
@@ -4740,12 +4754,13 @@ function add_attacker_to_battle(who, from, area, move_type, leaders, troops) {
 
 	battle.attacker.who = who
 
+	//Cannot merge entries with same 'from' since one might Forced March and the other might March
 	battle.attacker.forces.push({
 		from: from,
 		move_type: move_type,
 		river_crossing: has_bridge(from, area),
 		leaders: leaders,
-		troops: troops
+		troops: troops,
 	})
 }
 
@@ -4805,6 +4820,12 @@ function battle_has_defend_order(area) {
 	let battle = get_battle_entry(area, null)
 
 	return battle.defender.defend_order
+}
+
+function update_battle_losses(who, area, amt) {
+	let battle = get_battle_entry(area, null)
+
+	get_player_battle_data(who, area).losses = amt
 }
 
 function has_bridge(from, to) {
@@ -5137,7 +5158,7 @@ P.calculate_combat_value = script(`
 
 	set G.active [RUSSIA, FRANCE]
 	call roll_battle_die { combat_value: L.$ }
-	call determine_hits { attacker: L.attacker, defender: L.defender, combat_value: L.$ }
+	call determine_losses { attacker: L.attacker, defender: L.defender, combat_value: L.$ }
 	goto assign_losses { attacker: L.attacker, defender: L.defender, losses: L.hits }
 `)
 
@@ -5254,6 +5275,10 @@ function modify_battle_roll(who, roll) {
 	}
 }
 
+function increment_eliminated(who, battle, amt = 1) {
+	get_player_battle_data(who, battle).num_eliminated += amt
+}
+
 P.roll_battle_die = {
 	_begin() {
 		//L.combat_value
@@ -5287,27 +5312,47 @@ P.roll_battle_die = {
 		set_delete(G.active, R)
 
 		if (G.active.length === 0) {
-			L.L.$ = L.combat_value.map(value => Math.floor(value)).slice()
+			L.L.$ = L.combat_value.map(value => value >= 0 ? Math.floor(value): 0).slice()
 			end()
 		}
 	}
 }
 
-P.determine_hits = function() {
+P.determine_losses = function() {
 	//L.combat_value
-	L.hits = L.combat_value.map(value => get_combat_losses_inflicted(value))
+	L.losses = L.combat_value.map(value => get_combat_losses_inflicted(value)).reverse() //Hits for one side => losses for other
 
 	if (is_fortress_town(G.current_battle) && ((count_num_infantry(L.defender, G.current_battle) > 0) || (count_num_guard(L.defender, G.current_battle) > 0)))
-		++L.hits[L.attacker]
+		++L.losses[L.attacker]
 	
 	if (battle_has_defend_order(G.current_battle))
-		L.hits[L.defender] = Math.max(0, --L.hits[L.defender])
+		L.losses[L.defender] = Math.max(0, --L.losses[L.defender])
+
+	if (G.current_battle === S_RIGA && (is_battle_defender(RUSSIA, G.current_battle))) //Fortress Riga special rule
+		L.losses[L.defender] = Math.max(0, --L.losses[L.defender])
 
 	log()
-	for (let who = RUSSIA; who <= FRANCE; ++who)
-		log(`${ROLES[who]} inflicted ${L.hits[who]} hits.`)
+	for (let who = RUSSIA; who <= FRANCE; ++who) {
+		log(`${ROLES[who]} suffered ${L.losses[who]} losses.`)	
 
-	L.L.hits = L.hits.reverse()
+		logi(`+${get_combat_losses_inflicted(L.combat_value[enemy(who)])} SPs`)
+
+		if (is_battle_attacker(who)) {
+			if (is_fortress_town(G.current_battle) && ((count_num_infantry(L.defender, G.current_battle) > 0) || (count_num_guard(L.defender, G.current_battle) > 0)))
+				logi(`+1 fortress`)
+			
+		} else {
+			if (battle_has_defend_order(G.current_battle))
+				logi(`-1 Defend`)
+			if (G.current_battle === S_RIGA && (is_battle_defender(RUSSIA, G.current_battle)))
+				logi(`-1 S${S_RIGA}`)
+		}
+	}
+
+	update_battle_losses(L.attacker, G.current_battle, L.losses[L.attacker])
+	update_battle_losses(L.defender, G.current_battle, L.losses[L.defender])
+
+	L.L.hits = L.losses
 	end()
 }
 
@@ -5357,12 +5402,10 @@ function count_num_sps_of_type(who, type, area) {
 P.assign_losses = {
 	_begin() {
 		//L.losses, L.attacker, L.defender
-		console.log(L.losses)
 		log_h3("Assign Losses", 2)
 		G.active = [RUSSIA, FRANCE]
 
 		L.count = [0, 0]
-		console.log(L.count)
 		L.has_assigned_cavalry_loss = [false, false]
 	},
 	prompt() {
@@ -5404,6 +5447,7 @@ P.assign_losses = {
 			exhaust_troop(R, G.current_battle, type)
 		} else {
 			eliminate_troop(R, G.current_battle, type)
+			increment_eliminated(R, G.current_battle)
 		}
 
 		++L.count[R]
@@ -5411,7 +5455,9 @@ P.assign_losses = {
 	},
 	eliminate() {
 		for (let type of get_all_exhausted_sp_types(R, G.current_battle)) {
-			eliminate_troop(R, G.current_battle, type, count_num_sps_of_type(R, type, G.current_battle))
+			let count = count_num_sps_of_type(R, type, G.current_battle)
+			increment_eliminated(R, G.current_battle, count)
+			eliminate_troop(R, G.current_battle, type, count)
 		}
 		log(`${ROLES[R]} has no more fresh SPs.`)
 		log(`${ROLES[R]} eliminated!`)
@@ -5420,12 +5466,12 @@ P.assign_losses = {
 		set_delete(G.active, R)
 		if (G.active.length === 0)
 			if (!has_friendly_troop(RUSSIA, G.current_battle) || !has_friendly_troop(FRANCE, G.current_battle)) {
-				goto("end_battle")
+				goto("end_battle", { winner: get_battle_winner(L.count) })
 			} else if (L.count[RUSSIA] === L.count[FRANCE]) {
 				log(`${ROLES[RUSSIA]} inflicted ${L.count[RUSSIA]} losses.`)
 				log(`${ROLES[FRANCE]} inflicted ${L.count[FRANCE]} losses.`)
 				log("Battle tied.")
-				goto("drawn_battle")
+				goto("tied_battle")
 			} else {
 				log(`${ROLES[RUSSIA]} inflicted ${L.count[FRANCE]} losses.`)
 				log(`${ROLES[FRANCE]} inflicted ${L.count[RUSSIA]} losses.`)
@@ -5477,6 +5523,7 @@ P.pursuit = {
 			logi(`${L.pursuit_cavalry[enemy(L.winner)]} strength`)
 			if (get_leader_location(MURAT) === G.current_battle && L.winner !== FRANCE) { log("<+1 Murat") }
 			log()
+
 			if (L.pursuit_cavalry[L.winner] > L.pursuit_cavalry[enemy(L.winner)]) {
 				let difference = L.pursuit_cavalry[L.winner] - L.pursuit_cavalry[enemy(L.winner)]
 				log(`${ROLES[L.winner]} won the pursuit.`)
@@ -5484,7 +5531,7 @@ P.pursuit = {
 				goto("assign_pursuit_losses", { loser: enemy(L.winner), difference })
 			} else {
 				log(`Pursuit inconclusive!`)
-				goto("end_battle")
+				goto("end_battle", { winner: L.winner, loser: enemy(L.winner), drawn_battle: false })
 			}
 		}
 	}
@@ -5512,7 +5559,9 @@ P.assign_pursuit_losses = {
 	eliminate() {
 		push_undo()
 		for (let type of get_all_exhausted_sp_types(R, G.current_battle)) {
-			eliminate_troop(R, G.current_battle, type, count_num_sps_of_type(R, type, G.current_battle))
+			let count = count_num_sps_of_type(R, type, G.current_battle)
+			increment_eliminated(G.active, G.current_battle, count)
+			eliminate_troop(R, G.current_battle, type, count)
 		}
 		log(`${ROLES[R]} has no more fresh SP.`)
 		log(`${ROLES[R]} eliminated!`)
@@ -5522,18 +5571,279 @@ P.assign_pursuit_losses = {
 	troop(type) {
 		push_undo()
 		eliminate_troop(G.active, G.current_battle, type)
+		increment_eliminated(G.active, G.current_battle)
 		if (--L.difference === 0) L.has_finished = true
 	},
 	done() {
-		goto("end_battle")
+		goto("end_battle", { winner: enemy(G.active), loser: G.active, drawn_battle: false })
 	}
 }
 
-P.end_battle = function() {
-	map_delete(G.battles, G.current_battle)
-	if (G.battles.length > 0) { G.active = get_who_has_initiative() }
-	end()
+function did_all_attacking_forces_cross_bridges(battle) {
+	let attacker_data = get_attacker_data(battle)
+
+	return attacker_data.forces.every(force => force.bridge === true)
 }
+
+P.tied_battle = script(`
+	eval {
+		L.winner = -1
+		if (is_fortress_town(G.current_battle) || did_all_attacking_forces_cross_bridges(G.current_battle)) {
+			L.winner = get_battle_defender(G.current_battle)
+		} else {
+			L.winner = get_who_has_initiative()
+		}
+	}
+	call end_battle { drawn_battle: true, winner: L.winner, loser: enemy(L.winner)}	
+`)
+
+P.end_battle = script(`
+	if (!L.drawn_battle) {
+		call battle_shift_vp_and_initiative { winner: L.winner }
+	}
+	call retreat { loser: L.loser }
+	eval {
+		if (get_area_vp(G.current_battle) > 0 && is_battle_attacker(L.winner, G.current_battle)) {
+			log()
+			log(ROLES[L.winner] + " captured S" + G.current_battle + "!")
+			increase_vp(L.winner, get_area_vp(G.current_battle))
+		}
+		map_delete(G.battles, G.current_battle)
+		if (G.battles.length > 0) { 
+			G.active = get_who_has_initiative() 
+		}
+	}	
+`)
+
+function get_current_initiative_level() {
+	return Math.abs(G.initiative)
+}
+
+P.battle_shift_vp_and_initiative = {
+	_begin() {
+		//L.winner
+		log_h3("VP & Initiative Shifts")
+		G.active = L.winner
+		L.num_enemy_sps_eliminated = get_player_battle_data(enemy(G.active), G.current_battle).num_eliminated
+		L.has_shifted_vp = false
+		L.has_finished = false
+		L.step = -1
+	},
+	prompt() {
+		if (!L.has_shifted_vp) {
+			if (L.step === -1) {
+				if (L.num_enemy_sps_eliminated > 0) {
+					prompt(`Battle Winner: Shift VP marker ${L.num_enemy_sps_eliminated} spaces in your favor.`)
+					action_vp_marker()
+				} else {
+					prompt(`No enemy SPs eliminated - no VP shifts.`)
+					button_pass()
+				}
+			} else {
+				if (G.active === RUSSIA)
+					prompt(`Losing force included L${NAPOLEON}: Gain an additional VP shift.`)
+				else
+					prompt(`Losing force included L${ALEXANDER}: Gain an additional VP shift.`)
+				action_vp_marker()
+			}
+		} else if (!L.has_finished) {
+			if (G.active === get_who_has_initiative()) {
+				if ((get_current_initiative_level() < 4) || (L.num_enemy_sps_eliminated > get_current_initiative_level())) {
+					prompt(`Shift Initiative Marker 1 in your favor for eliminating more losing SPs than the current Initiative level.`)
+					action_initiative_marker()
+				} else if (get_current_initiative_level() === 4) {
+					prompt(`Initiative cannot be shifted further.`)
+					button_pass()
+				} else {
+					prompt(`No Initiative shift: number of enemy SPs eliminated is not greater than the current initiative level.`)
+					button_pass()
+				}
+			} else {
+				prompt(`Shift Initiative Marker 1 in your favor for winning the battle.`)
+				action_initiative_marker()
+			}
+		} else {
+			prompt(`VP and Initiative Shifts: All done.`)
+			button_done()
+		}
+	},
+	vp() {
+		push_undo()
+		if (L.step === -1) {
+			log(`${ROLES[G.active]} eliminated ${L.num_enemy_sps_eliminated} enemy SPs.`)
+			increase_vp(G.active, L.num_enemy_sps_eliminated)
+			if (losing_force_includes_king(G.active, G.current_battle))
+				++L.step
+			else 
+				L.has_shifted_vp = true
+		} else {
+			log(`Losing force included L${G.active === RUSSIA ? NAPOLEON : ALEXANDER}.`)
+			increase_vp(G.active)
+			L.has_shifted_vp = true
+		}
+	},
+	initiative() {
+		push_undo()
+		shift_initiative(G.active)
+		L.has_finished = true
+	},
+	pass() {
+		push_undo()
+		if (!L.has_shifted_vp) 
+			L.has_shifted_vp = true
+		else
+			L.has_finished = true
+	},
+	done() {
+		end()
+	}
+}
+
+function losing_force_includes_king(winner, battle) {
+	return ((winner === RUSSIA) && (get_leader_location(NAPOLEON) === battle)) || ((winner === FRANCE) && (get_leader_location(ALEXANDER) === battle))
+}
+
+function get_valid_attacker_retreat_connections(battle) {
+	return get_connections_used_by_attacker(battle)
+}
+
+function get_valid_defender_retreat_connections(battle) {
+	let possible_areas = []
+	for (let area of get_all_adjacent_areas(battle))
+		set_add(possible_areas, area)
+	return possible_areas.filter(area => !set_has(get_connections_used_by_attacker(battle), area))
+}
+
+//TODO: Handling with no retreat areas
+//TODO: Alexander & Platov ability enforcement (will do after finishing battle events)
+P.retreat = {
+	_begin() {
+		//L.loser
+		log_h3("Retreat", NONE)
+		G.active = L.loser
+		let possible_retreat_destinations
+		if (is_battle_attacker(L.loser, G.current_battle))
+			possible_retreat_destinations = get_valid_attacker_retreat_connections(G.current_battle)
+		else
+			possible_retreat_destinations = get_valid_defender_retreat_connections(G.current_battle)
+
+		L.retreat_destinations = find_retreat_destinations(L.loser, G.current_battle, possible_retreat_destinations)
+
+		L.retreat = {
+			total_num: 0,
+			leaders: [],
+			troops: Array(NUM_TROOP_TYPES).fill(0),
+		}
+
+		L.selected_area = -1
+		L.has_retreated = false
+	},
+	prompt() {
+		console.log(L.retreat_destinations.map(area => get_area_name(area)))
+		if (L.selected_area === -1) {
+			prompt(`Select a retreat destination. (${join_array_with_or(L.retreat_destinations.map(area => `S${area}`))})`)
+			for (let area of L.retreat_destinations)
+				action_area(area)
+		} else if (!L.has_retreated) {
+			prompt(`Select a force to retreat from S${G.current_battle}.`)
+
+			for (let leader of get_leaders_at_area(G.active, G.current_battle))
+				if (!set_has(L.retreat.leaders, leader))
+					button_leader(leader)
+
+			for (let type of get_troop_types_at_area(G.active, G.current_battle)) {
+				if (count_num_sps_of_type(G.active, type, G.current_battle) > L.retreat.troops[type]) {
+					action("add_troop", type)
+				}
+				if (L.retreat.troops[type] > 0) {
+					action("remove_troop", type)
+				}
+			}
+
+			button("select_all")
+			console.log(L.retreat.total_num)
+			console.log(count_num_sps(G.active, G.current_battle))
+			console.log(get_area_troop_set(G.current_battle, null))
+			button_confirm(L.retreat.total_num > 0 || (L.retreat_destinations.length === 0 && (L.retreat.total_num > count_num_sps(G.active, G.current_battle))))
+		} else {
+			prompt(`Retreat: All done.`)
+			button_done()
+		}
+	},
+	area(area) {
+		push_undo()
+		L.selected_area = area
+		set_delete(L.retreat_destinations, L.selected_area)
+	},
+	leader_button(leader) {
+		push_undo()
+		set_toggle(L.retreat.leaders, leader)
+	},
+	add_troop(type) {
+		push_undo()
+		L.retreat.troops[type]++
+		L.retreat.total_num++
+	},
+	remove_troop(type) {
+		push_undo()
+		L.retreat.troops[type]--
+		L.retreat.total_num--
+	},
+	select_all() {
+		push_undo()
+		for (let leader of get_leaders_at_area(G.active, G.current_battle))
+			if (!set_has(L.retreat.leaders, leader)) set_add(L.retreat.leaders, leader)
+
+		L.retreat.total_num = 0
+		for (let type of get_troop_types_at_area(G.active, G.current_battle)) {
+			let count = count_num_sps_of_type(G.active, type, G.current_battle)
+			L.retreat.total_num += count
+			L.retreat.troops[type] = count
+		}
+	},
+	confirm() {
+		push_undo()
+		move_formation(L.retreat.leaders, L.retreat.troops, G.current_battle, L.selected_area)
+		
+		log("Retreated from from S" + G.current_battle)
+		if (L.retreat.leaders.length > 0) {
+			logi(`L${L.retreat.leaders[0]}`) //Seniormost leader
+			for (let type = 0; type < L.retreat.troops.length; ++type) {
+				if (L.retreat.troops[type] > 0) {
+					log_only(G.active, "<" + L.retreat.troops[type] + " " + get_troop_type_name(type))
+				}
+			}
+		} else {
+			for (let type = 0; type < L.retreat.troops.length; ++type) {
+				if (L.retreat.troops[type] > 0) {
+					log("<" + L.retreat.troops[type] + " " + get_troop_type_name(type))
+				}
+			}
+		}
+		logi("to S" + L.selected_area)
+		log()
+		
+		if (!has_friendly_troop(G.active, G.current_battle))
+			L.has_retreated = true
+		else {
+			L.selected_area = -1
+			L.retreat.total_num = 0
+			L.retreat.leaders.length = 0
+			L.retreat.troops = Array(NUM_TROOP_TYPES).fill(0)
+		}
+	},
+	done() {
+		if (has_friendly_depot(G.active, G.current_battle)) {
+			push_undo()
+			call("remove_depot", {area: G.current_battle})
+		} else
+			end()
+	},
+	_resume() {
+		end()
+	}
+}
+
 
 //=== 10. EXECUTE RALLY ORDERS ===
 P.rally = script(`
@@ -5631,7 +5941,7 @@ P.do_rally = {
 					prompt(`You may flip back one for your exhausted troops back to its fresh side.`)
 				}
 				for (let type of get_troop_types_at_area(G.active, L.area)) {
-					if (!has_friendly_depot(G.active, L.area) || is_exhausted_infantry(type)) {
+					if (is_troop_type_exhausted(type)) {
 						action("troop", type)
 					}
 				}
@@ -5644,10 +5954,12 @@ P.do_rally = {
 	troop(type) {
 		push_undo()
 		rally_troop(G.active, L.area, type)
+		L.has_rallied = true
 	},
 	troop_2x(type) {
 		push_undo()
 		rally_troop(G.active, L.area, type, 2)
+		L.has_rallied = true
 	},
 	confirm() {
 		push_undo()
@@ -5677,7 +5989,7 @@ P.execute_cossack_raid = {
 		G.active = RUSSIA
 		L.current_order = -1
 		L.has_executed_order = false
-		L.cossack_raid_orders = get_placed_orders_of_type(COSSACK_RAID).filter(order => has_cossack_sp(get_order_location(order)))
+		L.cossack_raid_orders = get_placed_orders_of_type(COSSACK_RAID).filter(order => has_cossack_sp(get_order_location(order)) && get_all_adjacent_areas(get_order_location(order)).some(area => has_friendly_troop(FRANCE, area)))
 	},
 	prompt() {
 		if (L.cossack_raid_orders.length === 0) {
@@ -5693,6 +6005,9 @@ P.execute_cossack_raid = {
 					action_order(order)
 			}
 		}
+	},
+	_resume() {
+		set_delete(L.cossack_raid_orders, L.current_order)
 	},
 	order(order) {
 		push_undo()
@@ -5750,7 +6065,12 @@ P.do_cossack_raid = {
 	area(area) {
 		push_undo()
 		G.active = FRANCE
-		call("apply_cossack_raid", area)
+		L.has_raided = true
+		call("apply_cossack_raid", {area})
+	},
+	done() {
+		push_undo()
+		end()
 	}
 }
 
@@ -5763,7 +6083,7 @@ P.apply_cossack_raid = {
 	prompt() {
 		if (L.step === -1) {
 			if (L.orders_to_remove.length > 0) {
-				prompt(`Remove Forage orders from S${L.area}.`)
+				prompt(`Remove all Forage orders from S${L.area}.`)
 				for (let order of L.orders_to_remove) action_order(order)
 			} else {
 				prompt(`No Forage orders at S${L.area}.`)
@@ -5812,6 +6132,7 @@ P.place_depot = script(`
 
 	if (get_placed_orders_of_type(PLACE_DEPOT).length === 0) {
 		log "No place depot orders placed."
+		eval { finish("WIP", "exit code 0") }
 	} else {
 		call determine_who_goes_first { order_type: PLACE_DEPOT }
 		call switch_orders { current_order_type: PLACE_DEPOT }
@@ -5877,7 +6198,7 @@ P.execute_place_depot = {
 		L.current_order = -1
 
 		if (L.has_passed[RUSSIA] && L.has_passed[FRANCE]) {
-			end()
+			finish("WIP", "exit code 0")
 		} else {
 			G.active = enemy(G.active)
 		}
