@@ -7,7 +7,7 @@ id,name,type,fortress,nation,supply,depot,vp,zone
 6,Kalvarija,area,,,,,,A3
 7,Suwalki,area,,,,,,A3
 8,Unnamed A3,area,,,,,,A3
-9,Grodno,area,,,,,,A3
+9,Grodno,area,,,,1,,A3
 10,Szczuczy,area,,,,,,A4
 11,Grand Duchy of Warsaw North,off_map,,france,1,,,A4
 12,Bialystok,area,,,,1,,A4
@@ -27,7 +27,7 @@ id,name,type,fortress,nation,supply,depot,vp,zone
 26,Kedainiai,area,,,,,,B2
 27,Vilkomir,area,,,,,,B2
 28,Unnamed B2,area,,,,,,B2
-29,Kovno,area,,,,,,B2
+29,Kovno,area,,,,1,,B2
 30,Vilna,key_city,,,,1,2,B3
 31,Onuskis,area,,,,,,B3
 32,Mostyr,area,1,,,,,B3
@@ -45,7 +45,7 @@ id,name,type,fortress,nation,supply,depot,vp,zone
 44,Lutsk,area,1,,,1,,B6
 45,Dubno,area,,,,1,,B6
 46,Livonia,off_map,,russia,,,,C1
-47,Ostrov,key_city,,,,,1,C1
+47,Ostrov,key_city,,,,1,1,C1
 48,Unnamed C1,area,,,,,,C1
 49,Jakobstadt,area,,,,1,,C1
 50,Ludzha,area,,,,,,C1
@@ -58,7 +58,7 @@ id,name,type,fortress,nation,supply,depot,vp,zone
 57,Nastaniski,area,,,,,,C3
 58,Molodechno,area,,,,1,,C3
 59,Volozhin,area,,,,,,C3
-60,Minsk,key_city,,,,,1,C3
+60,Minsk,key_city,,,,1,1,C3
 61,Pleshchenitsy,area,,,,,,C3
 62,Novgrudok,area,,,,,,C4
 63,Nesvich,area,,,,1,,C4

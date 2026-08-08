@@ -9,6 +9,9 @@
 4. Are cavalry patrols orders that are not executed because there are no enemy troops in the vicinity removed?
 5. Can you place Forced March/Cavalry Patrols with Good Leadership?
 6. Retreat/Evade without any depot markers -> currently goes to nearest supply source to which a path can be traced
+7. Fickle Habsburgs: is there pursuit?
+8. How do Platov's Cossacks and Crumbling Cohesion stack (i.e. are they cumulative)?
+9. If RU doesn't have initiative, crumbling cohesion result is 0?
 
 ## Known Bugs (to fix at a later time)
 1. attrition has not been done yet - as are events depending on attrition losses

@@ -708,7 +708,6 @@ function update_troops() {
 				let connection_split = [] //In order to correctly update the number of troops in case there are troops of the same type across multiple connections
 
 				for (let entry of get_attacker_data(area).forces) {
-					console.log(entry)
 					if (entry.troops[type] > 0) {
 						let connection = find_connection(area, entry.from)
 						if (entry.leaders.length === 0) {
