@@ -991,7 +991,7 @@ function get_month_name(turn) {
 }
 
 function get_season(turn) {
-	return (turn >= OCT) ? WINTER : SUMMER
+	return (get_month(turn) >= OCT) ? WINTER : SUMMER
 }
 
 function get_current_season() {
@@ -1305,7 +1305,7 @@ const SCENARIOS = [
 function on_setup(scenario, options) {
 	const SCENARIO_DATA = data.scenarios.find(sc => sc.name === scenario)
 
-	log_h1(scenario)
+	log_h1(scenario, NONE)
 
 	G.turn = SCENARIO_DATA.start
 	G.last_turn = SCENARIO_DATA.end
@@ -1375,7 +1375,7 @@ function update_supply(who) {
 }
 
 function setup_june() {
-	log_h1("June Setup")
+	log_h1("June Setup", SUMMER)
 	/* RUSSIA */
 	set_troop(RUSSIA, S_RIGA, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_DUNABURG, FRESH_INFANTRY, 1)
@@ -1457,7 +1457,7 @@ function setup_june() {
 }
 
 function setup_july() {
-	log_h1("July Setup")
+	log_h1("July Setup", SUMMER)
 	/* RUSSIA */
 	set_troop(RUSSIA, S_RIGA, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_DUNABURG, FRESH_INFANTRY, 1)
@@ -1582,7 +1582,7 @@ function setup_july() {
 }
 
 function setup_aug() {
-	log_h1("August Setup")
+	log_h1("August Setup", SUMMER)
 	/* RUSSIA */
 	set_troop(RUSSIA, S_RIGA, FRESH_INFANTRY, 1)
 	set_troop(RUSSIA, S_MITAU, FRESH_INFANTRY, 1)
@@ -1711,7 +1711,7 @@ function setup_aug() {
 }
 
 function setup_oct() {
-	log_h1("October Setup")
+	log_h1("October Setup", WINTER)
 	/* RUSSIA */
 	set_troop(RUSSIA, S_RIGA, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_DRISSA, FRESH_INFANTRY, 1)
@@ -1911,7 +1911,7 @@ P.setup_hand = { //TODO: clarification on whether discards are public, shuffle d
 		while (count_non_dummy_cards_in_hand(R) < L.hand_size[R]) {
 			let drawn_card = draw_card(R)
 			if (is_must_play_event(drawn_card)) {
-				log(`Discarded C${drawn_card} (must-play event).`)
+				log(`Discarded ${get_card_log_alias(drawn_card)} (must-play event)`)
 				discard_card(drawn_card)
 			}
 		}
@@ -1935,9 +1935,9 @@ P.setup_hand = { //TODO: clarification on whether discards are public, shuffle d
 					array_delete_item(get_deck(RUSSIA), HOLY_MOTHER_RUSSIA_RU)
 				}
 				get_deck(RUSSIA).push(HOLY_MOTHER_RUSSIA_RU)
-				log(`C${HOLY_MOTHER_RUSSIA_RU} placed on top of the Russian deck.`)
+				log(`${get_card_log_alias(HOLY_MOTHER_RUSSIA_RU)} placed on top of the Russian deck.`)
 			}
-			call("begin_turn")
+			goto("begin_turn")
 		}
 	}
 }
@@ -1951,7 +1951,7 @@ function test_card(c) {
 		array_delete_item(get_deck(who), c)
 	}
 	get_deck(who).push(c)
-	log(`TEST: C${c} placed on top of the ${ROLES[who]} deck.`)
+	log(`TEST: ${get_card_log_alias(c)} placed on top of the ${ROLES[who]} deck.`)
 }
 
 //=== BEGINNING OF TURN ===
@@ -1964,7 +1964,7 @@ P.begin_turn = function() {
 }
 
 P.turn = script(`
-	eval { log_h1(get_month_name(G.turn) + " " + get_turn_name(G.turn))}
+	eval { log_h1(get_month_name(G.turn) + " " + get_turn_name(G.turn), get_current_season())}
 	call draw_card_to_hand
 	call play_card_for_additional_orders
 	call select_orders
@@ -2062,7 +2062,7 @@ P.draw_card_to_hand = {
 			button_draw()
 			return
 		case "review_drawn_card":
-			prompt(`You drew C${L.drawn_card[R]}.`)
+			prompt(`You drew ${get_card_log_alias(L.drawn_card[R], NONE)}.`)
 			button_confirm()
 			return
 		case "holy_mother_russia_ru_fr": //EXCEPTION: Extra step where France picks a key city (in addition to usual confirmation)
@@ -2101,7 +2101,7 @@ P.draw_card_to_hand = {
 					prompt_card(VULNERABLE_SUPPLY_LINES, "Discard a card from your hand.")
 					button_discard()
 				} else if (map_get(L.event_execution_status, VULNERABLE_SUPPLY_LINES, null) === 0) {
-					prompt_card(VULNERABLE_SUPPLY_LINES, `You discarded C${L.discarded_card}.`)
+					prompt_card(VULNERABLE_SUPPLY_LINES, `You discarded ${get_card_log_alias(L.discarded_card)}.`)
 					button_next()
 				} else {
 					if (L.depots_to_remove.length > 0) {
@@ -2284,7 +2284,7 @@ P.draw_card_to_hand = {
 		if (G.active.length === 0) {
 			for (let evt of L.persistent_events) { add_persistent_event(evt) }
 			if (L.selected_key > -1) { add_event_keyword(HOLY_MOTHER_RUSSIA_RU, { area : L.selected_key}) }
-
+			log()
 			end()
 		}
 	}
@@ -2297,6 +2297,7 @@ P.play_card_for_additional_orders = script(`
 	call play_card_for_orders
 
 	log "@Play Events"
+	log ""
 	eval { L.initiative = get_who_has_initiative() }
 	set G.active (1 - L.initiative)
 	call play_events_with_ops_card
@@ -2326,7 +2327,7 @@ P.play_card_for_orders = {
 				action_card(c)
 			}
 		} else {
-			prompt(`You played C${L.played_card[R]} for ${L.ops_played[R]} additional orders.`)
+			prompt(`You played ${get_card_log_alias(L.played_card[R])} for ${L.ops_played[R]} additional orders.`)
 			button_confirm()
 			button_undo()
 		}
@@ -2356,7 +2357,7 @@ P.play_card_for_orders = {
 		if (G.active.length === 0) {
 			log()
 			for (let who = RUSSIA; who <= FRANCE; ++who) {
-				log_h3(`C${L.played_card[who]}: +${L.ops_played[who]} orders`, who)
+				log(`${get_card_log_alias(L.played_card[who])}: +${L.ops_played[who]} orders`)
 			}
 			log()
 			G.additional_orders = L.ops_played
@@ -2426,12 +2427,17 @@ P.play_events_with_ops_card = {
 	},
 	_resume() {
 		array_delete_item(L.events_could_be_played, L.active_card)
+		L.has_played_event = true
 	},
 	pass() {
-		end()
+		if (!L.has_played_event) {
+			log(`${ROLES[G.active]} did not play events.`)
+			end()
+		} else
+			end()
 	},
 	done() {
-		end()
+		this.pass()
 	}
 }
 
@@ -2682,7 +2688,7 @@ P.select_orders = {
 	},
 	done() {
 		set_delete(G.active, R)
-		log(`${ROLES[R]} chose ${G.selected_orders[R].length} orders.`)
+		log(`${ROLES[R]} selected ${G.selected_orders[R].length} orders.`)
 		if (G.active.length === 0) {
 			log()
 			end()
@@ -2771,27 +2777,27 @@ P.place_orders_events = {
 	_begin() {
 		//L.time
 		L.events = (L.time === "beginning") ? [INFIGHTING_AND_INTRIGUE, LETHARGIC_PURSUIT] : [NEW_POSTING, EXHAUSTED_HORSES, DISORDERLY_MARCH]
-		L.events = L.events.filter(card => can_play_event(card) && get_hand(G.active).includes(card))
+		L.playable_events = L.events.filter(card => can_play_event(card) && get_hand(G.active).includes(card))
 		L.has_played_event = false
 	},
 	prompt() {
-		if (L.events.length > 0) {
-			prompt(`You may play events (${L.events.map(card => `C${card}`).join(", ")}).`)
-			for (let c of L.events) 
+		if (L.playable_events.length > 0) {
+			prompt(`You may play events (${L.events.map(card => get_card_log_alias(card)).join(", ")}).`)
+			for (let c of L.playable_events) 
 				action_card(c)
 			button_pass()
 		} else {
 			if (L.has_played_event)
-				prompt("No more events to play.")
+				prompt("Play Events: All done.")
 			else 
-				prompt("No eligible events in hand to play.")
+				prompt(`You do not have ${join_array_with_or(L.events.map(card => get_card_log_alias(card, NONE)))}.`)
 			button_done()
 		}
 	},
 	card(c) {
 		push_undo()
 		L.has_played_event = true
-		set_delete(L.events, c)
+		set_delete(L.playable_events, c)
 		call("event", { card: c })
 	},
 	pass() { end() },
@@ -2844,7 +2850,7 @@ P.do_place_orders = {
 		}
 		else {
 			if (L.state[R] === "place_platov_order") {
-				prompt_leader(PLATOV, `Place ${get_order_name(G.platov_order)} at S${get_leader_location(PLATOV)}.`)
+				prompt(`Place ${get_order_name(G.platov_order)} with L${PLATOV} at S${get_leader_location(PLATOV)}.`)
 				action_area(get_leader_location(PLATOV))
 			}
 			else if (L.state[R] === "place_increased_french_command_capability_order") {
@@ -2933,6 +2939,9 @@ P.do_place_orders = {
 P.determine_who_goes_first = {
 	_begin() {
 		//L.order_type
+		log_h3("First Player", NONE)
+		log()
+
 		//These events are mutually exclusive since Evasive Maneuvers is summer-only and Energetic Leadership is winter-only
 		if ((L.order_type === FORCED_MARCH) && can_play_event(EVASIVE_MANEUVERS)) {
 			L.state = EVASIVE_MANEUVERS
@@ -2958,11 +2967,11 @@ P.determine_who_goes_first = {
 				button_confirm()
 			} else {
 				if (get_hand(RUSSIA).includes(EVASIVE_MANEUVERS)) {
-					prompt(`You may play C${EVASIVE_MANEUVERS}.`)
+					prompt(`You may play ${get_card_log_alias(EVASIVE_MANEUVERS)}.`)
 					action_card(EVASIVE_MANEUVERS)
 					button_pass()
 				} else {
-					prompt(`You do not have C${EVASIVE_MANEUVERS} in hand.`)
+					prompt(`You do not have ${get_card_log_alias(EVASIVE_MANEUVERS)} in hand.`)
 					button_pass()
 				}
 			}
@@ -2981,11 +2990,11 @@ P.determine_who_goes_first = {
 				}
 			} else {
 				if (get_hand(FRANCE).includes(ENERGETIC_LEADERSHIP)) {
-					prompt(`You may play C${ENERGETIC_LEADERSHIP}.`)
+					prompt(`You may play ${get_card_log_alias(ENERGETIC_LEADERSHIP)}.`)
 					action_card(ENERGETIC_LEADERSHIP)
 					button_pass()
 				} else {
-					prompt(`You do not have C${ENERGETIC_LEADERSHIP}.`)
+					prompt(`You do not have ${get_card_log_alias(ENERGETIC_LEADERSHIP)}.`)
 					button_pass()
 				}
 			}
@@ -3116,9 +3125,12 @@ function can_switch_order(leader, current_type) {
 	}
 }
 
-P.switch_orders = {
+P.change_orders = {
 	_begin() {
 		//L.current_order_type
+		log_h3("Change Orders", NONE)
+		log()
+
 		G.active = [RUSSIA, FRANCE]
 
 		L.selected_leader = [-1, -1]
@@ -3133,9 +3145,16 @@ P.switch_orders = {
 		L.placed_orders = [[], []]
 		L.discarded_card = [-1, -1]
 		L.napoleon_action = -1
+		L.log = [[], []] //Cache of all logging, sorted by player (all done at the end of the state)
 
 		for (let who = RUSSIA; who <= FRANCE; ++who)
 			L.leaders_who_can_use_abilities[who] = L.leaders_who_can_use_abilities[who].filter(leader => can_switch_order(leader, L.current_order_type))
+	},
+	push_log(text) {
+		L.log[R].push(text)
+	},
+	pop_log() {
+		L.log[R].pop()
 	},
 	prompt() {
 		if (L.leaders_who_can_use_abilities[R].length > 0) {
@@ -3219,6 +3238,7 @@ P.switch_orders = {
 		}
 	},
 	order(order) {
+		this.push_log(`L${L.selected_leader[R]} at S${get_leader_location(L.selected_leader[R])}`)
 		switch(L.selected_leader[R]) {
 		case KUTUZOV:
 			this.switch_order(order, RALLY)
@@ -3227,13 +3247,15 @@ P.switch_orders = {
 			this.switch_order(order, EVADE)
 			break
 		case BAGRATION:
+			log(`L${BAGRATION}`)
 			this.switch_order(order, DEFEND)
 			break
 		case CHICHAGOV:
 			place_order(order, get_leader_location(CHICHAGOV))
 			L.placed_orders[R].push(order)
+			this.push_log(`>Discarded a card to place ${get_order_name(order)}.`)
 			break
-		case NAPOLEON:
+		case NAPOLEON: //The one unique case, so involves more bespoke code compared to the other leaders
 			if (L.step[R] === -1) {
 				L.napoleon_action = 1
 				if (get_order_type(order) === L.current_order_type) {
@@ -3244,12 +3266,14 @@ P.switch_orders = {
 				} else {
 					L.napoleon_action = 2
 					this.switch_order(order, L.current_order_type)
+					this.push_log(`>Changed an order.`)
 					break
 				}
 			} else {
 				L.napoleon_action = 3
 				place_order(order, get_leader_location(NAPOLEON))
 				L.placed_orders[R].push(order)
+				this.push_log(`>Changed an order.`)
 				break
 			}
 		case DAVOUT:
@@ -3258,6 +3282,7 @@ P.switch_orders = {
 		case SCHWARZENBERG:
 			place_order(order, get_leader_location(SCHWARZENBERG))
 			L.placed_orders[R].push(order)
+			this.push_log(`>Discarded a card to place ${get_order_name(order)}.`)
 		}
 		set_delete(L.leaders_who_can_use_abilities[R], L.selected_leader[R])
 		L.leaders_who_have_used_abilities[R].push(L.selected_leader[R])
@@ -3267,6 +3292,8 @@ P.switch_orders = {
 		remove_order(order)
 		let replacement_order = add_order_of_type_from_pool(R, replacement_type, get_leader_location(L.selected_leader[R]))
 		L.switches[R].push([order, replacement_order]) 
+		if (L.selected_leader[R] !== NAPOLEON)
+			this.push_log(`>Changed an order to ${get_order_type_name(replacement_type)}.`)
 	},
 	undo() {
 		if (L.selected_leader[R] > -1) {
@@ -3284,6 +3311,7 @@ P.switch_orders = {
 			}
 		} else {
 			L.selected_leader[R]  = L.leaders_who_have_used_abilities[R].pop()
+			this.pop_log(R)
 
 			//Future note to self: Variables cannot be declared in case, which is why conditionals are used
 			//All leaders with a change order to TYPE ability
@@ -3321,7 +3349,14 @@ P.switch_orders = {
 	done() {
 		set_delete(G.active, R)
 
+		if (L.leaders_who_have_used_abilities[R].length === 0)
+			log(`${ROLES[R]} did not change orders.`)
+
 		if (G.active.length === 0) {
+			for (let who = RUSSIA; who <= FRANCE; ++who)
+				for (let s of L.log[who])
+					log(s)
+			
 			end()
 		}
 	}
@@ -3355,10 +3390,12 @@ function get_placed_orders_of_type(type) {
 }
 
 P.forced_march = script(`
-	log "@Execute Forced Marches"
-	call switch_orders { current_order_type: FORCED_MARCH }
+	log "@Forced March"
+	call change_orders { current_order_type: FORCED_MARCH }
 	if (get_placed_orders_of_type(FORCED_MARCH).length === 0) {
-		log "No forced march orders placed."
+		log ""
+		log "No Forced March orders placed."
+		log ""
 	} else {
 		call determine_who_goes_first { order_type: FORCED_MARCH }
 		if (is_event_active(EVASIVE_MANEUVERS)) {
@@ -3372,6 +3409,7 @@ P.forced_march = script(`
 P.execute_forced_marches = {
 	_begin() {
 		//L.first_player
+		log_h3("Execute Orders", NONE)
 		G.active = L.first_player
 		L.has_passed = [false, false]
 		L.current_order = -1
@@ -3450,13 +3488,14 @@ P.execute_forced_marches = {
 */
 
 P.march = script(`
-	log "@Execute Marches"
-
+	log "@March"
+	call change_orders { current_order_type: MARCH }
 	if (get_placed_orders_of_type(MARCH).length === 0) {
-		log "No march orders placed."
+		log ""
+		log "No March orders placed."
+		log ""
 	} else {
 		call determine_who_goes_first { order_type: MARCH }
-		call switch_orders { current_order_type: MARCH }
 		call execute_marches { first_player: L.$ }
 	}
 `)
@@ -3793,17 +3832,17 @@ P.move = {
 		} 
 
 		if ((L.current_area === S_MOSCOW) && is_event_active(PRIDE_AND_HESITATION) && (L.move.leaders.length > 0) && (G.active === FRANCE)) {
-			log(`C${PRIDE_AND_HESITATION}.`)
+			log_card(PRIDE_AND_HESITATION)
 			increase_vp(RUSSIA)
 		}
 
 		if (is_event_active(HOLY_MOTHER_RUSSIA_FR) && (map_get(G.persistent_events, HOLY_MOTHER_RUSSIA_FR, -1).area === L.current_area) && (G.active === RUSSIA)) { //TO CHECK: Does this stack on the same move or only once per move?
-			log(`C${HOLY_MOTHER_RUSSIA_FR}.`)
+			log_card(HOLY_MOTHER_RUSSIA_FR)
 			increase_vp(FRANCE)
 		}
 
 		if ((G.active === FRANCE) && (is_event_active(DISORDERLY_MARCH)) && (map_get(G.persistent_events, DISORDERLY_MARCH, null).area === area)) {
-			log(`C${DISORDERLY_MARCH}.`)
+			log_card(DISORDERLY_MARCH)
 			L.allowance = 0
 		}
 
@@ -3861,6 +3900,9 @@ P.move = {
 		}
 
 		mark_already_moved(G.active, L.current_area, L.move.leaders, L.move.troops)
+
+		if (!has_battle(L.current_area))
+			log(`Battle declared at S${L.current_area}.`)
 
 		if (!has_battle(L.current_area)) {
 			add_attacker_to_battle(G.active, previous_area, L.current_area, L.move.type, L.move.leaders.slice(), L.move.troops.slice())
@@ -3970,16 +4012,16 @@ P.determine_seniority = {
 */
 
 P.cavalry_patrols = script(`
-	log "@Execute Cavalry Patrols"
-
+	log "@Cavalry Patrols"
+	call change_orders { current_order_type: CAVALRY_PATROLS }
+	set G.active RUSSIA
+	call may_play_flying_columns
 	if (get_placed_orders_of_type(CAVALRY_PATROLS).length === 0) {
-		log "No cavalry orders placed by either side."
+		log ""
+		log "No Cavalry Patrols orders placed."
 		log ""
 	} else {
 		call determine_who_goes_first { order_type: CAVALRY_PATROLS }
-		call switch_orders { current_order_type: CAVALRY_PATROLS }
-		set G.active RUSSIA
-		call may_play_flying_columns
 		call execute_cavalry_patrols { first_player: L.$ }
 		set G.active FRANCE
 		call may_play_good_leadership
@@ -3993,6 +4035,7 @@ function has_cavalry_or_cossack_in_area(who, area) {
 P.execute_cavalry_patrols = {
 	_begin() {
 		//L.first_player
+		log_h3("Execute Orders", NONE)
 		G.active = L.first_player
 		L.has_passed = [false, false]
 		L.current_order = -1
@@ -4137,16 +4180,16 @@ P.do_cavalry_patrols = {
 */
 
 P.evade = script(`
-	log "@Execute Evade"
-
+	log "@Evade"
+	call change_orders { current_order_type: EVADE }
+	set G.active RUSSIA
+	call may_play_evade_events
 	if (get_placed_orders_of_type(EVADE).length === 0) {
-		log "No evade placed by either side."
+		log ""
+		log "No Evade orders placed."
 		log ""
 	} else {
 		call determine_who_goes_first { order_type: EVADE }
-		call switch_orders { current_order_type: EVADE }
-		set G.active RUSSIA
-		call may_play_evade_events
 		call execute_evade { first_player: L.$ }
 	}
 `)
@@ -4164,11 +4207,11 @@ P.may_play_evade_events = {
 				prompt(`Play Events: All done.`)
 				button_done()
 			} else {
-				prompt(`You do not have C${UNEXPECTED_RETREAT} or C${CAVALRY_SCREENING} in hand.`)
+				prompt(`You do not have ${get_card_log_alias(UNEXPECTED_RETREAT)} or ${get_card_log_alias(CAVALRY_SCREENING)} in hand.`)
 				button_pass()
 			}
 		} else {
-			prompt(`You may play ${join_array_with_and(L.events_in_hand.map(card => `C${card}`))}.`)
+			prompt(`You may play ${join_array_with_and(L.events_in_hand.map(card => get_card_log_alias(card)))}.`)
 			button_pass()
 			for (let card of L.events_in_hand) action_card(card)
 		}
@@ -4239,6 +4282,7 @@ P.execute_evade = {
 		L.current_order = -1
 
 		if (L.has_passed[RUSSIA] && L.has_passed[FRANCE]) {
+			log()
 			end()
 		} else {
 			G.active = enemy(G.active)
@@ -4960,7 +5004,8 @@ function is_fresh_cavalry(troop_type) {
 */
 
 P.battle = (`
-	call switch_orders { order_type: DEFEND }
+	log "@Battles"
+	call change_orders { order_type: DEFEND }
 	call resolve_battles
 `)
 
@@ -4986,7 +5031,7 @@ function sort_battles_by_type() {
 
 P.resolve_battles = {
 	_begin() {
-		log_h2("Resolve Battles")
+		log_h3("Resolve Battles", NONE)
 		G.active = get_who_has_initiative()
 
 		L.battles_by_type = sort_battles_by_type()
@@ -5018,16 +5063,19 @@ P.resolve_battles = {
 	confirm() {
 		push_undo()
 		log("No battles to execute this turn.")
+		log()
 		end()
 	},
 	done() {
 		push_undo()
+		log()
 		end()
 	},
 	area(area) {
 		clear_undo()
 		G.current_battle = area
 		log_h3(`S${area}`, get_battle_attacker(area))
+		log()
 		call("do_battle", { area: area, attacker: get_battle_attacker(area), defender: get_battle_defender(area) })
 	},
 	_resume() {
@@ -5039,10 +5087,20 @@ P.resolve_battles = {
 	}
 }
 
-P.do_battle = script(`
-	set G.active L.defender
-	call defend { area: L.area }
+function has_friendly_order(who, area) {
+	return get_orders_at_area(who, area).length > 0
+}
 
+P.do_battle = script(`
+	eval { log_h4("Reveal Defend Orders") }
+	if (has_friendly_order(L.defender, L.area)) {
+		set G.active L.defender
+		call defend { area: L.area }
+	} else {
+		log ("No Defend orders.")
+	}
+	log ""
+	
 	call play_battle_events { attacker: L.attacker, defender: L.defender, area: L.area }
 	call calculate_combat_value { attacker: L.attacker, defender: L.defender, area: L.area }
 `)
@@ -5065,6 +5123,7 @@ P.defend = {
 		}
 	},
 	pass() {
+		log(`No Defend orders.`)
 		end()
 	},
 	order(order) {
@@ -5097,7 +5156,7 @@ function get_num_battle_events_could_by_played(who, area) {
 }
 
 P.play_battle_events = script(`
-	eval { log_h3("Play Battle Events", 2) }
+	log "$Play Battle Events"
 	set G.played_cards [[], []]
 	set G.active L.attacker
 	call commit_battle_events { area: L.area }
@@ -5148,17 +5207,15 @@ P.commit_battle_events = {
 		L.num_battle_events_in_hand--
 	},
 	done() {
-		log(`${ROLES[G.active]} played ${G.played_cards[G.active].length} cards.`)
 		end()
 	}
 }
 
 P.reveal_battle_events = function() {
-	log()
 	for (let who = RUSSIA; who <= FRANCE; ++who) {
 		log(ROLES[who])
 		for (let c of G.played_cards[who]) {
-			logi("C" + c)
+			logi(get_card_log_alias(c))
 			if (!is_card_dummy(c))
 				add_battle_event(c)
 		}
@@ -5169,11 +5226,12 @@ P.reveal_battle_events = function() {
 		}
 	}
 	G.played_cards = [[], []]
+	log()
 	end()
 }
 
 P.calculate_combat_value = script(`
-	eval { log_h3("Calculate Combat Value", 2) }
+	eval { log_h4("Calculate Combat Value") }
 	call do_combat_value_calculations { attacker: L.attacker, defender: L.defender, area: L.area }
 
 	set G.active [RUSSIA, FRANCE]
@@ -5438,6 +5496,7 @@ P.determine_losses = function() {
 	update_battle_losses(L.defender, G.current_battle, L.losses[L.defender])
 
 	L.L.hits = L.losses
+	log()
 	end()
 }
 
@@ -5490,7 +5549,7 @@ function count_num_sps_of_type(who, type, area) {
 P.assign_losses = {
 	_begin() {
 		//L.losses, L.attacker, L.defender
-		log_h3("Assign Losses", 2)
+		log_h4("Assign Losses")
 		G.active = [RUSSIA, FRANCE]
 
 		L.count = [0, 0]
@@ -5575,12 +5634,12 @@ P.determine_battle_winner = function() {
 
 		// RU #35 Fickle Habsburgs: Russia wins even if tied.
 		if (is_battle_event_currently_active(FICKLE_HABSBURGS)) {
-			log(`C${FICKLE_HABSBURGS}: Russia won.`)
+			log(`${get_card_log_alias(FICKLE_HABSBURGS)}: Russia won.`)
 			goto("end_battle", { drawn_battle: false, winner: RUSSIA, loser: FRANCE})
 		} 
 		// RU #37: Enveloping Moves: Russia wins a tie if they have more SPs.
 		else if (is_battle_event_currently_active(ENVELOPING_MOVES) && (count_num_fresh_sps(RUSSIA, G.current_battle) > count_num_fresh_sps(FRANCE, G.current_battle))) {
-			log(`C${ENVELOPING_MOVES}: Russia won.`)
+			log(`${get_card_log_alias(ENVELOPING_MOVES)}: Russia won.`)
 			goto("end_battle", { drawn_battle: false, winner: RUSSIA, loser: FRANCE})
 		}
 		else {
@@ -5590,7 +5649,7 @@ P.determine_battle_winner = function() {
 
 	} 
 	else if (is_battle_event_currently_active(FIERCE_FIGHTING_RU)) {
-		log(`C${FIERCE_FIGHTING_RU}: No pursuit after battle.`)
+		log(`${get_card_log_alias(FIERCE_FIGHTING_RU)}: No pursuit after battle.`)
 		goto("end_battle", { winner: get_battle_winner(L.count) })
 	}
 	// Decisive battle: Pursuit
@@ -5598,6 +5657,7 @@ P.determine_battle_winner = function() {
 		log(`${ROLES[RUSSIA]} inflicted ${L.count[FRANCE]} losses.`)
 		log(`${ROLES[FRANCE]} inflicted ${L.count[RUSSIA]} losses.`)
 		log(`${ROLES[get_battle_winner(L.count)]} won!`)
+		log()
 		goto("pursuit", { winner: get_battle_winner(L.count) })
 	}
 }
@@ -5620,7 +5680,7 @@ function count_pursuit_cavalry(who, area) {
 P.pursuit = {
 	_begin() {
 		//L.winner
-		log_h3("Pursuit", NONE)
+		log_h4("Pursuit")
 		G.active = [RUSSIA, FRANCE]
 		L.pursuit_cavalry = [count_pursuit_cavalry(RUSSIA, G.current_battle), count_pursuit_cavalry(FRANCE, G.current_battle)]
 	
@@ -5696,6 +5756,7 @@ P.assign_pursuit_losses = {
 		if (--L.difference === 0) L.has_finished = true
 	},
 	done() {
+		log()
 		goto("end_battle", { winner: enemy(G.active), loser: G.active, drawn_battle: false })
 	}
 }
@@ -5749,7 +5810,7 @@ P.battle_shift_vp_and_initiative = {
 	_begin() {
 		//L.winner
 		console.log(get_battle_entry(G.current_battle, null))
-		log_h3("VP & Initiative Shifts")
+		log_h4("VP & Initiative Shifts")
 		G.active = L.winner
 		L.num_enemy_sps_eliminated = get_player_battle_data(enemy(G.active), G.current_battle).num_eliminated
 		L.has_shifted_vp = false
@@ -5822,6 +5883,7 @@ P.battle_shift_vp_and_initiative = {
 			L.has_finished = true
 	},
 	done() {
+		log()
 		end()
 	}
 }
@@ -5846,7 +5908,7 @@ function get_valid_defender_retreat_connections(battle) {
 P.retreat = {
 	_begin() {
 		//L.loser
-		log_h3("Retreat", NONE)
+		log_h4("Retreat")
 		G.active = L.loser
 		let possible_retreat_destinations = []
 		if (is_battle_attacker(L.loser, G.current_battle))
@@ -5973,10 +6035,12 @@ P.rally = script(`
 	log "@Execute Rally"
 
 	if (get_placed_orders_of_type(RALLY).length === 0) {
-		log "No forced march orders placed."
+		log ""
+		log "No Rally orders placed."
+		log ""
 	} else {
 		call determine_who_goes_first { order_type: RALLY }
-		call switch_orders { current_order_type: RALLY }
+		call change_orders { current_order_type: RALLY }
 		call execute_rally { first_player: L.$ }
 	}
 `)
@@ -6101,7 +6165,9 @@ P.cossack_raid = script(`
 	log "@Execute Cossack Raid"
 
 	if (get_placed_orders_of_type(COSSACK_RAID).length === 0) {
-		log "No cossack raid orders placed."
+		log ""
+		log "No Cossack Raid orders placed."
+		log ""
 	} else {
 		call execute_cossack_raid
 	}
@@ -6258,7 +6324,7 @@ P.place_depot = script(`
 		eval { finish("WIP", "exit code 0") }
 	} else {
 		call determine_who_goes_first { order_type: PLACE_DEPOT }
-		call switch_orders { current_order_type: PLACE_DEPOT }
+		call change_orders { current_order_type: PLACE_DEPOT }
 		call execute_place_depot { first_player: L.$ }
 	}
 `)
@@ -6561,8 +6627,8 @@ function add_event_keyword(evt, keywords) {
 }
 
 function prompt_event_confirmation(evt, info) {
-	if (typeof evt === "string") {
-		E[get_event_state_name(parseInt(evt))].confirm_prompt()
+	if (typeof evt === "string") {//kludge! needs refactor in draw_card_to_hand
+		E[get_event_state_name(parseInt(evt.substring(6)))].confirm_prompt()
 	} else {
 		E[get_event_state_name(evt)].confirm_prompt()
 	}
@@ -6580,7 +6646,7 @@ function prompt_event_execution(evt, info) {
 }
 
 function prompt_card(c, text) {
-	prompt(`C${c}: ${text}`)
+	prompt(`${get_card_log_alias(c, NONE)}: ${text}`)
 }
 
 function log_event_confirmation(c, info) {
@@ -6676,11 +6742,11 @@ P.may_play_confused_retreat = {
 	inactive: "play C2",
 	prompt() {
 		if (get_hand(RUSSIA).includes(CONFUSED_RETREAT)) {
-			prompt(`You may play C${CONFUSED_RETREAT}.`)
+			prompt(`You may play ${get_card_log_alias(CONFUSED_RETREAT)}.`)
 			action_card(CONFUSED_RETREAT)
 			button_pass()
 		} else {
-			prompt(`You do not have C${CONFUSED_RETREAT}.`)
+			prompt(`You do not have ${get_card_log_alias(CONFUSED_RETREAT)}.`)
 			button_pass()
 		}
 	},
@@ -6802,6 +6868,7 @@ function increase_devastation(area, amount = 1) {
 //RU #4: Evasive Maneuvers
 P.evasive_maneuvers = {
 	_begin() {
+		log_h3("Execute Orders", NONE)
 		G.active = RUSSIA
 		L.current_order = -1
 		L.has_executed_order = false
@@ -6849,10 +6916,10 @@ P.may_play_bagrations_retreat = {
 	inactive: "play C6",
 	prompt() {
 		if (get_hand(RUSSIA).includes(BAGRATIONS_RETREAT)) {
-			prompt(`You may play C${BAGRATIONS_RETREAT}.`)
+			prompt(`You may play ${get_card_log_alias(BAGRATIONS_RETREAT)}}.`)
 			action_card(BAGRATIONS_RETREAT)
 		} else {
-			prompt(`You do not have C${BAGRATIONS_RETREAT}.`)
+			prompt(`You do not have ${get_card_log_alias(BAGRATIONS_RETREAT)}.`)
 		}
 		button_pass()
 	},
@@ -7065,7 +7132,7 @@ P.garrison_troops = {
 }
 
 // RU #14: Extreme Weather
-E.extreme_weather = {
+E.extreme_weather_ru = {
 	confirm_prompt() {
 		prompt_card(EXTREME_WEATHER_RU, "Draw a card, France -2 orders this turn, 1 fresh SP in each force that uses 'March' or 'Forced March' becomes exhausted.")
 		button_draw()
@@ -7271,11 +7338,11 @@ P.may_play_flying_columns = {
 	inactive: "play C20",
 	prompt() {
 		if (get_hand(RUSSIA).includes(FLYING_COLUMNS)) {
-			prompt(`You may play C${FLYING_COLUMNS}.`)
+			prompt(`You may play ${get_card_log_alias(FLYING_COLUMNS)}.`)
 			action_card(FLYING_COLUMNS)
 			button_pass()
 		} else {
-			prompt(`You do not have C${FLYING_COLUMNS}.`)
+			prompt(`You do not have ${get_card_log_alias(FLYING_COLUMNS)}.`)
 			button_pass()
 		}
 	},
@@ -7359,7 +7426,7 @@ P.flying_columns = {
 P.russia_may_play_city_ablaze = {
 	//L.area
 	prompt() {
-		prompt(`Russia may play C${CITY_ABLAZE} (CANNOT BE UNDONE)`)
+		prompt(`Russia may play ${get_card_log_alias(CITY_ABLAZE)} (CANNOT BE UNDONE)`)
 		button_confirm()
 	},
 	confirm() {
@@ -7377,10 +7444,10 @@ P.may_play_city_ablaze = {
 	inactive: "to play C22",
 	prompt() {
 		if (get_hand(RUSSIA).includes(CITY_ABLAZE)) {
-			prompt(`You may play C${CITY_ABLAZE}`)
+			prompt(`You may play ${get_card_log_alias(CITY_ABLAZE)}.`)
 			action_card(CITY_ABLAZE)
 		} else {
-			prompt(`You do not have C${CITY_ABLAZE}.`)
+			prompt(`You do not have ${get_card_log_alias(CITY_ABLAZE)}.`)
 			button_pass()
 		}
 	},
@@ -7778,7 +7845,7 @@ P.disorderly_march = {
 					action_order(order)
 				}
 			} else {
-				prompt_card(DISORDERLY_MARCH, `Remove orders at S${L.selected_area}: All done.`)
+				prompt_card(DISORDERLY_MARCH, `This turn, France must stop after entering S${L.selected_area}.`)
 				button_done()
 			}
 		} else {
@@ -7800,17 +7867,18 @@ P.disorderly_march = {
 	order(order_id) {
 		push_undo()
 		log("Removed from S" + L.selected_area)
-		log("1 order")
+		logi("1 order")
 		remove_order(order_id)
 		set_delete(L.orders_to_remove, order_id)
 	},
 	done() {
 		++L.step
+		log(`This turn, France must stop after entering S${L.selected_area}.`)
 		G.active = RUSSIA
 	},
 	confirm() {
 		clear_undo()
-		log(`France must remove all 'Defend', 'Forage', and 'Place Depot' orders at S${L.selected_area}.`)
+		//log(`France must remove all 'Defend', 'Forage', and 'Place Depot' orders at S${L.selected_area}.`)
 		L.orders_to_remove = get_orders_at_area(FRANCE, L.selected_area).filter(order => [DEFEND, FORAGE, PLACE_DEPOT].includes(get_order_type(order)))
 		++L.step
 		G.active = FRANCE
@@ -8297,11 +8365,11 @@ P.may_play_good_leadership = {
 	inactive: "play C79",
 	prompt() {
 		if (get_hand(FRANCE).includes(GOOD_LEADERSHIP)) {
-			prompt(`You may play C${GOOD_LEADERSHIP}.`)
+			prompt(`You may play ${get_card_log_alias(GOOD_LEADERSHIP)}.`)
 			action_card(GOOD_LEADERSHIP)
 			button_pass()
 		} else {
-			prompt(`You do not have C${GOOD_LEADERSHIP}.`)
+			prompt(`You do not have ${get_card_log_alias(GOOD_LEADERSHIP)}.`)
 			button_pass()
 		}
 	},
@@ -8533,11 +8601,11 @@ P.may_play_poniatowskis_v_corps = {
 	inactive: "play C91",
 	prompt() {
 		if (get_hand(FRANCE).includes(PONIATOWSKIS_V_CORPS)) {
-			prompt(`You may play C${PONIATOWSKIS_V_CORPS}.`)
+			prompt(`You may play ${get_card_log_alias(PONIATOWSKIS_V_CORPS)}.`)
 			action_card(PONIATOWSKIS_V_CORPS)
 			button_pass()
 		} else {
-			prompt(`You do not have C${PONIATOWSKIS_V_CORPS}.`)
+			prompt(`You do not have ${get_card_log_alias(PONIATOWSKIS_V_CORPS)}.`)
 			button_pass()
 		}
 	},
@@ -8633,7 +8701,7 @@ P.vulnerable_supply_lines = {
 					}
 				}
 			} else if (L.step === 0) {
-				prompt_card(VULNERABLE_SUPPLY_LINES, `You discarded C${L.discarded_card}.`)
+				prompt_card(VULNERABLE_SUPPLY_LINES, `You discarded ${get_card_log_alias(L.discarded_card)}.`)
 				button_next()
 			} else {
 				if (L.depots_to_remove.length > 0) {
@@ -8953,9 +9021,9 @@ function get_abbreviation(who) {
 	return (who === RUSSIA) ? "ru" : ((who === FRANCE) ? "fr" : "na")
 }
 
-function log_h1(text) {
+function log_h1(text, season = NONE) {
 	log()
-	log(`!${text}`)
+	log(`!${season === SUMMER ? "S" : (season === WINTER) ? "W" : "N" }${text}`)
 	log()
 }
 
@@ -8970,12 +9038,24 @@ function log_h3(text, who = 2) {
 	log(`#${get_abbreviation(who)}${text}`)
 }
 
+function log_h4(text) {
+	log("$" + text)
+}
+
 function logi(text) {
 	log(">" + text)
 }
 
+function get_card_log_alias(card, who = get_card_owner(card)) {
+	return `C${who === NONE ? "N" : ROLES[who][0]}${card}`
+}
+
+function log_card(card, who = get_card_owner(card)) {
+	log(get_card_log_alias(card, who))
+}
+
 function card_box_begin(card) {
-	log_box_begin(`C${card}`, get_card_owner(card))
+	log_box_begin(get_card_log_alias(card, NONE), get_card_owner(card))
 }
 
 function card_box_end() {

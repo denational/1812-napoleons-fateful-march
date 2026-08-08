@@ -784,7 +784,9 @@ function update_orders() {
 function escape_text(text) {
 	escape_html(text)
 	escape_typography(text)
-	text = escape_tip_class_sub(text, /C(\d+)/g, "tip", "card card_$1", data.cards.map(card => card.name))
+	text = escape_tip_class_sub(text, /CN(\d+)/g, "card-tip", "card card_$1", data.cards.map(card => card.name))
+	text = escape_tip_class_sub(text, /CR(\d+)/g, "card-tip ru", "card card_$1", data.cards.map(card => card.name))
+	text = escape_tip_class_sub(text, /CF(\d+)/g, "card-tip fr", "card card_$1", data.cards.map(card => card.name))
 	text = escape_tip_light(text, /S(\d+)/g, "area-tip", "area", data.areas.map(s => `${process_area_name(s.name)} (${s.zone})`))
 	text = escape_tip_light(text, /L(\d+)/g, "tip", "leader", data.leaders.map(leader => leader.log_name))
 
@@ -808,8 +810,14 @@ function on_log(text, ix) {
 		text = text.substring(3)
 		break
 	case "!":
-		text = text.substring(1)
-		p.className = 'h1'
+		if (text[1] === "S")
+			p.className = 'h1 summer'
+		else if (text[1] === "W")
+			p.className = 'h1 winter'
+		else 
+			p.className = 'h1'
+		console.log(p.className)
+		text = text.substring(2)
 		break
 	case "@":
 		text = text.substring(1)
@@ -818,6 +826,10 @@ function on_log(text, ix) {
 	case "#":
 		p.className = `h3 ${text.substring(1, 3)}`
 		text = text.substring(3)
+		break
+	case "$":
+		p.className = 'h4'
+		text = text.substring(1)
 		break
 	case ">":
 		text = text.substring(1)

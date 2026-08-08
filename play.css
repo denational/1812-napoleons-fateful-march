@@ -37,7 +37,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
     }
 }
 
-#tip, #area-tip {
+#tip, #area-tip, #card-tip {
 	position: fixed;
 	z-index: 100;
 	right: 240px;
@@ -56,14 +56,20 @@ body.Russia header.your_turn {background-color: var(--russia);}
 
 	& .h1 { 
 		background-color: hsl(200, 34%, 73%);
-		font-weight: bold;
+		font-weight: bolder;
 		padding:2px 0;
 		text-align: center;
 		font-variant-caps: small-caps;
+		border-top: 1px solid black;
+		border-bottom: 1px solid black;
+		height: 1.5em;
 	}
 
+	& .h1.summer { background-color: hsl(51, 100%, 74%);}
+	& .h1.winter { background-color: hsl(200, 61%, 81%); }
+
 	& .h2 {
-    	background-color: wheat;
+    	background-color: hsl(24, 100%, 85%);
     	padding:2px 0;
     	text-align: center;
     	font-variant-caps: small-caps;
@@ -71,11 +77,20 @@ body.Russia header.your_turn {background-color: var(--russia);}
 
 	& .h3 { 
     	background-color: lightgray;
-    	text-align: left;
+    	text-align: center;
+		font-variant-caps: small-caps;
 	}
-	& .h3.ru { background-color: var(--russia_light);}
-	& .h3.fr { background-color: var(--france_light);}
+	& .h3.ru, .h3.fr { 
+		text-align: left;
+		font-variant-caps: normal;
+	}
+	& .h3.ru { background-color: var(--russia_light); }
+	& .h3.fr { background-color: var(--france_light); }
 
+	& .h4 {
+		text-decoration: underline;
+		font-weight: bold;
+	}
 
 	& .group.header { 
 		font-variant: small-caps; 
@@ -109,7 +124,18 @@ body.Russia header.your_turn {background-color: var(--russia);}
 		font-variant: small-caps;
 		font-style: normal;
 	}
-}
+
+	& .card-tip {
+		font-variant-caps: small-caps;
+		font-weight: lighter;
+		padding: 0 4px; 
+		border-radius: 2px; 
+	}
+
+	& .card-tip.fr { background-color: var(--france_light) }
+	& .card-tip.ru { background-color: var(--russia_light) }
+
+ }
 
 #log .tip:hover, .area-tip:hover {
     cursor: pointer; 
