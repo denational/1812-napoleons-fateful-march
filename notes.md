@@ -29,3 +29,4 @@
 13. retreat with no valid path not handled yet (not enough test cases yet)
 14. display bug - prussian troops exhausted on connection disappear (battle of riga)
 15. combine forces in battle step
+16. capture leaders after battle if alone

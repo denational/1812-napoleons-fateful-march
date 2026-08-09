@@ -569,7 +569,7 @@ function get_seniormost_leader(who, area) {
 function update_tracks() {
 	//Time
 	populate("track-time", V.turn, "time", 0)
-	populate("track-time", V.last_turn, "time", 1)
+	populate("track-time", V.end_turn, "time", 1)
 
 	//VP
 	if (V.vp >= 0) {
@@ -697,36 +697,45 @@ function update_troops() {
 				update_keyword(get_troop_name(type), get_used(who, type), "exhausted")
 			}
 
-			//Populating the marker (without the number of troops)
-			if (has_friendly_leader(who, area) && ((is_cavalry(type) || is_cossack(type)) || (get_seniormost_leader(who, area) !== PLATOV))) { //If there's a friendly leader in the area, put the troops on his mat
-				populate(`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader(who, area), get_troop_name(type), get_used(who, type))
-			} 
-			else if (area === FRENCH_CASUALTIES) {
-				populate("fr_casualties", 0, get_troop_name(type), get_used(who, type))
-			} 
-			else if (has_battle(area) && is_battle_attacker(who, area)) {
+			
+			if (has_battle(area) && is_battle_attacker(who, area)) {
 				let connection_split = [] //In order to correctly update the number of troops in case there are troops of the same type across multiple connections
 
 				for (let entry of get_attacker_data(area).forces) {
 					if (entry.troops[type] > 0) {
+						if (is_fresh(type)) {
+							update_keyword(get_troop_name(type), get_used(who, type), "fresh")
+						} else {
+							update_keyword(get_troop_name(type), get_used(who, type), "exhausted")
+						}
+
 						let connection = find_connection(area, entry.from)
 						if (entry.leaders.length === 0) {
 							populate("connection_stack", connection, get_troop_name(type), get_used(who, type))
 						} else {
 							populate(`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader_from_list(who, entry.leaders), get_troop_name(type), get_used(who, type))
 						}
-						if (!map_has(connection_split, connection))
+						if (!map_has(connection_split, connection)) {
 							map_set(connection_split, connection, {id: get_used(who, type), amt: entry.troops[type]})
-						else
+						} else {
 							map_get(connection_split, connection, null).amt = map_get(connection_split, connection, null).amt + entry.troops[type]
+						}
+						incr_used(who, type)
 					}
 				}
 				map_for_each(connection_split, (connection, entry) => {
 					update_text("troop-text", entry.id, entry.amt)
 				})
-				incr_used(who, type)
 				continue
-			} else {
+			} 
+			//Populating the marker (without the number of troops)
+			else if (has_friendly_leader(who, area) && ((is_cavalry(type) || is_cossack(type)) || (get_seniormost_leader(who, area) !== PLATOV))) { //If there's a friendly leader in the area, put the troops on his mat
+				populate(`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader(who, area), get_troop_name(type), get_used(who, type))
+			} 
+			else if (area === FRENCH_CASUALTIES) {
+				populate("fr_casualties", 0, get_troop_name(type), get_used(who, type))
+			} 
+			else {
 				populate("area_stack", area, get_troop_name(type), get_used(who, type))
 			}
 
@@ -816,7 +825,6 @@ function on_log(text, ix) {
 			p.className = 'h1 winter'
 		else 
 			p.className = 'h1'
-		console.log(p.className)
 		text = text.substring(2)
 		break
 	case "@":
@@ -838,6 +846,10 @@ function on_log(text, ix) {
 	case "<":
 		text = text.substring(1)
 		p.className = 'ii'
+		break
+	case "&":
+		text = text.substring(1)
+		p.className = 'italic'
 		break
 	}
     

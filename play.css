@@ -120,6 +120,10 @@ body.Russia header.your_turn {background-color: var(--russia);}
 		text-indent: 28px;
 	}
 
+	& .italic {
+		font-style: italic;
+	}
+
 	& .tip {
 		font-variant: small-caps;
 		font-style: normal;
@@ -127,7 +131,6 @@ body.Russia header.your_turn {background-color: var(--russia);}
 
 	& .card-tip {
 		font-variant-caps: small-caps;
-		font-weight: lighter;
 		padding: 0 4px; 
 		border-radius: 2px; 
 	}

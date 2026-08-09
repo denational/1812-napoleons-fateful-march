@@ -1035,7 +1035,7 @@ function move_depot(id, where) {
 
 function remove_depot(id, where) {
 	G.depots[id] = POOL
-	log("Removed depot from S" + where + ".")
+	log(`Removed depot at S${where}.`)
 }
 
 function find_depot_at_location(who, area) {
@@ -1270,12 +1270,12 @@ function on_view() {
 	V.hand_length = [G.hand[RUSSIA].length, G.hand[FRANCE].length]
 	V.current_hand = G.hand[R] ?? []
 	V.initiative = G.initiative
-	V.last_turn = G.last_turn
+	V.end_turn = G.end_turn
 	V.leaders = G.leaders
 	V.removed = G.removed
 	V.set_aside = G.set_aside
 	V.troops = G.troops
-	V.turn = G.turn
+	V.turn = (G.turn === undefined) ? G.start_turn : G.turn
 	V.vp = G.vp
 	V.played_cards = G.played_cards ?? [[], []]
 	V.orders = G.orders.slice(get_first_order(R), get_last_order(R) + 1) ?? []
@@ -1307,8 +1307,8 @@ function on_setup(scenario, options) {
 
 	log_h1(scenario, NONE)
 
-	G.turn = SCENARIO_DATA.start
-	G.last_turn = SCENARIO_DATA.end
+	G.start_turn = SCENARIO_DATA.start
+	G.end_turn = SCENARIO_DATA.end
 
 	G.vp = SCENARIO_DATA.vp
 	G.initiative = SCENARIO_DATA.initiative
@@ -1350,7 +1350,7 @@ function on_setup(scenario, options) {
 
 	update_supply()
 
-	switch(get_current_month()) {
+	switch(get_month(G.start_turn)) {
 	case JUNE: setup_june(); break
 	case JULY: setup_july(); break
 	case AUG: setup_aug(); break
@@ -1937,7 +1937,7 @@ P.setup_hand = { //TODO: clarification on whether discards are public, shuffle d
 				get_deck(RUSSIA).push(HOLY_MOTHER_RUSSIA_RU)
 				log(`${get_card_log_alias(HOLY_MOTHER_RUSSIA_RU)} placed on top of the Russian deck.`)
 			}
-			goto("begin_turn")
+			goto("main")
 		}
 	}
 }
@@ -1955,16 +1955,29 @@ function test_card(c) {
 }
 
 //=== BEGINNING OF TURN ===
-P.begin_turn = function() {
-	if (is_resource_turn(G.turn)) {
-		call("resource_turn")
-	} else {
-		call("turn")
+P.main = script(`
+	for G.turn in G.start_turn to G.end_turn {
+		if (is_resource_turn(G.turn)) {
+			call resource_phase
+		} else {
+			call turn	
+		}
+	}
+	goto final_scoring	
+`)
+
+function log_start_of_turn(turn) {
+	log_h1(`${get_month_name(G.turn)} ${get_turn_name(G.turn)}`, get_season(turn))
+
+	if (turn === JUNE_5) {
+		log_h4("French Logistic Preparations")
+		log_italic(`France receives a free Forced March and Place Depot order in the first turn. This Place Depot order may be placed in S${S_KOVNO}.`)
+		log()
 	}
 }
 
 P.turn = script(`
-	eval { log_h1(get_month_name(G.turn) + " " + get_turn_name(G.turn), get_current_season())}
+	eval { log_start_of_turn(G.turn) }
 	call draw_card_to_hand
 	call play_card_for_additional_orders
 	call select_orders
@@ -4220,7 +4233,7 @@ P.may_play_evade_events = {
 		push_undo()
 		L.played_event = true
 		set_delete(L.events_in_hand, card)
-		call("event", card)
+		call("event", { card })
 	},
 	pass() { end() },
 	done() { end() }
@@ -4696,9 +4709,9 @@ function find_closest_depot_for_retreat(who, area) {
 	RUSSIA
 *		#5 	Idle Reserves 			If defending											- Imperial Guard fight X0, unless France play 'The Imperial Guard'
 		#7 	Indecision	 																	- Cancel the effect of 'The Imperial Guard'
-		#8 	Fighting Withdrawal 	If defending											- Both sides' losses are reduced by 2 and no pursuit. RU must retreat after battle and count as having lost it.
+*		#8 	Fighting Withdrawal 	If defending											- Both sides' losses are reduced by 2 and no pursuit. RU must retreat after battle and count as having lost it.
 *		#9 	Uninspired Tactics		If defending in a fortress town || under defend orders	- FR losses +1
-		#12	Outflanking				Attacking with a leader across > 1 connection			- FR designate one connection as the main attack. The FR combat value is reduced by the total combat value across all other connections
+*		#12	Outflanking				Attacking with a leader across > 1 connection			- FR designate one connection as the main attack. The FR combat value is reduced by the total combat value across all other connections
 		#22 City Ablaze!			When FR gain control of a Key City
 		#23	Stubborn Rearguard		Immediately after losing a battle						- Cancel any losses from pursuit in the battle
 		#28	Poor Coordination		No restriction											- FR combat value -3 for each Track connection used
@@ -4721,14 +4734,14 @@ function find_closest_depot_for_retreat(who, area) {
 	FRANCE
 		#1 	Hard Marching																	- Forced March FR SPs fight X1 instead of X0,5
 		#2 	Hard Marching																	- Forced March FR SPs fight X1 instead of X0,5
-		#6 	Outflanking				If attacking from more than one direction				- RU designate one connection as main attack. The RU combat value is reduced by the total combat value across all other connections
+*		#6 	Outflanking				If attacking from more than one direction				- RU designate one connection as main attack. The RU combat value is reduced by the total combat value across all other connections
 		#7	Unsuccessful Diseng.															- Both sides losses -1
 		#11	Grand Battery			If Napoleon is present									- RU losses +1 if defending, +2 if attacking. If RU played Infantry Squares losses +1 more.
 		#12	Cavalry Charge			If Murat is present										- Up to two FR Cavalry SPs fight at X3
 		#13	Murat's Cavalry			If Murat is present										- Up to two FR Cavalry SPs are doubled, but 1 is exhausted. If Fr win the battle, the remaining fresh Cavalry count X2 for pursuit.
 		#14	Skillful Maneuvers		If attacking with a leader && across >1 connection		- When Battle cards are revealed, France may choose to either cancel the effect of a river or a 'defend' order.
 		#16	Infantry Squares		If at least 2 FR infantry/Imperial Guard				- combat value of all RU Cavalry SPs is X0, and first loss must be cavalry
-		#18	Outflanking				If attacking with a Leader and across >1 connection		- same as #6
+*		#18	Outflanking				If attacking with a Leader and across >1 connection		- same as #6
 		#21	Confusing Orders		If Kutuzov is present									- cancel the effect of up to 2 of the player RU battle cards
 		#23	Poor Coordination		If RU forces entered the battle from >1 connection		- Reduce the total RU combat value by 2 for each connection used by RU to enter the battle
 		#26	Combined Arms			If a FR leader is present								- X2 the combat value of up to 1 Cav. and 3 Inf. Cancels RU Infantry Squares.
@@ -4767,7 +4780,14 @@ function find_closest_depot_for_retreat(who, area) {
 */
 
 function init_battle_entry(area) {
-	map_set(G.battles, area, {attacker: {who: -1, forces: [], losses: 0, num_eliminated: 0,}, defender: {who: -1, forces: [], losses: 0, num_eliminated: 0,}, events: []})
+	map_set(G.battles, area, 
+		{
+			attacker: {who: -1, forces: [], losses: 0, num_eliminated: 0,}, 
+			defender: {who: -1, forces: [], losses: 0, num_eliminated: 0,}, 
+			events: [],
+			outflanking: -1,
+		}
+	)
 }
 
 function has_battle(area) {
@@ -4887,6 +4907,10 @@ function add_battle_event(area, event) {
 	set_add(battle.events, event)
 
 	//console.log(JSON.stringify(G.battles, null, 2))
+}
+
+function add_battle_outflanking(area, connection_origin) {
+	get_battle_entry(area, null).outflanking = connection_origin
 }
 
 function is_battle_event_active(area, event) {
@@ -5129,6 +5153,7 @@ P.defend = {
 	order(order) {
 		remove_order(order)
 		add_defend_order_to_battle(L.area)
+		log("Revealed Defend order.")
 		end()
 	}
 }
@@ -5157,12 +5182,21 @@ function get_num_battle_events_could_by_played(who, area) {
 
 P.play_battle_events = script(`
 	log "$Play Battle Events"
+	eval { G.hand[RUSSIA].push(POOR_COORDINATION_RU) }
+	eval { G.hand[FRANCE].push(OUTFLANKING_FR_2) }
 	set G.played_cards [[], []]
 	set G.active L.attacker
 	call commit_battle_events { area: L.area }
 	set G.active L.defender
 	call commit_battle_events { area: L.area }	
 	call reveal_battle_events
+	
+	for L.who in RUSSIA to FRANCE {
+		if (G.played_cards[L.who].length > 0) {
+			set G.active L.who
+			call execute_battle_events
+		}
+	}
 `)
 
 const BATTLE_CARD = 2
@@ -5207,6 +5241,7 @@ P.commit_battle_events = {
 		L.num_battle_events_in_hand--
 	},
 	done() {
+		clear_undo()
 		end()
 	}
 }
@@ -5214,20 +5249,48 @@ P.commit_battle_events = {
 P.reveal_battle_events = function() {
 	for (let who = RUSSIA; who <= FRANCE; ++who) {
 		log(ROLES[who])
-		for (let c of G.played_cards[who]) {
-			logi(get_card_log_alias(c))
-			if (!is_card_dummy(c))
-				add_battle_event(c)
-		}
+		if (G.played_cards[who].length > 0) {
+			for (let c of G.played_cards[who]) {
+				logi(get_card_log_alias(c))
+				if (!is_card_dummy(c))
+					add_battle_event(G.current_battle, c)
+			}
 
-		if (set_has(G.played_cards[who], get_dummy(who))) {
-			return_dummy_to_hand(who)
-			set_delete(G.played_cards[who], get_dummy(who))
+			if (set_has(G.played_cards[who], get_dummy(who))) {
+				return_dummy_to_hand(who)
+				set_delete(G.played_cards[who], get_dummy(who))
+			}
+		} else {
+			logi("Nothing")
 		}
 	}
-	G.played_cards = [[], []]
 	log()
 	end()
+}
+
+P.execute_battle_events = {
+	_begin() {
+		L.events_to_be_executed = G.played_cards[G.active].slice()
+	},
+	prompt() {
+		if (L.events_to_be_executed.length > 0) {
+			prompt(`Scroll down and implement the effect of each battle event played (${join_array_with_and(L.events_to_be_executed.map(card => get_card_log_alias(card)))}).`)
+			for (let card of L.events_to_be_executed)
+				action_card(card)
+		} else {
+			prompt(`Execute battle events: All done.`)
+			button_done()
+		}
+	},
+	card(card) {
+		push_undo()
+		set_delete(L.events_to_be_executed, card)
+		call("event", { card })
+	},
+	done() {
+		log()
+		end()
+	}
 }
 
 P.calculate_combat_value = script(`
@@ -5240,38 +5303,69 @@ P.calculate_combat_value = script(`
 	goto assign_losses { attacker: L.attacker, defender: L.defender, losses: L.hits }
 `)
 
+function is_outflanking_currently_active(who) {
+	if (who === RUSSIA)
+		return is_battle_event_currently_active(OUTFLANKING_RU)
+	else 
+		if (!is_battle_event_currently_active(POOR_COORDINATION_RU))
+			return is_battle_event_currently_active(OUTFLANKING_FR_1) || is_battle_event_currently_active(OUTFLANKING_FR_2)
+	return false
+}
+
 P.do_combat_value_calculations = function() {
 	let combat_value = [0, 0]
-
+	log("DEBUG INFO")
 	let attacker = get_attacker_data(G.current_battle)
 
 	for (let entry = 0; entry < attacker.forces.length; ++entry) {
 		
 		combat_value[attacker.who] += find_combat_value(attacker.who, attacker.forces[entry], G.current_battle)
 	}
+	log_h4(`${ROLES[attacker.who]} total: ${combat_value[attacker.who]}`)
 
 	let defender = get_defender_data(G.current_battle)
 	for (let entry = 0; entry < defender.forces.length; ++entry) {
 		combat_value[defender.who] += find_combat_value(defender.who, defender.forces[entry], G.current_battle)
 	}
 
+	if (is_battle_event_currently_active(POOR_COORDINATION_RU)) {
+		combat_value[FRANCE] -= 3 * count_num_track_connections_used_to_enter_battle(FRANCE, G.current_battle)
+		log(`Poor Coordination: France -${3 * count_num_track_connections_used_to_enter_battle(FRANCE, G.current_battle)}`)
+	}
+	
+	// RU #12, FR #6, FR #17: Outflanking
+	if (attacker.who === FRANCE && is_outflanking_currently_active(FRANCE)) {
+		if (!is_battle_event_currently_active(POOR_COORDINATION_RU)) {
+			combat_value[RUSSIA] -= calculate_outflanking_strength(G.current_battle)
+			log(`Outflanking: -${calculate_outflanking_strength(G.current_battle)}`)
+		}
+	} else if (attacker.who === RUSSIA && is_outflanking_currently_active(RUSSIA)) {
+		combat_value[FRANCE] -= calculate_outflanking_strength(G.current_battle)
+		log(`Outflanking: -${calculate_outflanking_strength(G.current_battle)}`)
+	}
+
+	log_h4(`${ROLES[defender.who]} total: ${combat_value[defender.who]}`)
+	log()
 	L.L.$ = combat_value.slice()
 	end()
 }
 
 function find_combat_value(who, battle_data, area) {
+	log(`${ROLES[who]}`)
+	logi(`S${battle_data.from}`)
 	let strength = 0
 
 	strength += get_infantry_strength(who, battle_data, area)
 	strength += get_cavalry_strength(who, battle_data, area)
-	strength += get_cossack_strength(who, battle_data, area)
-	strength += get_guard_strength(who, battle_data, area)
+	if (who === RUSSIA) strength += get_cossack_strength(who, battle_data, area)
+	if (who === FRANCE) strength += get_guard_strength(who, battle_data, area)
 	strength += get_exhausted_strength(who, battle_data, area)
 
 	// RU #34 Platov's Cossacks
 	if (is_event_active(PLATOVS_COSSACKS) && (who === FRANCE))
 		strength -= count_num_sps_of_type(RUSSIA, FRESH_COSSACK, area)
 
+	logi(`Total strength: ${strength}`)
 	return strength
 } 
 
@@ -5282,14 +5376,17 @@ function get_infantry_strength(who, battle_data, area) {
 	let strength = battle_data.troops[FRESH_INFANTRY] + battle_data.troops[FRESH_PRUSSIAN_INFANTRY] + battle_data.troops[FRESH_AUSTRIAN_INFANTRY]
 
 	// RU #38: Konstantine's Corps: Up to 3 RU Infantry SPs fight at X2
-	if ((who === RUSSIA) && is_battle_event_currently_active(KONSTANTINES_CORPS))
+	if ((who === RUSSIA) && is_battle_event_currently_active(KONSTANTINES_CORPS)) {
 		strength += Math.max(3, battle_data.troops[FRESH_INFANTRY])
+	}
 
-	if (did_force_march)
+	if (did_force_march) {
 		strength *= 0.5
-	if (did_cross_river)
+	} if (did_cross_river) {
 		strength *= 0.5
+	}
 
+	log(`<Total Infantry: ${strength}`)
 	return strength
 }
 
@@ -5306,16 +5403,18 @@ function get_cavalry_strength(who, battle_data, area) {
 	}
 
 	//Basic modifiers
-	if (did_force_march)
+	if (did_force_march) {
 		strength *= 0.5
-	if (did_cross_river)
+	} if (did_cross_river) {
 		strength *= 0.5
+	}
 
 	//Events
 	if ((who === FRANCE) && is_battle_event_currently_active(INFANTRY_SQUARES_RU)) {
 		strength = 0
 	}
 
+	log(`<Total Cavalry: ${strength}`)
 	return strength
 }
 
@@ -5339,6 +5438,7 @@ function get_cossack_strength(who, battle_data, area) {
 	if (did_cross_river)
 		strength *= 0.5
 
+	log(`<Total Cossack: ${strength}`)
 	return strength
 }
 
@@ -5363,6 +5463,7 @@ function get_guard_strength(who, battle_data, area) {
 		if (!is_battle_event_currently_active(THE_IMPERIAL_GUARD))
 			strength = 0
 
+	log(`<Total Guard: ${strength}`)
 	return strength
 }
 
@@ -5451,6 +5552,12 @@ P.determine_losses = function() {
 		L.losses[L.defender] = Math.max(0, --L.losses[L.defender])
 
 	//Events:
+	// RU #8: Fighting Withdrawal
+	if (is_battle_event_currently_active(FIGHTING_WITHDRAWAL)) {
+		L.losses[RUSSIA] = Math.max(L.losses[RUSSIA] - 2, 0)
+		L.losses[FRANCE] = Math.max(L.losses[FRANCE] - 2, 0)
+	}
+
 	// RU #9: Uninspired Tactics
 	if (is_battle_event_currently_active(UNINSPIRED_TACTICS))
 		++L.losses[FRANCE]
@@ -5478,7 +5585,7 @@ P.determine_losses = function() {
 	for (let who = RUSSIA; who <= FRANCE; ++who) {
 		log(`${ROLES[who]} suffered ${L.losses[who]} losses.`)	
 
-		logi(`+${get_combat_losses_inflicted(L.combat_value[enemy(who)])} SPs`)
+		logi(`+${get_combat_losses_inflicted(L.combat_value[enemy(who)])} ${ROLES[enemy(who)]} hits`)
 
 		if (is_battle_attacker(who)) {
 			if (is_fortress_town(G.current_battle) && ((count_num_infantry(L.defender, G.current_battle) > 0) || (count_num_guard(L.defender, G.current_battle) > 0)))
@@ -5490,6 +5597,9 @@ P.determine_losses = function() {
 			if (G.current_battle === S_RIGA && (is_battle_defender(RUSSIA, G.current_battle)))
 				logi(`-1 S${S_RIGA}`)
 		}
+
+		if (is_battle_event_currently_active(UNINSPIRED_TACTICS) && who === FRANCE)
+			logi(`+1 ${get_card_log_alias(UNINSPIRED_TACTICS)}`)
 	}
 
 	update_battle_losses(L.attacker, G.current_battle, L.losses[L.attacker])
@@ -5616,35 +5726,55 @@ P.assign_losses = {
 	},
 	done() {
 		set_delete(G.active, R)
-		if (G.active.length === 0)
+		if (G.active.length === 0) {
+			log(`${ROLES[RUSSIA]} assigned ${L.count[RUSSIA]} losses.`)
+			log(`${ROLES[FRANCE]} assigned ${L.count[FRANCE]} losses.`)
+			log()
 			goto("determine_battle_winner", { count: L.count })
+		}
 	}
 }
 
 P.determine_battle_winner = function() {
+	//console.log(get_battle_entry(G.current_battle, null))
 	//End battle if one side has no more SPs
 	if (!has_friendly_troop(RUSSIA, G.current_battle) || !has_friendly_troop(FRANCE, G.current_battle)) {
-		goto("end_battle", { drawn_battle: false, winner: get_battle_winner(L.count), loser: enemy(get_battle_winner(L.count)) })
+		let winner = !has_friendly_troop(RUSSIA, G.current_battle) ? FRANCE : RUSSIA
+		goto("end_battle", { drawn_battle: false, winner, loser: enemy(winner) })
 	} 
+
+	else if (is_battle_event_currently_active(FIGHTING_WITHDRAWAL)) {
+		log(`${get_card_log_alias(FIGHTING_WITHDRAWAL)}: France won.`)
+		log()
+		goto("end_battle", { drawn_battle: false, winner: FRANCE, loser: RUSSIA})
+	}
 	//Determine whether events influence a victory, or tie
 	else if (L.count[RUSSIA] === L.count[FRANCE]) {
-
-		log(`${ROLES[RUSSIA]} inflicted ${L.count[RUSSIA]} losses.`)
-		log(`${ROLES[FRANCE]} inflicted ${L.count[FRANCE]} losses.`)
-
+		log_h4("Tied Battle")
 		// RU #35 Fickle Habsburgs: Russia wins even if tied.
 		if (is_battle_event_currently_active(FICKLE_HABSBURGS)) {
 			log(`${get_card_log_alias(FICKLE_HABSBURGS)}: Russia won.`)
+			log()
 			goto("end_battle", { drawn_battle: false, winner: RUSSIA, loser: FRANCE})
 		} 
 		// RU #37: Enveloping Moves: Russia wins a tie if they have more SPs.
 		else if (is_battle_event_currently_active(ENVELOPING_MOVES) && (count_num_fresh_sps(RUSSIA, G.current_battle) > count_num_fresh_sps(FRANCE, G.current_battle))) {
 			log(`${get_card_log_alias(ENVELOPING_MOVES)}: Russia won.`)
+			log()
 			goto("end_battle", { drawn_battle: false, winner: RUSSIA, loser: FRANCE})
 		}
 		else {
-			log("Battle tied.")
-			goto("tied_battle")
+			let winner
+			if (is_fortress_town(G.current_battle) || did_all_attacking_forces_cross_bridges(G.current_battle)) {
+				winner = get_battle_defender(G.current_battle)
+				log(`Fortress Town: ${ROLES[winner]} won.`)
+				
+			} else {
+				winner = get_who_has_initiative()
+				log(`Initiative: ${ROLES[winner]} won.`)
+			}
+			log()
+			goto("end_battle", { drawn_battle: true, winner: winner, loser: enemy(winner)})	
 		}
 
 	} 
@@ -5654,11 +5784,16 @@ P.determine_battle_winner = function() {
 	}
 	// Decisive battle: Pursuit
 	else {
+		log_h4("Determine Winner")
 		log(`${ROLES[RUSSIA]} inflicted ${L.count[FRANCE]} losses.`)
 		log(`${ROLES[FRANCE]} inflicted ${L.count[RUSSIA]} losses.`)
 		log(`${ROLES[get_battle_winner(L.count)]} won!`)
 		log()
-		goto("pursuit", { winner: get_battle_winner(L.count) })
+		if (can_play_event(STUBBORN_REARGUARD_RU) && (get_battle_winner(L.count) == FRANCE)) {
+			goto("may_play_stubborn_rearguard_ru")
+		} else {
+			goto("pursuit", { winner: get_battle_winner(L.count) })
+		}
 	}
 }
 
@@ -5767,18 +5902,6 @@ function did_all_attacking_forces_cross_bridges(battle) {
 	return attacker_data.forces.every(force => force.bridge === true)
 }
 
-P.tied_battle = script(`
-	eval {
-		L.winner = -1
-		if (is_fortress_town(G.current_battle) || did_all_attacking_forces_cross_bridges(G.current_battle)) {
-			L.winner = get_battle_defender(G.current_battle)
-		} else {
-			L.winner = get_who_has_initiative()
-		}
-	}
-	call end_battle { drawn_battle: true, winner: L.winner, loser: enemy(L.winner)}	
-`)
-
 //TODO: Response trigger for City Ablaze! if France take control of a key city
 //TODO: Draw a card if any battle events played
 //TODO: Konstantine's Corps, Cavalry Charge: Draw a card if battle won by RU
@@ -5809,7 +5932,7 @@ function get_current_initiative_level() {
 P.battle_shift_vp_and_initiative = {
 	_begin() {
 		//L.winner
-		console.log(get_battle_entry(G.current_battle, null))
+		//console.log(get_battle_entry(G.current_battle, null))
 		log_h4("VP & Initiative Shifts")
 		G.active = L.winner
 		L.num_enemy_sps_eliminated = get_player_battle_data(enemy(G.active), G.current_battle).num_eliminated
@@ -5877,10 +6000,13 @@ P.battle_shift_vp_and_initiative = {
 	},
 	pass() {
 		push_undo()
-		if (!L.has_shifted_vp) 
+		if (!L.has_shifted_vp) {
+			log("No VP shift.")
 			L.has_shifted_vp = true
-		else
+		} else {
+			log("No Initiative shift.")
 			L.has_finished = true
+		}
 	},
 	done() {
 		log()
@@ -5990,7 +6116,7 @@ P.retreat = {
 		push_undo()
 		move_formation(L.retreat.leaders, L.retreat.troops, G.current_battle, L.selected_area)
 		
-		log("Retreated from from S" + G.current_battle)
+		log("Retreated from S" + G.current_battle)
 		if (L.retreat.leaders.length > 0) {
 			logi(`L${L.retreat.leaders[0]}`) //Seniormost leader
 			for (let type = 0; type < L.retreat.troops.length; ++type) {
@@ -6032,7 +6158,7 @@ P.retreat = {
 
 //=== 10. EXECUTE RALLY ORDERS ===
 P.rally = script(`
-	log "@Execute Rally"
+	log "@Rally"
 
 	if (get_placed_orders_of_type(RALLY).length === 0) {
 		log ""
@@ -6048,6 +6174,7 @@ P.rally = script(`
 P.execute_rally = {
 	_begin() {
 		//L.first_player
+		log_h3("Execute Orders", NONE)
 		G.active = L.first_player
 		L.has_passed = [false, false]
 		L.current_order = -1
@@ -6141,20 +6268,26 @@ P.do_rally = {
 	troop(type) {
 		push_undo()
 		rally_troop(G.active, L.area, type)
+		log("Rallied")
+		logi(`1 ${get_troop_type_name(type)}`)
 		L.has_rallied = true
 	},
 	troop_2x(type) {
 		push_undo()
 		rally_troop(G.active, L.area, type, 2)
+		log("Rallied")
+		logi(`2 ${get_troop_type_name(type)}`)
 		L.has_rallied = true
 	},
 	confirm() {
 		push_undo()
 		log("No exhausted SPs to Rally.")
+		log()
 		end()
 	},
 	done() {
 		push_undo()
+		log()
 		end()
 	}
 
@@ -6162,7 +6295,7 @@ P.do_rally = {
 
 //=== 11. EXECUTE COSSACK RAID ORDERS ===
 P.cossack_raid = script(`
-	log "@Execute Cossack Raid"
+	log "@Cossack Raid"
 
 	if (get_placed_orders_of_type(COSSACK_RAID).length === 0) {
 		log ""
@@ -6175,6 +6308,7 @@ P.cossack_raid = script(`
 
 P.execute_cossack_raid = {
 	_begin() {
+		log_h3("Execute Orders", NONE)
 		G.active = RUSSIA
 		L.current_order = -1
 		L.has_executed_order = false
@@ -6255,10 +6389,12 @@ P.do_cossack_raid = {
 		push_undo()
 		G.active = FRANCE
 		L.has_raided = true
+		log(`Targeted S${area}:`)
 		call("apply_cossack_raid", {area})
 	},
 	done() {
 		push_undo()
+		log()
 		end()
 	}
 }
@@ -6302,11 +6438,14 @@ P.apply_cossack_raid = {
 	troop(type) {
 		push_undo()
 		eliminate_troop(FRANCE, L.area, type)
+		logi("Eliminated")
+		log_only(RUSSIA, `<1 Exh. SP`)
+		log_only(FRANCE, `<1 ${get_troop_type_name(type)}`)
 		++L.step
 	},
 	next() {
-		if (L.step === -1) log(`No Forage orders to remove.`)
-		else log(`No exhausted SPs to eliminate.`)
+		if (L.step === -1) log(`>No Forage orders.`)
+		else log(`>No Exh. SPs.`)
 		++L.step
 	},
 	done() {
@@ -6911,6 +7050,24 @@ E.idle_reserves = {
 	}
 }
 
+P.idle_reserves = {
+	prompt() {
+		if (is_battle_event_currently_active(THE_IMPERIAL_GUARD))
+			prompt_card(IDLE_RESERVES, `No effect: France played ${get_card_log_alias(THE_IMPERIAL_GUARD)}.`)
+		else
+			prompt_card(IDLE_RESERVES, "All Imperial Guard SPs fight at X0 this battle.")
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		if (is_battle_event_currently_active(THE_IMPERIAL_GUARD))
+			log(`No effect – France played ${get_card_log_alias(THE_IMPERIAL_GUARD)}.`)
+		else
+			log("All Imperial Guard SPs fight at X0.")
+		end()
+	}
+}
+
 //RU #6: Bagration's Retreat
 P.may_play_bagrations_retreat = {
 	inactive: "play C6",
@@ -6940,10 +7097,54 @@ P.bagrations_retreat - { //TODO
 	}
 }
 
+// RU #8: Fighting Withdrawal
+E.fighting_withdrawal = {
+	could_play() {
+		return is_battle_defender(RUSSIA, G.current_battle)
+	}
+}
+
+P.fighting_withdrawal = {
+	_begin() {
+		L.step = -1
+	},
+	prompt() {
+		if (L.step === -1) {
+			prompt_card(FIGHTING_WITHDRAWAL, `Both sides losses are reduced by 2 in this battle.`)
+			button_next()
+		} else {
+			prompt_card(FIGHTING_WITHDRAWAL, `There is no pursuit, but Russia must retreat after battle and count as having lost it.`)
+			button_confirm()
+		}
+	},
+	next() {
+		push_undo()
+		log("Both sides' losses are reduced by 2.")
+		++L.step
+	},
+	confirm() {
+		push_undo()
+		log("Russia must retreat and count as having lost the battle.")
+		end()
+	}
+}
+
 //RU #9: Uninspired Tactics
 E.uninspired_tactics = {
 	could_play() {
 		return (is_battle_defender(RUSSIA, G.current_battle) && is_fortress_town(G.current_battle)) || battle_has_defend_order(G.current_battle)
+	}
+}
+
+P.uninspired_tactics = {
+	prompt() {
+		prompt_card(UNINSPIRED_TACTICS, "French losses +1.")
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log("French losses +1.")
+		end()
 	}
 }
 
@@ -7103,10 +7304,105 @@ function get_locations_with_leader(who) {
 }
 
 // RU #12: Outflanking
+// FR #6: Outflanking
+// FR #17: Outflanking
 E.outflanking_ru = {
 	could_play() {
-		return (is_battle_attacker(RUSSIA, G.current_battle) && did_attacker_attack_across_multiple_connections(G.current_battle))
+		return is_battle_attacker(RUSSIA, G.current_battle) && did_attacker_attack_across_multiple_connections(G.current_battle)
 	}
+}
+
+E.outflanking_fr_1 = {
+	could_play() {
+		return (is_battle_attacker(FRANCE, G.current_battle)) && did_attacker_attack_across_multiple_connections(G.current_battle)
+	}
+}
+E.outflanking_fr_2 = {
+	could_play() {
+		return (is_battle_attacker(FRANCE, G.current_battle)) && did_attacker_attack_across_multiple_connections(G.current_battle)
+	}
+}
+
+P.outflanking_ru = function() { goto("outflanking", { attacker: RUSSIA, defender: FRANCE, card: OUTFLANKING_RU }) }
+P.outflanking_fr_1 = function() { 
+	if (is_battle_event_currently_active(POOR_COORDINATION_RU))
+		goto("outflanking_no_effect", { card: OUTFLANKING_FR_1 })
+	else
+		goto("outflanking", { attacker: FRANCE, defender: RUSSIA, card: OUTFLANKING_FR_1 }) 
+}
+P.outflanking_fr_2 = function() { 
+	if (is_battle_event_currently_active(POOR_COORDINATION_RU))
+		goto("outflanking_no_effect", { card: OUTFLANKING_FR_2 })
+	else
+		goto("outflanking", { attacker: FRANCE, defender: RUSSIA, card: OUTFLANKING_FR_2 }) 
+}
+
+P.outflanking = {
+	_begin() {
+		//L.attacker, L.defender, L.card
+		G.active = L.attacker
+		L.has_defender_confirmed = false
+		L.designated_connection_from = -1
+	},
+	prompt() {
+		if (!L.has_defender_confirmed) {
+			if (G.active === L.attacker) {
+				prompt_card(L.card, `Confirm: ${ROLES[L.defender]} will designate a connection as the main attack.`)
+				button_confirm()
+			} else if (L.designated_connection_from === -1) {
+				prompt_card(L.card, "Designate a connection as the main attack.")
+				for (let origin of get_connections_used_by_attacker(G.current_battle))
+					action_connection(origin, G.current_battle)
+			} else {
+				prompt(`You designated a connection from S${L.designated_connection_from} to S${G.current_battle}.`)
+				button_confirm()
+			}
+		} else {
+			prompt_card(L.card, "All done.")
+			button_done()
+		}
+	},
+	confirm() {
+		push_undo()
+		if (G.active === L.defender) L.has_defender_confirmed = true
+		G.active = enemy(G.active)
+	},
+	connection(connection_id) {
+		push_undo()
+		L.designated_connection_from = get_other_area(connection_id, G.current_battle)
+		add_battle_outflanking(G.current_battle, L.designated_connection_from)
+		log(`Designated connection from S${L.designated_connection_from} to S${G.current_battle}.`)
+	},
+	done() {
+		push_undo()
+		end()
+	}
+}
+
+P.outflanking_no_effect = {
+	_begin() {
+		G.active = FRANCE
+	},
+	prompt() {
+		prompt_card(L.card, `No effect – ${get_card_log_alias(POOR_COORDINATION_RU)} has been played.`)
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log(`${get_card_log_alias(POOR_COORDINATION_RU)}: No effect.`)
+		end()
+	}
+}
+
+function calculate_outflanking_strength(area) {
+	let attacker = get_attacker_data(area)
+	let count = 0
+	for (let entry of attacker.forces) {
+		if (entry.from !== get_battle_entry(area, null).outflanking)
+			for (let type of entry.troops)
+				if (type > 0) count += type
+	}
+	return count
 }
 
 // RU #13: Garrison Troops
@@ -7537,6 +7833,40 @@ P.city_ablaze = {
 	}
 }
 
+// RU #23: Stubborn Rearguard
+P.may_play_stubborn_rearguard_ru = {
+	_begin() {
+		G.active = RUSSIA
+	},
+	prompt() {
+		if (get_hand(RUSSIA).includes(STUBBORN_REARGUARD_RU)) {
+			prompt(`You may play ${get_card_log_alias(STUBBORN_REARGUARD_RU)} to cancel any losses from pursuit after this battle.`)
+			action_card(STUBBORN_REARGUARD_RU)
+		} else {
+			prompt(`You do not have ${get_card_log_alias(STUBBORN_REARGUARD_RU)} in hand.`)
+			button_pass()
+		}
+	},
+	card(card) {
+		push_undo()
+		goto("event", { card })
+	},
+	pass() {
+		goto("pursuit", { winner: FRANCE })
+	}
+}
+
+P.stubborn_rearguard_ru = {
+	prompt() {
+		prompt_card(STUBBORN_REARGUARD_RU, "Cancel any losses from pursuit in this battle. (cannot be undone)")
+		button_confirm()
+	},
+	confirm() {
+		//TO CHECK: Do we even need to go to pursuit at this point?
+		goto("end_battle", { drawn_battle: false, winner: FRANCE, loser: RUSSIA})
+	}
+}
+
 function has_friendly_depot(who, area) {
 	return get_depots(who).some(location => location === area)
 }
@@ -7612,10 +7942,29 @@ P.new_posting = {
 	}
 }
 
+// RU #28: Poor Coordination
+function count_num_track_connections_used_to_enter_battle(who, area) {
+	return array_count(get_connections_used_in_battle(who, area), origin => get_adjacent_areas_by_track(area).includes(origin))
+}
+
+P.poor_coordination_ru = {
+	_begin() {
+		L.num_track_connections_used = count_num_track_connections_used_to_enter_battle(FRANCE, G.current_battle) 
+	},
+	prompt() {
+		prompt_card(POOR_COORDINATION_RU, `Reduce French combat value by ${3 * L.num_track_connections_used} for ${L.num_track_connections_used} Track connections used to enter the battle.`)
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log(`France combat value -${3 * L.num_track_connections_used}.`)
+		end()
+	}
+}
+
 //RU #29: Cavalry Screening
 P.cavalry_screening = {
 	_begin() {
-		card_box_begin(CAVALRY_SCREENING)
 		L.count = Math.min(2, array_count(get_orders_at_area(G.active, POOL), order => get_order_type(order) === EVADE))
 	},
 	inactive: "retreat under cover of their cavalry",
@@ -7638,8 +7987,6 @@ P.cavalry_screening = {
 	},
 	done() { 
 		push_undo()
-		card_box_end()
-		discard_or_remove_card(CAVALRY_PATROLS)
 		end() 
 	}
 }
@@ -7651,10 +7998,32 @@ E.stoic_infantry = {
 	}
 }
 
+P.stoic_infantry = { //TODO: Implement actual effect
+	prompt() {
+		prompt_card(STOIC_INFANTRY, "The first 2 Russian Infantry SPs to become exhausted this battle immediately rally again.")
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log("The first 2 Russian Infantry SPs to become exhausted this battle immediately rally again.")
+		end()
+	}
+}
+
 // RU #32: The Artillery Corps
 E.the_artillery_corps = {
 	could_play() {
 		return has_leader_in_battle(RUSSIA, G.current_battle)
+	}
+}
+
+P.the_artillery_corps = {
+	prompt() {
+		if (is_battle_event_currently_active(INFANTRY_SQUARES_FR))
+			prompt_card(THE_ARTILLERY_CORPS, `French losses are increased by 2 (${get_card_log_alias(INFANTRY_SQUARES_FR)} was played).`)
+		else
+			prompt_card(THE_ARTILLERY_CORPS, `French losses are increased by 1.`)
+		button_confirm()
 	}
 }
 
@@ -8069,20 +8438,6 @@ P.polish_support = {
 	_resume() {
 		++L.step
 	},
-}
-
-// FR #6: Outflanking
-// FR #17: Outflanking
-E.outflanking_fr_1 = {
-	could_play() {
-		return (get_battle_attacker(G.current_battle) === FRANCE) &&(count_num_attacker_connections(G.current_battle) > 1)
-	}
-}
-
-E.outflanking_fr_2 = {
-	could_play() {
-		return (get_battle_attacker(G.current_battle) === FRANCE) &&(count_num_attacker_connections(G.current_battle) > 1)
-	}
 }
 
 // FR #8: Infighting & Intrigue
@@ -9044,6 +9399,10 @@ function log_h4(text) {
 
 function logi(text) {
 	log(">" + text)
+}
+
+function log_italic(text) {
+	log("&" + text)
 }
 
 function get_card_log_alias(card, who = get_card_owner(card)) {
