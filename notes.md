@@ -12,6 +12,9 @@
 7. Fickle Habsburgs: is there pursuit?
 8. How do Platov's Cossacks and Crumbling Cohesion stack (i.e. are they cumulative)?
 9. If RU doesn't have initiative, crumbling cohesion result is 0?
+10. Do battle cards 'stack'?
+11. what trumps, full elimination rout, or confusions and delays (assuming france won)
+
 
 ## Known Bugs (to fix at a later time)
 1. attrition has not been done yet - as are events depending on attrition losses
@@ -30,3 +33,6 @@
 14. display bug - prussian troops exhausted on connection disappear (battle of riga)
 15. combine forces in battle step
 16. capture leaders after battle if alone
+17. Troops that forced march to an area before enemy moves there would still fight at X1
+18. Eugène's IV Corps is playable despite him not being there
+19. 

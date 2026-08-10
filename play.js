@@ -535,6 +535,9 @@ function on_update() {
 	action_button("place_order", "Place Order")
 	action_button("change_order", "Change Order")
 
+	action_button("remove_defend_order", "Remove Defend Order")
+	action_button("cancel_river_effect", "Cancel River Effect")
+
 	action_button("roll", "Roll")
 	action_button("eliminate", "Eliminate")
 
@@ -805,10 +808,18 @@ function escape_text(text) {
 
 function on_log(text, ix) {
 	var p = document.createElement("div")
+
+	if (text.startsWith("HR") || text.startsWith("HF")) {
+		text = text.substring(2)
+		if (text === "") {
+			p.hidden = true
+			return p
+		}
+	}
+	
 	let is_box_header = false
-
 	update_log_boxes(ix)
-
+	
 	switch(text[0]) {
 	case "}":
 		close_log_box(ix)

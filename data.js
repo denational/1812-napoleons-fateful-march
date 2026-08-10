@@ -6385,7 +6385,7 @@ const data = {
 			"seniority": 1,
 			"vp": 1,
 			"short_name": "Schwarzenberg",
-			"log_name": "von Schwarzenberg"
+			"log_name": "Schwarzenberg"
 		}
 	],
 	"orders": [

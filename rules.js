@@ -6,6 +6,7 @@
 //TODO: Attrition
 //TODO: Attrition events
 //TODO: Resources Phase
+//TODO: New Living Rules updates (from notes.html)
 
 const data = require("./data")
 
@@ -13,7 +14,12 @@ const RUSSIA = 0
 const FRANCE = 1
 const ROLES = ["Russia", "France"]
 
+//Framework global variables
 var G, L, V, R, P = {}
+//Could play event checks
+var E = {}
+//Event execution holders (WIP)
+var X = {}
 
 //=== CONSTANTS ===
 /* ALLIED NATIONS */
@@ -187,8 +193,10 @@ const NOV_5 = 30
 /* AREAS */
 const areas = data.areas
 
+const ELIMINATED = -2
 const OUT_OF_PLAY = -1
 const POOL = 0
+
 const S_PRUSSIA_NORTH = 1 //The northern of the two "Prussia" areas
 const S_TILSIT = 2
 const S_KALTINENAI = 3
@@ -1248,20 +1256,24 @@ function add_order_of_type_from_pool(who, type, where) {
 	return id
 }
 
+function filter_log(log, player) {
+	if (Array.isArray(log)) {
+		log = log.map(entry => {
+			if (entry.startsWith("HR") && (player !== RUSSIA))
+				return "HR"
+			else if (entry.startsWith("HF") && (player !== FRANCE))
+				return "HF"
+			return entry
+		})
+	}
+	return log
+}
+
 //=== VIEW ===
 function on_view() {
+	V.log = filter_log(V.log, R)
+
 	V.active = G.active
-
-	if (R !== RUSSIA) {
-		V.log = V.log.filter(entry => !entry.startsWith("HR"))
-	}
-	
-	if (R !== FRANCE) {
-		V.log = V.log.filter(entry => !entry.startsWith("HF"))
-	}
-
-	V.log = V.log.map(entry => (entry.startsWith("HR") || entry.startsWith("HF")) ? entry.substring(2) : entry)
-
 	V.depots = G.depots
 	V.devastation = G.devastation
 	V.current_discard = G.discard[R] ?? []
@@ -1928,6 +1940,10 @@ P.setup_hand = { //TODO: clarification on whether discards are public, shuffle d
 		set_delete(G.active, R)
 
 		if (G.active.length === 0) { //Scenario 5 special rule
+			for (let who = RUSSIA; who <= FRANCE; ++who)
+				if (L.discarded_cards[who].length > 0)
+					log(`${ROLES[who]} discarded ${L.discarded_cards[who].length} cards.`)
+
 			if (L.scenario === BATTLE_OF_SMOLENSK_CAMPAIGN_START) {
 				if (set_has(get_discard(RUSSIA), HOLY_MOTHER_RUSSIA_RU)) {
 					set_delete(get_discard(RUSSIA), HOLY_MOTHER_RUSSIA_RU)
@@ -1971,8 +1987,14 @@ function log_start_of_turn(turn) {
 
 	if (turn === JUNE_5) {
 		log_h4("French Logistic Preparations")
-		log_italic(`France receives a free Forced March and Place Depot order in the first turn. This Place Depot order may be placed in S${S_KOVNO}.`)
+		log_italic(`France receives a free Forced March and Place Depot order. As an exception to the rules, this Place Depot order may be placed in S${S_KOVNO}.`)
 		log()
+	}
+
+	if (turn === OCT_R || (G.start_turn >= OCT_R)) {
+		log_h4("Winter")
+		log_italic(`Initiative is shifted 1 in Russia's favor during each subsequent Resources Step.`)
+		log_italic(`The Winter Weather Die is used in the Attrition Step.`)
 	}
 }
 
@@ -3141,7 +3163,9 @@ function can_switch_order(leader, current_type) {
 P.change_orders = {
 	_begin() {
 		//L.current_order_type
-		log_h3("Change Orders", NONE)
+		//Defend doesn't have its own phase, so it might be unclear
+		if (L.current_order_type !== DEFEND) log_h3("Change Orders", NONE)
+		else log_h3("Change Orders – Defend", NONE)
 		log()
 
 		G.active = [RUSSIA, FRANCE]
@@ -4714,40 +4738,40 @@ function find_closest_depot_for_retreat(who, area) {
 *		#12	Outflanking				Attacking with a leader across > 1 connection			- FR designate one connection as the main attack. The FR combat value is reduced by the total combat value across all other connections
 		#22 City Ablaze!			When FR gain control of a Key City
 		#23	Stubborn Rearguard		Immediately after losing a battle						- Cancel any losses from pursuit in the battle
-		#28	Poor Coordination		No restriction											- FR combat value -3 for each Track connection used
+*		#28	Poor Coordination		No restriction											- FR combat value -3 for each Track connection used
 		#31 Stoic Infantry			If defending, at least 1 Infantry						- First two SPs exhausted in this battle immediately rally again
 *		#32 The Artillery Corps		If a RU leader is present								- FR losses +1, +1 more if France play 'Infantry Squares'
 		#33	Fortifications			If defending with a leader								- Place a 'Defend' order, or double the effect of an existing one. Cancels 'Outflanking'.
 *		#34	Platov's Cossacks		If Platov is present									- Cossacks fight at X1. French combat value -= num cossacks
 *		#35	Fickle Habsburgs		If Schwarzenberg is present								- Losses on both sides -1, RU wins even if tied
-		#36	Infantry Squares		If at least 4 RU Infantry SPs are present				- Combat value of all French Cavalry is X0, first loss must be cavalry if present
-		#37	Enveloping Moves		If attacking with a leader								- If RU > FR fresh sps, drawn battle is considered Russian victory
+*		#36	Infantry Squares		If at least 4 RU Infantry SPs are present				- Combat value of all French Cavalry is X0, first loss must be cavalry if present
+*		#37	Enveloping Moves		If attacking with a leader								- If RU > FR fresh sps, drawn battle is considered Russian victory
 -		#38	Konstantine's Corps		If a RU leader is present								- Up to 3 Infantry SPs fight at X2, draw additional card if battle won
 -		#39	Cavalry Charge			If a RU leader is present								- Combat value of up to 2 RU Cavalry is doubled. draw additional card if battle won
 		#40 Delayed Forces			If defending											- FR designates one connection used to enter battle, the combat value of FR forces entering across all other connections is X0. Cancels 'Outflanking'
 *		#41	Fierce Fighting			If defending with a leader								- Increase both sides' losses by 2, and no prusuit
-		#47	Treacherous Allies																- If RU are within two areas of Vilna, eliminate all Prussian and Austrian Sps in this battle + Schwarzenberg
--		#50	Crumbling Cohesion		If attacking											- Shift Initiative 1 in Russia's favor. Cossacks X(RU Initiative) instead of X0.
-		#51	Unreliable Germans		If RU has the initiative								- All Austrian and Prussian SPs X0, French Infantry and Cavalry X0,5
-		#53	Aggressive Cossacks		If RU has the initiative								- Combat value of Cossacks X2 instead of X0
+*		#47	Treacherous Allies																- If RU are within two areas of Vilna, eliminate all Prussian and Austrian Sps in this battle + Schwarzenberg
+*		#50	Crumbling Cohesion		If attacking											- Shift Initiative 1 in Russia's favor. Cossacks X(RU Initiative) instead of X0.
+*		#51	Unreliable Germans		If RU has the initiative								- All Austrian and Prussian SPs X0, French Infantry and Cavalry X0,5
+*		#53	Aggressive Cossacks		If RU has the initiative								- Combat value of Cossacks X2 instead of X0
 
 	FRANCE
-		#1 	Hard Marching																	- Forced March FR SPs fight X1 instead of X0,5
-		#2 	Hard Marching																	- Forced March FR SPs fight X1 instead of X0,5
+*		#1 	Hard Marching																	- Forced March FR SPs fight X1 instead of X0,5
+*		#2 	Hard Marching																	- Forced March FR SPs fight X1 instead of X0,5
 *		#6 	Outflanking				If attacking from more than one direction				- RU designate one connection as main attack. The RU combat value is reduced by the total combat value across all other connections
-		#7	Unsuccessful Diseng.															- Both sides losses -1
-		#11	Grand Battery			If Napoleon is present									- RU losses +1 if defending, +2 if attacking. If RU played Infantry Squares losses +1 more.
-		#12	Cavalry Charge			If Murat is present										- Up to two FR Cavalry SPs fight at X3
-		#13	Murat's Cavalry			If Murat is present										- Up to two FR Cavalry SPs are doubled, but 1 is exhausted. If Fr win the battle, the remaining fresh Cavalry count X2 for pursuit.
+*		#7	Unsuccessful Diseng.															- Both sides losses -1
+*		#11	Grand Battery			If Napoleon is present									- RU losses +1 if defending, +2 if attacking. If RU played Infantry Squares losses +1 more.
+*		#12	Cavalry Charge			If Murat is present										- Up to two FR Cavalry SPs fight at X3
+*		#13	Murat's Cavalry			If Murat is present										- Up to two FR Cavalry SPs are doubled, but 1 is exhausted. If Fr win the battle, the remaining fresh Cavalry count X2 for pursuit.
 		#14	Skillful Maneuvers		If attacking with a leader && across >1 connection		- When Battle cards are revealed, France may choose to either cancel the effect of a river or a 'defend' order.
-		#16	Infantry Squares		If at least 2 FR infantry/Imperial Guard				- combat value of all RU Cavalry SPs is X0, and first loss must be cavalry
+*		#16	Infantry Squares		If at least 2 FR infantry/Imperial Guard				- combat value of all RU Cavalry SPs is X0, and first loss must be cavalry
 *		#18	Outflanking				If attacking with a Leader and across >1 connection		- same as #6
 		#21	Confusing Orders		If Kutuzov is present									- cancel the effect of up to 2 of the player RU battle cards
-		#23	Poor Coordination		If RU forces entered the battle from >1 connection		- Reduce the total RU combat value by 2 for each connection used by RU to enter the battle
-		#26	Combined Arms			If a FR leader is present								- X2 the combat value of up to 1 Cav. and 3 Inf. Cancels RU Infantry Squares.
-		#27	Confusions & Delays		If defending											- Reduce FR losses by 2, RU by 1. France must retreat after battle, which is considered tied.
-		#28	Saint-Cyr's VI Corps	If defending											- Place a 'Defend' order in the area and double the combat value of 2 FR Infantry SPs.
-		#29	Eble's Pontoneers		If a FR leader is present								- Ignore the penalties of attacking across a river
+*		#23	Poor Coordination		If RU forces entered the battle from >1 connection		- Reduce the total RU combat value by 2 for each connection used by RU to enter the battle
+*		#26	Combined Arms			If a FR leader is present								- X2 the combat value of up to 1 Cav. and 3 Inf. Cancels RU Infantry Squares.
+*		#27	Confusions & Delays		If defending											- Reduce FR losses by 2, RU by 1. France must retreat after battle, which is considered tied.
+-		#28	Saint-Cyr's VI Corps	If defending											- Place a 'Defend' order in the area and double the combat value of 2 FR Infantry SPs.
+*		#29	Eble's Pontoneers		If a FR leader is present								- Ignore the penalties of attacking across a river
 		#30	Stubborn Rearguard		After losing											- Cancel any losses from pursuit in this battle
 		#31	The Imperial Guard		If Napoleon is present.									- The combat value of all Imperial Guard are X3 instead of X1,5. If RU win, FR must discard a random card and Russia +2VP.
 		#32	Delayed Forces			If RU forces entered the battle from >1 connection		- All RU Sps across 1 connection fight at X0. Cancels 'Outflanking'.
@@ -4920,7 +4944,22 @@ function is_battle_event_active(area, event) {
 }
 
 function is_battle_event_currently_active(event) {
-	return is_battle_event_active(G.current_battle, event)
+	if (!is_battle_event_active(G.current_battle, event))
+		return false
+
+	switch(event) {
+	case IDLE_RESERVES:
+		return !is_battle_event_currently_active(THE_IMPERIAL_GUARD)
+	case OUTFLANKING_RU:
+		return !is_battle_event_currently_active(DELAYED_FORCES_FR) && !is_battle_event_currently_active(THE_OLD_GUARD)
+	case INFANTRY_SQUARES_RU: 
+		return !is_battle_event_currently_active(COMBINED_ARMS)
+	case OUTFLANKING_FR_1:
+	case OUTFLANKING_FR_2:
+		return !is_battle_event_currently_active(POOR_COORDINATION_RU) && !is_battle_event_currently_active(FORTIFICATIONS) && !is_battle_event_currently_active(DELAYED_FORCES_RU)
+	}
+
+	return true
 }
 
 function count_num_attacker_connections(area) {
@@ -5029,7 +5068,7 @@ function is_fresh_cavalry(troop_type) {
 
 P.battle = (`
 	log "@Battles"
-	call change_orders { order_type: DEFEND }
+	call change_orders { current_order_type: DEFEND }
 	call resolve_battles
 `)
 
@@ -5182,8 +5221,7 @@ function get_num_battle_events_could_by_played(who, area) {
 
 P.play_battle_events = script(`
 	log "$Play Battle Events"
-	eval { G.hand[RUSSIA].push(POOR_COORDINATION_RU) }
-	eval { G.hand[FRANCE].push(OUTFLANKING_FR_2) }
+	eval { G.hand[FRANCE].push(SKILLFULL_MANEUVERS) }
 	set G.played_cards [[], []]
 	set G.active L.attacker
 	call commit_battle_events { area: L.area }
@@ -5328,17 +5366,22 @@ P.do_combat_value_calculations = function() {
 		combat_value[defender.who] += find_combat_value(defender.who, defender.forces[entry], G.current_battle)
 	}
 
+	// RU #28: Poor Coordination
 	if (is_battle_event_currently_active(POOR_COORDINATION_RU)) {
 		combat_value[FRANCE] -= 3 * count_num_track_connections_used_to_enter_battle(FRANCE, G.current_battle)
 		log(`Poor Coordination: France -${3 * count_num_track_connections_used_to_enter_battle(FRANCE, G.current_battle)}`)
 	}
+
+	// FR #23: Poor Coordination
+	if (is_battle_event_currently_active(POOR_COORDINATION_FR)) {
+		combat_value[RUSSIA] -= 2 * count_num_connections_used_to_enter_battle(RUSSIA, G.current_battle)
+		log(`Poor Coordination: Russia -${2 * count_num_connections_used_to_enter_battle(RUSSIA, G.current_battle)}`)
+	}
 	
 	// RU #12, FR #6, FR #17: Outflanking
 	if (attacker.who === FRANCE && is_outflanking_currently_active(FRANCE)) {
-		if (!is_battle_event_currently_active(POOR_COORDINATION_RU)) {
-			combat_value[RUSSIA] -= calculate_outflanking_strength(G.current_battle)
-			log(`Outflanking: -${calculate_outflanking_strength(G.current_battle)}`)
-		}
+		combat_value[RUSSIA] -= calculate_outflanking_strength(G.current_battle)
+		log(`Outflanking: -${calculate_outflanking_strength(G.current_battle)}`)
 	} else if (attacker.who === RUSSIA && is_outflanking_currently_active(RUSSIA)) {
 		combat_value[FRANCE] -= calculate_outflanking_strength(G.current_battle)
 		log(`Outflanking: -${calculate_outflanking_strength(G.current_battle)}`)
@@ -5373,16 +5416,43 @@ function get_infantry_strength(who, battle_data, area) {
 	let did_force_march = (battle_data.move_type === FORCED_MARCH)
 	let did_cross_river = battle_data.river_crossing
 
-	let strength = battle_data.troops[FRESH_INFANTRY] + battle_data.troops[FRESH_PRUSSIAN_INFANTRY] + battle_data.troops[FRESH_AUSTRIAN_INFANTRY]
+	let strength = 0
 
-	// RU #38: Konstantine's Corps: Up to 3 RU Infantry SPs fight at X2
+	// Russia only has their own infantry
+	if (who === RUSSIA) {
+		strength = battle_data.troops[FRESH_INFANTRY]
+	} else {
+		// RU #51: Unreliable Germans - French Infantry fights X0.5, Allied Infantry fights X0
+		if (is_battle_event_currently_active(UNRELIABLE_GERMANS)) {
+			strength = 0.5 * battle_data.troops[FRESH_INFANTRY]
+		} else {
+			strength = battle_data.troops[FRESH_INFANTRY] + battle_data.troops[FRESH_PRUSSIAN_INFANTRY] + battle_data.troops[FRESH_AUSTRIAN_INFANTRY]
+		}
+	}
+
+	if (who === FRANCE)
+		strength += battle_data.troops[FRESH_PRUSSIAN_INFANTRY] + battle_data.troops[FRESH_AUSTRIAN_INFANTRY]
+	
+
+	// RU #38 Konstantine's Corps: Up to 3 RU Infantry SPs fight at X2
 	if ((who === RUSSIA) && is_battle_event_currently_active(KONSTANTINES_CORPS)) {
 		strength += Math.max(3, battle_data.troops[FRESH_INFANTRY])
 	}
 
-	if (did_force_march) {
+	// FR #26 Combined Arms: Up to 3 French Infantry SPs fight at X2
+	//TO CHECK: Do Austrians and Prussians count as 'French' for this event?
+	if ((who === FRANCE) && is_battle_event_currently_active(COMBINED_ARMS)) {
+		strength += Math.max(3, battle_data.troops[FRESH_INFANTRY])
+	}
+
+	// FR #28 Saint–Cyr's VI Corps: Up to 2 French Infantry SPs fight at X2
+	if ((who === FRANCE) && is_battle_event_currently_active(SAINT_CYRS_VI_CORPS)) {
+		strength += Math.max(2, battle_data.troops[FRESH_INFANTRY])
+	}
+
+	if (did_force_march && ((who !== FRANCE) || (!is_event_active(HARD_MARCHING_1) && !is_event_active(HARD_MARCHING_2))))
 		strength *= 0.5
-	} if (did_cross_river) {
+	if (did_cross_river && !((who === FRANCE) && (is_battle_event_currently_active(EBLES_PONTONEERS)))) {
 		strength *= 0.5
 	}
 
@@ -5398,14 +5468,36 @@ function get_cavalry_strength(who, battle_data, area) {
 	let modifier = is_fortress_town(area) ? 0.5 : 1
 	let strength = count_num_cavalry(who, area) * modifier
 
+	// RU #39 Cavalry Charge: Up to 2 Russian Cavalry SPs fight at X2
 	if (who === RUSSIA && is_battle_event_currently_active(CAVALRY_CHARGE_RU)) {
-		strength += Math.max(2, count_num_cavalry(who, area)) * modifier
+		strength += Math.min(2, count_num_cavalry(who, area)) * modifier
+	}
+
+	// RU #51 Unreliable Germans: French Cavalry fight at X0,5
+	if (who === FRANCE && is_battle_event_currently_active(UNRELIABLE_GERMANS)) {
+		strength *= 0.5
+	}
+	
+	// FR #12 Cavalry Charge: Up to 2 Russian Cavalry SPs fight at X3
+	if (who === FRANCE && is_battle_event_currently_active(CAVALRY_CHARGE_FR)) {
+		strength += Math.min(2, count_num_cavalry(who, area)) * modifier
+		strength += Math.min(2, count_num_cavalry(who, area)) * modifier
+	}
+
+	// FR #13 Murat's Cavalry: Up to 2 French Cavalry SPs fight at X2
+	if (who === FRANCE && is_battle_event_currently_active(MURATS_CAVALRY)) {
+		strength += Math.min(2, count_num_cavalry(who, area)) * modifier
+	}
+
+	// FR #26 Combined Arms: Up to 1 French Cavalry SP fights at X2
+	if ((who === FRANCE) && is_battle_event_currently_active(COMBINED_ARMS)) {
+		strength += Math.max(1, battle_data.troops[FRESH_CAVALRY]) * modifier
 	}
 
 	//Basic modifiers
-	if (did_force_march) {
+	if (did_force_march && ((who !== FRANCE) || (!is_event_active(HARD_MARCHING_1) && !is_event_active(HARD_MARCHING_2))))
 		strength *= 0.5
-	} if (did_cross_river) {
+	if (did_cross_river && !((who === FRANCE) && (is_battle_event_currently_active(EBLES_PONTONEERS)))) {
 		strength *= 0.5
 	}
 
@@ -5433,9 +5525,13 @@ function get_cossack_strength(who, battle_data, area) {
 		if (get_who_has_initiative() === RUSSIA)
 			strength += count_num_cossack(area) * get_current_initiative_level()
 
-	if (did_force_march)
+	// RU #53 Aggressive Cossacks
+	if (is_battle_event_currently_active(AGGRESSIVE_COSSACKS))
+		strength = battle_data.troops[FRESH_COSSACK] * 2
+
+	if (did_force_march && ((who !== FRANCE) || (!is_event_active(HARD_MARCHING_1) && !is_event_active(HARD_MARCHING_2))))
 		strength *= 0.5
-	if (did_cross_river)
+	if (did_cross_river && !((who === FRANCE) && (is_battle_event_currently_active(EBLES_PONTONEERS))))
 		strength *= 0.5
 
 	log(`<Total Cossack: ${strength}`)
@@ -5450,18 +5546,16 @@ function get_guard_strength(who, battle_data, area) {
 	let strength = 1.5 * battle_data.troops[FRESH_GUARD]
 
 	//Common modifiers: Forced March/River crossing
-	if (did_force_march)
+	if (did_force_march && ((who !== FRANCE) || (!is_event_active(HARD_MARCHING_1) && !is_event_active(HARD_MARCHING_2))))
 		strength *= 0.5
-	if (did_cross_river)
+	if (did_cross_river && !((who === FRANCE) && (is_battle_event_currently_active(EBLES_PONTONEERS))))
 		strength *= 0.5
 
 	//Events
 
 	//RU #5 Idle Reserves
 	if (is_battle_event_currently_active(IDLE_RESERVES))
-		//No effect if FR #31 'The Imperial Guard' is also active
-		if (!is_battle_event_currently_active(THE_IMPERIAL_GUARD))
-			strength = 0
+		strength = 0
 
 	log(`<Total Guard: ${strength}`)
 	return strength
@@ -5545,11 +5639,11 @@ P.determine_losses = function() {
 		++L.losses[L.attacker]
 	
 	if (battle_has_defend_order(G.current_battle))
-		L.losses[L.defender] = Math.max(0, --L.losses[L.defender])
+		L.losses[L.defender] = Math.max(0, L.losses[L.defender] - 1)
 
 	//Riga: special rule
 	if (G.current_battle === S_RIGA && (is_battle_defender(RUSSIA, G.current_battle))) //Fortress Riga special rule
-		L.losses[L.defender] = Math.max(0, --L.losses[L.defender])
+		L.losses[L.defender] = Math.max(0, L.losses[L.defender] - 1)
 
 	//Events:
 	// RU #8: Fighting Withdrawal
@@ -5571,14 +5665,37 @@ P.determine_losses = function() {
 
 	// RU #35 Fickle Habsburgs
 	if (is_battle_event_currently_active(FICKLE_HABSBURGS)) {
-		L.losses[RUSSIA] = Math.max(0, --L.losses[RUSSIA])
-		L.losses[FRANCE] = Math.max(0, --L.losses[FRANCE])
+		L.losses[RUSSIA] = Math.max(0, L.losses[RUSSIA] - 1)
+		L.losses[FRANCE] = Math.max(0, L.losses[FRANCE] - 1)
 	}
 
 	// RU #41 Fierce Fighting
 	if (is_battle_event_currently_active(FICKLE_HABSBURGS)) {
 		L.losses[RUSSIA] += 2
 		L.losses[FRANCE] += 2
+	}
+
+	// FR #7 Unsuccessful Disengagement
+	if (is_event_active(UNSUCCESSFUL_DISENGAGEMENT) && (get_event_keyword(UNSUCCESSFUL_DISENGAGEMENT, "area") === G.current_battle)) {
+		L.losses[RUSSIA] = Math.max(0, L.losses[RUSSIA] - 1)
+		L.losses[FRANCE] = Math.max(0, L.losses[FRANCE] - 1)
+	}
+
+	// FR #11 Grand Battery
+	if (is_battle_event_currently_active(GRAND_BATTERY)) {
+		if (is_battle_defender(FRANCE))
+			++L.losses[RUSSIA]
+		else
+			L.losses[RUSSIA] += 2
+
+		if (is_battle_event_currently_active(INFANTRY_SQUARES_RU))
+			++L.losses[RUSSIA]
+	}
+
+	// FR #27 Confusions and Delays
+	if (is_battle_event_currently_active(CONFUSIONS_AND_DELAYS)) {
+		L.losses[RUSSIA] = Math.max(0, L.losses[RUSSIA] - 1)
+		L.losses[FRANCE] = Math.max(0, L.losses[FRANCE] - 2)
 	}
 
 	log()
@@ -5655,7 +5772,7 @@ function count_num_sps_of_type(who, type, area) {
 
 //TODO: Response trigger for "Stubborn Rearguard" if Russia loses
 //TODO: Stoic Infantry: Immediately rally first two exhausted RU SPs
-//TODO: Infantry Squares (RU): First French loss must be Cavalry, if possible
+//TODO: Infantry Squares (RU & FR): First French loss must be Cavalry, if possible
 P.assign_losses = {
 	_begin() {
 		//L.losses, L.attacker, L.defender
@@ -5737,17 +5854,36 @@ P.assign_losses = {
 
 P.determine_battle_winner = function() {
 	//console.log(get_battle_entry(G.current_battle, null))
+
 	//End battle if one side has no more SPs
 	if (!has_friendly_troop(RUSSIA, G.current_battle) || !has_friendly_troop(FRANCE, G.current_battle)) {
 		let winner = !has_friendly_troop(RUSSIA, G.current_battle) ? FRANCE : RUSSIA
 		goto("end_battle", { drawn_battle: false, winner, loser: enemy(winner) })
 	} 
 
+	// RU #8 Fighting Withdrawal: France wins
 	else if (is_battle_event_currently_active(FIGHTING_WITHDRAWAL)) {
 		log(`${get_card_log_alias(FIGHTING_WITHDRAWAL)}: France won.`)
 		log()
 		goto("end_battle", { drawn_battle: false, winner: FRANCE, loser: RUSSIA})
 	}
+
+	// RU #37: Enveloping Moves: If Russia has more SPs, the battle is considered a draw that is won by Russia.
+	else if (is_battle_event_currently_active(ENVELOPING_MOVES) && (count_num_fresh_sps(RUSSIA, G.current_battle) > count_num_fresh_sps(FRANCE, G.current_battle))) {
+		log_h4("Tied Battle")
+		log(`${get_card_log_alias(ENVELOPING_MOVES)}: Russia won.`)
+		log()
+		goto("end_battle", { drawn_battle: true, winner: RUSSIA, loser: FRANCE})
+	}
+
+	// FR #27 Confusions and Delays: Regardless of losses, the French must retreat from battle, which is automatically considered tied
+	else if (is_battle_event_currently_active(CONFUSIONS_AND_DELAYS)) {
+		log_h4("Tied Battle")
+		log(`${get_card_log_alias(CONFUSIONS_AND_DELAYS)}: France lost.`)
+		log()
+		goto("end_battle", { drawn_battle: true, winner: RUSSIA, loser: FRANCE})
+	}
+
 	//Determine whether events influence a victory, or tie
 	else if (L.count[RUSSIA] === L.count[FRANCE]) {
 		log_h4("Tied Battle")
@@ -5757,12 +5893,6 @@ P.determine_battle_winner = function() {
 			log()
 			goto("end_battle", { drawn_battle: false, winner: RUSSIA, loser: FRANCE})
 		} 
-		// RU #37: Enveloping Moves: Russia wins a tie if they have more SPs.
-		else if (is_battle_event_currently_active(ENVELOPING_MOVES) && (count_num_fresh_sps(RUSSIA, G.current_battle) > count_num_fresh_sps(FRANCE, G.current_battle))) {
-			log(`${get_card_log_alias(ENVELOPING_MOVES)}: Russia won.`)
-			log()
-			goto("end_battle", { drawn_battle: false, winner: RUSSIA, loser: FRANCE})
-		}
 		else {
 			let winner
 			if (is_fortress_town(G.current_battle) || did_all_attacking_forces_cross_bridges(G.current_battle)) {
@@ -5806,10 +5936,17 @@ function get_battle_winner(count) {
 }
 
 function count_pursuit_cavalry(who, area) {
-	if (who === RUSSIA)
-		return count_num_cavalry(who, area) + (2 * count_num_cossack(area))
-	else
-		return count_num_cavalry(who, area)
+	let count = 0
+	if (who === RUSSIA) { 
+		count = count_num_cavalry(who, area) + (2 * count_num_cossack(area))
+	} else {
+		// FR #13 Murat's Cavalry: French Cavalry count X2 for pursuit
+		if (is_battle_event_currently_active(MURATS_CAVALRY))
+			count = 2 * count_num_cavalry(who, area)
+		else
+			count = count_num_cavalry(who, area)
+	}
+	return count
 }
 
 P.pursuit = {
@@ -5847,6 +5984,7 @@ P.pursuit = {
 				goto("assign_pursuit_losses", { loser: enemy(L.winner), difference })
 			} else {
 				log(`Pursuit inconclusive!`)
+				log()
 				goto("end_battle", { winner: L.winner, loser: enemy(L.winner), drawn_battle: false })
 			}
 		}
@@ -6720,8 +6858,6 @@ function check_lines_of_communication(who) {
 
 */
 
-var E = {}
-
 /*
 	G.persistent events is a plain 1D array 'map' of alternating key, value pairs (see framework).
 	key - event card id
@@ -6763,6 +6899,10 @@ function add_event_keyword(evt, keywords) {
 	if (evt_data !== null) {
 		evt_data = Object.assign(evt_data, keywords)
 	}
+}
+
+function get_event_keyword(evt, keyword, fallback = null) {
+	return map_get(G.persistent_events, evt, fallback)?.keyword ?? null
 }
 
 function prompt_event_confirmation(evt, info) {
@@ -7091,7 +7231,7 @@ P.may_play_bagrations_retreat = {
 	}
 }
 
-P.bagrations_retreat - { //TODO
+P.bagrations_retreat = { //TODO
 	_begin() {
 		end()
 	}
@@ -8024,10 +8164,18 @@ P.the_artillery_corps = {
 		else
 			prompt_card(THE_ARTILLERY_CORPS, `French losses are increased by 1.`)
 		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		if (is_battle_event_currently_active(INFANTRY_SQUARES_FR))
+			log(`French losses +2. (${get_card_log_alias(INFANTRY_SQUARES_FR)})`)
+		else
+			log(`French losses +1.`)
+		end()
 	}
 }
 
-// RU #33: Fortifications
+// RU #33: Fortifications TODO
 E.fortifications = {
 	could_play() {
 		return is_battle_defender(RUSSIA, G.current_battle) && has_leader_in_battle(RUSSIA, G.current_battle)
@@ -8041,10 +8189,36 @@ E.platovs_cossacks = {
 	}
 }
 
+P.platovs_cossacks = {
+	prompt() {
+		prompt_card(PLATOVS_COSSACKS, `Cossack SPs fight at X1, and the French combat value is decreased by the number of fresh Cossacks present.`)
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log("Cossack SPs fight at X1.")
+		log("French combat value is decreased by the number of fresh Cossack SPs present.")
+		end()
+	}
+}
+
 // RU #35: Fickle Habsburgs
 E.fickle_habsburgs = {
 	could_play() {
 		return is_leader_in_battle(SCHWARZENBERG, G.current_battle)
+	}
+}
+
+P.fickle_habsburgs = {
+	prompt() {
+		prompt_card(FICKLE_HABSBURGS, "Losses on both sides are reduced by 1, and Russia wins a tied battle.")
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log("Both sides' losses -1.")
+		log("Russia wins if the battle is tied.")
+		end()
 	}
 }
 
@@ -8055,10 +8229,35 @@ E.infantry_squares_ru = {
 	}
 }
 
+P.infantry_squares_ru = {
+	prompt() {
+		prompt_card(INFANTRY_SQUARES_RU, "French Cavalry SPs fight at X0, and the first French loss in this battle must be a Cavalry SP, if possible.")
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log("French Cavalry SPs fight at X0.")
+		log("The first French losses this battle must be a Cavalry SP, if possible.")
+		end()
+	}
+}
+
 // RU #37: Enveloping Moves
 E.enveloping_moves = {
 	could_play() {
 		return is_battle_attacker(RUSSIA, G.current_battle) && has_leader_in_battle(RUSSIA, G.current_battle)
+	}
+}
+
+P.enveloping_moves = {
+	prompt() {
+		prompt_card(ENVELOPING_MOVES, "If more Russian than French fresh SPs are present after battle, the battle is considered a draw that is won by Russia.")
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log("If more Russian than French fresh SPs are present after battle, the battle is considered a draw that is won by Russia.")
+		end()
 	}
 }
 
@@ -8069,6 +8268,19 @@ E.konstantines_corps = {
 	}
 }
 
+P.konstantines_corps = {
+	prompt() {
+		prompt_card(KONSTANTINES_CORPS, "Up to 3 Russian Infantry SPs fight at X2, and draw an additional card to your hand at the end of the battle if you win.")
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log("Up to 3 Russian Infantry SPs fight at X2.")
+		log("Russia draws an additional card to their hand if they win the battle.")
+		end()
+	}
+}
+
 // RU #39: Cavalry Charge
 E.cavalry_charge_ru = {
 	could_play() {
@@ -8076,7 +8288,20 @@ E.cavalry_charge_ru = {
 	}
 }
 
-// RU #40: Delayed Forces
+P.cavalry_charge = {
+	prompt() {
+		prompt_card(CAVALRY_CHARGE_RU, "Up to 2 Russian Cavalry SPs fight at X2, and draw an additional card to your hand at the end of the battle if you win.")
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log("Up to 2 Russian Cavalry SPs fight at X2.")
+		log("Russia draws an additional card to their hand if they win the battle.")
+		end()
+	}
+}
+
+// RU #40: Delayed Forces: TODO
 E.delayed_forces_ru = {
 	could_play() {
 		return is_battle_defender(RUSSIA, G.current_battle)
@@ -8087,6 +8312,19 @@ E.delayed_forces_ru = {
 E.fierce_fighting_ru = {
 	could_play() {
 		return is_battle_defender(RUSSIA, G.current_battle) && has_leader_in_battle(RUSSIA, G.current_battle)
+	}
+}
+
+P.fierce_fighting_ru = {
+	prompt() {
+		prompt_card(FIERCE_FIGHTING_RU, `Increase both sides' losses by 2, and there is no pursuit after battle.`)
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log("Both sides' losses +2.")
+		log("No pursuit after battle.")
+		end()
 	}
 }
 
@@ -8167,6 +8405,84 @@ E.devastated_countryside = {
 	confirm_log() {
 		log("The effect of Devastation markers is doubled for both sides this turn.")
 	}
+}
+
+// RU #47: Treacherous Allies
+function is_russia_within_two_areas_of_vilna() {
+	let area_exists = false
+	map_for_each(G.troops, (area, entries) => {
+		if (has_russian_sp(area) && (find_path_distance(area, S_VILNA) <= 2))
+			area_exists = true
+	})
+	return area_exists
+}
+
+P.treacherous_allies = {
+	_begin() {
+		L.step = -1
+	},
+	prompt() {
+		if (is_russia_within_two_areas_of_vilna()) {
+			if (L.step === -1) {
+				prompt_card(TREACHEROUS_ALLIES, `Confirm: France must remove Schwarzenberg and all Prussian and Austrian SPs at S${G.current_battle}.`)
+				button_confirm()
+			} else if (L.step === 0) {
+				let allied_nationalities_at_area = []
+				if (has_prussian_sp(G.current_battle)) set_add(allied_nationalities_at_area, "Prussian")
+				if (has_austrian_sp(G.current_battle)) set_add(allied_nationalities_at_area, "Austrian")
+				
+				let allies_string = allied_nationalities_at_area.length > 0 ? join_array_with_and(allied_nationalities_at_area) : "0 SPs."
+				
+				if (get_leader_location(SCHWARZENBERG) === G.current_battle)
+					prompt_card(TREACHEROUS_ALLIES, `Eliminate L${SCHWARZENBERG} and all ${allies_string} SPs.`)
+				button("eliminate")
+			} else {
+				prompt_card(TREACHEROUS_ALLIES, "All done.")
+				button_done()
+			}
+		} else {
+			prompt_card(TREACHEROUS_ALLIES, "No effect.")
+			button_confirm()
+		}
+	},
+	confirm() {
+		push_undo()
+		if (is_russia_within_two_areas_of_vilna()) {
+			G.active = FRANCE
+			++L.step
+		} else {
+			log("No effect.")
+			end()
+		}
+	},
+	eliminate() {
+		push_undo()
+		log("Eliminated")
+		if (get_leader_location(SCHWARZENBERG) === G.current_battle) {
+			logi(`L${SCHWARZENBERG}`)
+			eliminate_leader(SCHWARZENBERG)
+		}
+
+		for (let type of get_troop_types_at_area(FRANCE, G.current_battle)) {
+			if (type >= FRESH_PRUSSIAN_INFANTRY) {
+				let count = count_num_sps_of_type(FRANCE, type, G.current_battle)
+				logi(`${count} ${get_troop_type_name(type)}`)
+				eliminate_troop(FRANCE, G.current_battle, type, count)
+			}
+		}
+
+		//TODO: Remove these guys from the battle
+
+		++L.step
+	},
+	done() {
+		end()
+	}
+}
+
+function eliminate_leader(leader) {
+	move_leader(leader, OUT_OF_PLAY)
+	increase_vp(enemy(get_leader_faction(leader)), get_leader_vp(leader))
 }
 
 function get_order_location(order) {
@@ -8264,11 +8580,60 @@ E.crumbling_cohesion = {
 	}
 }
 
+P.crumbling_cohesion = {
+	_begin() {
+		L.step = -1
+	},
+	prompt() {
+		if (L.step === -1) {
+			if (get_who_has_initiative() === RUSSIA && get_current_initiative_level() === 4) {
+				prompt_card(CRUMBLING_COHESION, `Cannot increase Initiative further.`)
+				button_next()
+			} else {
+				prompt_card(CRUMBLING_COHESION, "Shift Initiative 1 in favor of Russia.")
+				action_initiative_marker()
+			}
+		} else {
+			prompt_card(CRUMBLING_COHESION, `Cossack SPs fight at X${get_who_has_initiative() === RUSSIA ? get_current_initiative_level() : 0} instead of X0.`)
+			button_confirm()
+		}
+	},
+	next() {
+		push_undo()
+		log("Cannot shift Initiative further.")
+		++L.step
+	},
+	initiative() {
+		push_undo()
+		shift_initiative(RUSSIA)
+		++L.step
+	},
+	confirm() {
+		push_undo()
+		log( `Cossack SPs fight at X${get_who_has_initiative() === RUSSIA ? get_current_initiative_level() : 0}.`)
+		end()
+	}
+}
+
 // RU #51: Unreliable Germans
 E.unreliable_germans = {
 	could_play() {
 		return get_who_has_initiative() === RUSSIA
 	}
+}
+
+P.unreliable_germans = {
+	prompt() {
+		prompt_card(UNRELIABLE_GERMANS, `All Austrian and Prussian SPs fight with X0 combat value, while French Infantry and Cavalry fight with X0,5 combat value.`)
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log("Austrian and Prussian SPs fight at X0.")
+		log("French Infantry and Cavalry fight at X0,5.")
+		end()
+	}
+	
 }
 
 // RU #52: Barclay de Tolly Resigns
@@ -8297,6 +8662,18 @@ E.barclay_de_tolly_resigns = {
 E.aggressive_cossacks = {
 	could_play() {
 		return get_who_has_initiative() === RUSSIA
+	}
+}
+
+P.aggressive_cossacks = {
+	prompt() {
+		prompt_card(AGGRESSIVE_COSSACKS, "Cossack SPs fight at X2 instead of X0.")
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log("Cossack SPs fight at X2.")
+		end()
 	}
 }
 
@@ -8475,10 +8852,50 @@ E.grand_battery = {
 	}
 }
 
+function add_to_prompt(text) {
+	V.prompt += text
+}
+
+P.grand_battery = {
+	prompt() {
+		if (is_battle_defender(FRANCE, G.current_battle))
+			prompt_card(GRAND_BATTERY, "Russian losses +1.")
+		else
+			prompt_card(GRAND_BATTERY, "Russian losses +2.")
+
+		if (is_battle_event_currently_active(INFANTRY_SQUARES_RU))
+			add_to_prompt(` Russian losses increased by an additional 1 because Russia played ${get_card_log_alias(INFANTRY_SQUARES_RU)}.`)
+
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		if (is_battle_defender(FRANCE, G.current_battle))
+			log("Russian losses +1.")
+		else
+			log("Russian losses +2.")
+		if (is_battle_event_currently_active(INFANTRY_SQUARES_RU))
+			log(`${get_card_log_alias(INFANTRY_SQUARES_RU)}: Russian losses increased by an additional 1.`)
+		end()
+	}
+}
+
 // FR #12: Cavalry Charge
 E.cavalry_charge_fr = {
 	could_play() {
 		return is_leader_in_battle(MURAT, G.current_battle)
+	}
+}
+
+P.cavalry_charge_fr = {
+	prompt() {
+		prompt_card(CAVALRY_CHARGE_FR, "The combat value of up to 2 FR Cavalry SPs are tripled.")
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log("Up to 2 FR Cavalry SPs fight X3.")
+		end()
 	}
 }
 
@@ -8489,10 +8906,47 @@ E.murats_cavalry = {
 	}
 }
 
-// FR #14: Skillful Maneuvers
+P.murats_cavalry = {
+	_begin() { L.step = -1 },
+	prompt() {
+		if (L.step === -1) {
+			prompt_card(MURATS_CAVALRY, "The combat value of up to 2 French Cavalry SPs is doubled, but one such SP becomes exhausted after the battle.")
+			button_confirm()
+		} else {
+			prompt_card(MURATS_CAVALRY, "If France wins the battle, the remaining fresh Cavalry count X2 for pursuit.")
+			button_confirm()
+		}
+	},
+	confirm() {
+		push_undo()
+		if (L.step === -1)  {
+			log("Up to 2 French Cavalry SPs fight at X2.")
+			++L.step
+		} else {
+			log("If France wins the battle, the remaining Cavalry count X2 for pursuit.")
+			end()
+		}
+	}
+}
+
+// FR #14: Skillful Maneuvers: TODO
 E.skillfull_maneuvers = {
 	could_play() {
 		return is_battle_attacker(FRANCE, G.current_battle) && did_attacker_attack_across_multiple_connections(G.current_battle)
+	}
+}
+
+P.skillfull_maneuvers = {
+	_begin() { L.selection = null },
+	prompt() {
+		if (L.selection === null) {
+			prompt_card(SKILLFULL_MANEUVERS, "Choose an effect to play.")
+			if (get_defender_data(G.current_battle).defend_order)
+				button("remove_defend_order")
+			if (get_attacker_data(G.current_battle).forces.some(entry => entry.river_crossing === true))
+				button("cancel_river_effect")
+			button_pass()
+		}
 	}
 }
 
@@ -8563,6 +9017,19 @@ P.peace_offer = {
 E.infantry_squares_fr = {
 	could_play() {
 		return (count_num_infantry(FRANCE, G.current_battle) + count_num_guard(FRANCE, G.current_battle)) >= 2
+	}
+}
+
+P.infantry_squares_fr = {
+	prompt() {
+		prompt_card(INFANTRY_SQUARES_FR, "Russian Cavalry SPs fight at X0, and the first Russian loss in this battle must be a Cavalry SP, if possible.")
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log("Russian Cavalry SPs fight at X0.")
+		log("The first Russian loss this battle must be a Cavalry SP, if possible.")
+		end()
 	}
 }
 
@@ -8691,8 +9158,24 @@ P.poor_communications = {
 // FR #23: Poor Coordination
 E.poor_coordination_fr = {
 	could_play() {
-		return (is_battle_attacker(RUSSIA, G.current_battle) && did_attacker_attack_across_multiple_connections(G.current_battle)) ||
-			(is_battle_defender(RUSSIA, G.current_battle) && (count_num_defender_connections(G.current_battle) > 1))
+		return count_num_connections_used_to_enter_battle(RUSSIA, G.current_battle) > 1
+	}
+}
+
+function count_num_connections_used_to_enter_battle(who, battle) {
+	return is_battle_attacker(who, battle) ? count_num_attacker_connections(battle) : count_num_defender_connections(battle)
+}
+
+P.poor_coordination_fr = {
+	begin() { L.num_connections_used = count_num_connections_used_to_enter_battle(RUSSIA, G.current_battle) },
+	prompt() {
+		prompt_card(POOR_COORDINATION_FR, `Reduce the Russian combat value by ${2 * L.num_connections_used} for ${L.num_connections_used} connections used to enter battle.`)
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log(`Reduce the Russian combat value by ${2 * L.num_connections_used} for ${L.num_connections_used} connections used to enter battle.`)
+		end()
 	}
 }
 
@@ -8874,10 +9357,48 @@ E.combined_arms = {
 	}
 }
 
+P.combined_arms = {
+	_begin() { L.step = -1 },
+	prompt() {
+		if (L.step === -1)
+			prompt_card(COMBINED_ARMS, "The combat value of up to 1 Cavalry and 3 Infantry SPs is doubled.")
+		else 
+			prompt_card(COMBINED_ARMS, `Cancels the effect of ${get_card_log_alias(INFANTRY_SQUARES_RU)}.`)
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+
+		if (L.step === -1)
+			log("The combat value of up to 1 Cavalry and 3 Infantry SPs is doubled.")
+		else
+			log(`Cancels ${get_card_log_alias(INFANTRY_SQUARES_RU)}.`)
+
+		if (L.step > -1 || !is_battle_event_active(G.current_battle, INFANTRY_SQUARES_RU)) 
+			end()
+		else
+			++L.step
+	}
+}
+
 // FR #27: Confusions & Delays
 E.confusions_and_delays = {
 	could_play() {
 		return is_battle_defender(FRANCE, G.current_battle)
+	}
+}
+
+P.confusions_and_delays = {
+	prompt() {
+		prompt_card(CONFUSIONS_AND_DELAYS, "French losses -2, and Russian losses -1. The French must retreat after this battle which is considered to be tied.")
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log("France losses -2.")
+		log("Russia losses -1.")
+		log("France must retreat after this battle, which is considered tied.")
+		end()
 	}
 }
 
@@ -8888,10 +9409,56 @@ E.saint_cyrs_vi_corps = {
 	}
 }
 
+P.saint_cyrs_vi_corps = {
+	_begin() { L.has_placed_defend = false },
+	prompt() {
+		if (!L.has_placed_defend) {
+			if (has_order_of_type(FRANCE, DEFEND, POOL)) {
+				prompt_card(SAINT_CYRS_VI_CORPS, `Place a Defend order at S${G.current_battle}.`)
+				action_area(G.current_battle)
+			} else {
+				prompt_card(SAINT_CYRS_VI_CORPS, "No Defend orders in pool to place.")
+				button_next()
+			}
+		} else {
+			prompt_card(SAINT_CYRS_VI_CORPS, "The combat value of up to 2 Infantry SPs is doubled.")
+			button_confirm()
+		}
+	},
+	area(area) {
+		push_undo()
+		add_order_of_type_from_pool(FRANCE, DEFEND, area)
+		log(`Placed 'Defend' order at S${G.current_battle}.`)
+		L.has_placed_defend = true
+	},
+	next() {
+		push_undo()
+		log("No Defend order in pool to place.")
+		L.has_placed_defend = true
+	},
+	confirm() {
+		push_undo()
+		log("The combat value of up to 2 Infantry SPs is doubled.")
+		end()
+	}
+}
+
 // FR #29: Eblé's Pontoneers
 E.ebles_pontoneers = {
 	could_play() {
 		return has_leader_in_battle(FRANCE, G.current_battle)
+	}
+}
+
+P.ebles_pontoneers = {
+	prompt() {
+		prompt_card(EBLES_PONTONEERS, "No penalties for attacking across a river.")
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log("No penalties for attacking across a river.")
+		end()
 	}
 }
 

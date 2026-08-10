@@ -371,7 +371,7 @@ fs.createReadStream(names)
 				def_leader(10, FRANCE, "Eugène de Beauharnais",  3, 3, "Beauharnais",	"de Beauharnais")
 				def_leader(11, FRANCE, "Louis-Nicolas Davout",   2, 2, "Davout",		"Davout")
 				def_leader(12, FRANCE, "Joachim Murat",          1, 2, "Murat",			"Murat")
-				def_leader(13, FRANCE, "Karl von Schwarzenberg", 1, 1, "Schwarzenberg",	"von Schwarzenberg")
+				def_leader(13, FRANCE, "Karl von Schwarzenberg", 1, 1, "Schwarzenberg",	"Schwarzenberg")
 
 				//=== ORDERS ===
 				const FORCED_MARCH = 0
