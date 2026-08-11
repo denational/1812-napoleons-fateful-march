@@ -379,7 +379,7 @@ function on_init() {
 	define_layout("fr_pool_depots", 0, layout["France Pool Depots"], "square")
 	define_layout("ru_pool_leaders", 0, layout["Russia Pool Leaders"], "square")
 	define_layout("fr_pool_leaders", 0, layout["France Pool Leaders"], "square")
-	define_layout("fr_casualties", 0, layout["France Casualties"], "square")
+	define_stack("fr_casualties", 0, layout["France Casualties"], -20, -20, 0, -58, 0, 36, 1, 4, 0.5, 0.5)
 
 	/* ORDERS */
 	for (let id = first_ru_order; id <= last_fr_order; ++id) {
@@ -659,7 +659,8 @@ function update_leaders() {
 	for (let leader = 0; leader < V.leaders.length; ++leader) {
 		let location = get_leader_location(leader)
 		switch(location) {
-		case OUT_OF_PLAY: continue
+		case OUT_OF_PLAY:
+			populate((get_leader_faction(leader) === RUSSIA) ? "fr_pool_leaders" : "ru_pool_leaders", 0, "leader", leader); break
 		case POOL:
 			populate((get_leader_faction(leader) === RUSSIA) ? "ru_pool_leaders" : "fr_pool_leaders", 0, "leader", leader); break
 		case FRENCH_CASUALTIES:

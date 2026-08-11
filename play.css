@@ -127,14 +127,12 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	& .tip {
 		font-variant: small-caps;
 		font-style: normal;
-		letter-spacing: 0.2px; /* space out letters a bit more for clarity */
 	}
 
 	& .card-tip {
 		font-variant-caps: small-caps;
 		padding: 0 4px; 
 		border-radius: 2px; 
-		letter-spacing: 0.2px; /* space out letters a bit more for clarity */
 	}
 
 	& .card-tip.fr { background-color: var(--france_light) }
@@ -199,6 +197,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	z-index: 5;
 }
 
+.fr_casualties > * { position: relative;}
 /* PANELS */
 #panels {
 	margin: 20px auto;
@@ -395,8 +394,6 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	height: 20px;
 	bottom: 12px;
 	right: 12px;
-	font-family: "Cormorant Garamond", serif;
-	font-weight: bold;
 	text-align: center;
 	align-items: center;
 }
