@@ -14,6 +14,7 @@
 9. If RU doesn't have initiative, crumbling cohesion result is 0?
 10. Do battle cards 'stack'?
 11. what trumps, full elimination rout, or confusions and delays (assuming france won)
+12. how do cossack events stack
 
 
 ## Known Bugs (to fix at a later time)
