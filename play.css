@@ -140,9 +140,13 @@ body.Russia header.your_turn {background-color: var(--russia);}
 
  }
 
-#log .tip:hover, .area-tip:hover {
+.tip:hover, .card-tip:hover, .area-tip:hover {
     cursor: pointer; 
     text-decoration: underline;
+}
+
+#prompt > .card-tip {
+	font-style: italic;
 }
 
 /* DICE */

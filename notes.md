@@ -15,6 +15,9 @@
 10. Do battle cards 'stack'?
 11. what trumps, full elimination rout, or confusions and delays (assuming france won)
 12. how do cossack events stack
+13. place orders must play
+14. if event says can't execute can you still place it?
+15. discards public?
 
 
 ## Known Bugs (to fix at a later time)

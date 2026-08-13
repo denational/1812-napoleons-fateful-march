@@ -499,7 +499,7 @@ function on_update() {
 	action_button_with_argument("troop", FRESH_PRUSSIAN_INFANTRY, "Pr. Infantry")
 	action_button_with_argument("troop", EXHAUSTED_PRUSSIAN_INFANTRY, "Exh. Pr. Infantry")
 	action_button_with_argument("troop", FRESH_AUSTRIAN_INFANTRY, "Au. Infantry")
-	action_button_with_argument("troop", EXHAUSTED_AUSTRIAN_INFANTRY, "Exh. Infantry")
+	action_button_with_argument("troop", EXHAUSTED_AUSTRIAN_INFANTRY, "Exh. Au. Infantry")
 
 	action_button_with_argument("troop_2x", EXHAUSTED_INFANTRY, "2x Exh. Infantry")
 	action_button_with_argument("troop_2x", EXHAUSTED_PRUSSIAN_INFANTRY, "2x Exh. Pr. Infantry")
