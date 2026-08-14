@@ -1406,10 +1406,6 @@ function on_setup(scenario, options) {
 	case OCT: setup_oct(); break
 	}
 
-	for (let who = RUSSIA; who <= FRANCE; ++who) {
-		shuffle(G.deck[who])
-	}
-
 	G.platov_order = -1
 	//G.supply = [calculate_distance_to_nearest_depot(RU), calculate_distance_to_nearest_depot(FR)]
 
@@ -1908,108 +1904,99 @@ function setup_oct() {
 	set_devastation(S_MOSCOW, 3)
 }
 
-P.setup_hand = { //TODO: clarification on whether discards are public, shuffle deck later
+P.setup_hand = {
 	_begin() {
 		//L.scenario
 		//L.hand_size
 		log_h2("Setup Hand")
-		L.has_drawn_cards = [false, false]
 		L.discarded_cards = [[], []]
-		L.has_passed = [false, false]
+		L.has_shuffled_deck = [false, false]
+		L.drawn_card = [-1, -1]
 	},
 	prompt() {
 		let num_non_dummy_cards = [count_non_dummy_cards_in_hand(RUSSIA), count_non_dummy_cards_in_hand(FRANCE)]
 
-		if (!L.has_drawn_cards[R]) {
-			if (num_non_dummy_cards[R] > L.hand_size[R]) {
+		if (!L.has_shuffled_deck[R]) {
+			if (num_non_dummy_cards[R] > L.hand_size[R])
 				prompt(`Discard cards (${num_non_dummy_cards[R] - L.hand_size[R]} remaining).`)
-			} else if (num_non_dummy_cards[R] === L.hand_size[R]) {
-				prompt(`You may discard more cards, or pass.`)
-				button_pass()
-			} else if (num_non_dummy_cards[R] > 0) {
-				prompt(`You may discard more cards before drawing ${L.hand_size[R] - num_non_dummy_cards[R]} cards.`)
-				button_draw()
-			} else {
-				prompt(`Draw ${L.hand_size[R]} cards.`)
-				button_draw()
-			}
+			else if (num_non_dummy_cards[R] > 0)
+				prompt(`You may discard more cards before shuffling the deck, or pass.`)
+			else
+				prompt(`Shuffle the deck.`)
 
-			if (num_non_dummy_cards[R] > 0) {
-				for (let c of get_hand(R)) {
-					if (!is_card_dummy(c)) {
-						action_card(c)
+			button_undo(L.discarded_cards[R].length > 0)
+			button("shuffle", num_non_dummy_cards[R] <= L.hand_size[R])
+
+			for (let card of get_hand(R))
+				if (!is_card_dummy(card))
+					action_card(card)
+		} else {
+			if ((num_non_dummy_cards[R] === L.hand_size[R]) && (L.drawn_card[R] === -1)) {
+				prompt(`Setup hand – All done.`)
+				button_done()
+			} else {
+				if (L.drawn_card[R] === -1) {
+					prompt(`Draw cards: ${L.hand_size[R] - num_non_dummy_cards[R]} remaining.`)
+					button_draw()
+				} else {
+					if (is_must_play_event(L.drawn_card[R])) {
+						prompt(`Discard and redraw Must-Play event: ${get_card_log_alias(L.drawn_card[R])}.`)
+						button("discard_and_redraw")
+					} else {
+						prompt(`You drew ${get_card_log_alias(L.drawn_card[R])}.`)
+						button_confirm()
 					}
 				}
 			}
-
-			button_undo(L.discarded_cards[R].length > 0 || L.has_passed[R])
-		}
-		else {
-			prompt(`Review drawn cards.`)
-			button_done()
 		}
 	},
-	card(c) {
-		discard_card(c)
-		L.discarded_cards[R].push(c)
-	},
-	pass() {
-		L.has_drawn_cards[R] = true
-	},
-	draw() {
-		while (count_non_dummy_cards_in_hand(R) < L.hand_size[R]) {
-			let drawn_card = draw_card(R)
-			if (is_must_play_event(drawn_card)) {
-				log(`Discarded ${get_card_log_alias(drawn_card)} (must-play event)`)
-				discard_card(drawn_card)
-			}
-		}
-		L.has_drawn_cards[R] = true
+	card(card) {
+		L.discarded_cards[R].push(card)
+		array_delete_item(get_hand(R), card)
 	},
 	undo() {
-		if (L.discarded_cards[R].length > 0 ) {
-			get_hand(R).push(L.discarded_cards[R].pop())
-		} else {
-			L.has_passed[R] = false
-		}
+		set_add(get_hand(R), L.discarded_cards[R].pop())
+	},
+	shuffle() {
+		for (let card of L.discarded_cards[R])
+			set_add(get_deck(R), card)
+
+		shuffle(get_deck(R))
+		L.has_shuffled_deck[R] = true
+		log(`${ROLES[R]} deck shuffled.`)	
+	},
+	draw() {
+		L.drawn_card[R] = draw_card(R)
+	},
+	discard_and_redraw() {
+		discard_card(L.drawn_card[R])
+		L.drawn_card[R] = draw_card(R)
+	},
+	confirm() {
+		L.drawn_card[R] = -1
 	},
 	done() {
 		set_delete(G.active, R)
-
 		if (G.active.length === 0) { //Scenario 5 special rule
-			for (let who = RUSSIA; who <= FRANCE; ++who)
-				if (L.discarded_cards[who].length > 0)
-					log(`${ROLES[who]} discarded ${L.discarded_cards[who].length} cards.`)
-
 			if (L.scenario === BATTLE_OF_SMOLENSK_CAMPAIGN_START) {
-				if (set_has(get_discard(RUSSIA), HOLY_MOTHER_RUSSIA_RU)) {
-					set_delete(get_discard(RUSSIA), HOLY_MOTHER_RUSSIA_RU)
-				} else if (get_deck(RUSSIA).includes(HOLY_MOTHER_RUSSIA_RU)) {
-					array_delete_item(get_deck(RUSSIA), HOLY_MOTHER_RUSSIA_RU)
-				}
-				get_deck(RUSSIA).push(HOLY_MOTHER_RUSSIA_RU)
-				log(`${get_card_log_alias(HOLY_MOTHER_RUSSIA_RU)} placed on top of the Russian deck.`)
+				place_card_at_the_top_of_the_deck(HOLY_MOTHER_RUSSIA_RU)
 			}
-			//test_card(CITY_ABLAZE)
-			//test_card(POLISH_SUPPORT)
 			goto("main")
 		}
 	}
 }
 
-//TO DELETE LATER: Useful for inserting specific test cases to the fuzzer
-function test_card(c) {
-	let who = get_card_owner(c)
-	if (set_has(get_discard(who), c)) {
-		set_delete(get_discard(who), c)
-	} else if (get_deck(who).includes(c)) {
-		array_delete_item(get_deck(who), c)
-	}
-	get_deck(who).push(c)
-	log(`TEST: ${get_card_log_alias(c)} placed on top of the ${ROLES[who]} deck.`)
+function place_card_at_the_top_of_the_deck(card) {
+	let who = get_card_owner(card)
+	if (set_has(get_discard(who), card))
+		set_delete(get_discard(who), card)
+	else if (get_deck(who).includes(cards))
+		array_delete_item(get_deck(who), card)
+	get_deck(who).push(card)
+	log(`${get_card_log_alias(card)} placed on top of the ${ROLES[who]} deck.`)
 }
 
-//=== BEGINNING OF TURN ===
+//=== MAIN ===
 P.main = script(`
 	for G.turn in G.start_turn to G.end_turn {
 		if (is_resource_turn(G.turn)) {
@@ -2021,9 +2008,8 @@ P.main = script(`
 	goto final_scoring	
 `)
 
-function log_start_of_turn(turn) {
+function start_turn(turn) {
 	log_h1(`${get_month_name(G.turn)} ${get_turn_name(G.turn)}`, get_season(turn))
-
 	if (turn === JUNE_5) {
 		log_h4("French Logistic Preparations")
 		log_italic(`France receives a free Forced March and Place Depot order. As an exception to the rules, this Place Depot order may be placed in S${S_KOVNO}.`)
@@ -2034,30 +2020,37 @@ function log_start_of_turn(turn) {
 		log_h4("Winter")
 		log_italic(`Initiative is shifted 1 in Russia's favor during each subsequent Resources Step.`)
 		log_italic(`The Winter Weather Die is used in the Attrition Step.`)
+		log()
 	}
+	log()
 
+	G.active = [RUSSIA, FRANCE]
+	log_h2("Draw a Card")
 	log()
 }
 
+const TURN_PHASES = [
+	"draw_card_to_hand",
+	"play_card_for_additional_orders",
+	"select_orders",
+	"place_orders",
+	"forced_march",
+	"cavalry_patrols",
+	"march",
+	"evade",
+	"battle",
+	"rally",
+	"cossack_raid",
+	"place_depot",
+	"attrition",
+	"lines_of_communications"
+]
+
 P.turn = script(`
-	eval { log_start_of_turn(G.turn) }
-	set G.active [RUSSIA, FRANCE]
-	log "@Draw a Card"
-	log
-	call draw_card_to_hand
-	call play_card_for_additional_orders
-	call select_orders
-	call place_orders
-	call forced_march
-	call cavalry_patrols
-	call march
-	call evade
-	call battle
-	call rally
-	call cossack_raid
-	call place_depot
-	call attrition
-	call lines_of_communications
+	eval { start_turn(G.turn) }
+	for G.phase in 0 to TURN_PHASES.length {
+		call (TURN_PHASES[G.phase])
+	}
 	goto end_turn
 `)
 
@@ -2088,10 +2081,8 @@ P.turn = script(`
 
 	draw_card_to_hand handles this by channelling players through a local state machine independently (L.state is tracked separately for each player).
 
-	Without must-play events, it's fairly straightforward: each player draws a card, then reviews what card they drew.
-	Most must play events are fairly simple to handle, since they are persistent events that just need to be confirmed now. These a dispatched to their corresponding 'E' object (see below).
-	Three events need a lot more manual handling and are handled explicitly within this state: 'Holy Mother Russia', 'Chaos in the Rear Areas', and 'Vulnerable Supply Lines.'
-
+	All card draws in the game are redirected to this state, so must-play events are defined as local states within draw_card_to_hand.
+	Unlike some of the other states that use the 'local state' mechanism, this state uses direct transitions rather than the enumerating approach of the other states.
 */
 
 function draw_a_card(player) {
@@ -3358,13 +3349,13 @@ P.determine_who_goes_first = {
 		push_undo()
 		L.first_player = RUSSIA
 		++L.step
-		call("draw_card_to_hand")
+		if (L.state === EVASIVE_MANEUVERS) call("draw_card_to_hand")
 	},
 	france() {
 		push_undo()
 		L.first_player = FRANCE
 		++L.step
-		call("draw_card_to_hand")
+		if (L.state === EVASIVE_MANEUVERS) call("draw_card_to_hand")
 	}
 }
 
@@ -4347,7 +4338,11 @@ P.execute_cavalry_patrols = {
 		L.orders_by_side = [L.forced_march_orders.filter(o => get_order_owner(o) === RUSSIA), L.forced_march_orders.filter(o => get_order_owner(o) === FRANCE)]
 
 		for (let who = RUSSIA; who <= FRANCE; ++who) {
-			L.orders_by_side[who] = L.orders_by_side[who].filter(order => has_friendly_troop(who, get_order_location(order)) && has_cavalry_or_cossack_in_area(who, get_order_location(order)))
+			L.orders_by_side[who] = L.orders_by_side[who].filter(order => 
+				has_friendly_troop(who, get_order_location(order)) 
+				&& has_cavalry_or_cossack_in_area(who, get_order_location(order))
+				&& (has_enemy_sp(get_order_location(order)) || get_all_adjacent_areas(get_order_location(order)).some(area => has_enemy_sp(area)))
+			)
 		}
 	},
 	prompt() {
@@ -5234,6 +5229,26 @@ function is_battle_event_currently_active(event) {
 	return true
 }
 
+function set_battle_winner(who, area) {
+	let battle = get_battle_entry(area, null)
+	battle.winner = who
+}
+
+function set_battle_loser(who, area) {
+	let battle = get_battle_entry(area, null)
+	battle.loser = who
+}
+
+function get_battle_winner(area) {
+	let battle = get_battle_entry(area, null)
+	return battle.winner
+}
+
+function get_battle_loser(area) {
+	let battle = get_battle_entry(area, null)
+	return battle.loser
+}
+
 function count_num_attacker_connections(area) {
 	let battle = get_battle_entry(area, null)
 	let areas_from = []
@@ -5494,8 +5509,6 @@ function get_num_battle_events_could_by_played(who, area) {
 P.play_battle_events = script(`
 	log "$Play Battle Events"
 	set G.played_cards [[], []]
-	eval { get_hand(RUSSIA).push(INDECISION) }
-	eval { get_hand(FRANCE).push(THE_IMPERIAL_GUARD)}
 	set G.active L.attacker
 	call commit_battle_events { area: L.area }
 	set G.active L.defender
@@ -5599,6 +5612,7 @@ P.execute_battle_events = {
 	card(card) {
 		push_undo()
 		set_delete(L.events_to_be_executed, card)
+		console.log(card)
 		call("event", { card })
 	},
 	done() {
@@ -6276,8 +6290,8 @@ P.assign_losses = {
 			},
 			on_troop(type) {
 				//1 in every 3 losses taken must come from a cavalry SP, if possible (the possible part is handled in prompt())
-				if (type === FRESH_CAVALRY) L.has_assigned_cavalry_loss = true
-				if (L.count[R] % 3 === 0) L.has_assigned_cavalry_loss = false
+				if (type === FRESH_CAVALRY) L.has_assigned_cavalry_loss[R] = true
+				if (L.count[R] % 3 === 0) L.has_assigned_cavalry_loss[R] = false
 
 				if (L.count[R] % 2 === 0) {
 					let connections = battle_exhaust_troop(R, G.current_battle, type)
@@ -6384,46 +6398,57 @@ P.assign_losses = {
 
 //TODO: Stoic Infantry: Immediately rally first two exhausted RU SPs
 P.determine_battle_winner = function() {
-	//console.log(get_battle_entry(G.current_battle, null))
+	// FR #27 Confusions and Delays: The battle is considered tied, and the French MUST retreat from battle.
+	//	Clarification: Supersedes exhaustion victory (if all Russians are eliminated)
+	if (is_battle_event_currently_active(CONFUSIONS_AND_DELAYS)) {
+		log_h4("Tied Battle")
+		log(`${get_card_log_alias(CONFUSIONS_AND_DELAYS)}: France must retreat.`)
+		set_battle_winner(RUSSIA, G.current_battle)
+		set_battle_loser(FRANCE, G.current_battle)
+		goto("end_battle", { drawn_battle: true })
+	}
 
-	//End battle if one side has no more SPs
-	if (!has_friendly_troop(RUSSIA, G.current_battle) || !has_friendly_troop(FRANCE, G.current_battle)) {
-		let winner = !has_friendly_troop(RUSSIA, G.current_battle) ? FRANCE : RUSSIA
-		goto("end_battle", { drawn_battle: false, winner, loser: enemy(winner) })
-	} 
+	// If one side has no SPs remaining, the other side wins if they have a fresh SP.
+	else if ((!has_friendly_troop(RUSSIA, G.current_battle) && has_fresh_sp(FRANCE, G.current_battle))
+		|| (!has_friendly_troop(FRANCE, G.current_battle) && has_fresh_sp(RUSSIA, G.current_battle))) {
+			
+		let winner = has_fresh_sp(RUSSIA, G.current_battle) ? RUSSIA : FRANCE
+		set_battle_winner(winner, G.current_battle)
+		set_battle_loser(enemy(winner), G.current_battle)
+		log(`${ROLES[winner]} won.`)
+		goto("end_battle", { drawn_battle: false })
+	}
 
 	// RU #8 Fighting Withdrawal: France wins
 	else if (is_battle_event_currently_active(FIGHTING_WITHDRAWAL)) {
 		log(`${get_card_log_alias(FIGHTING_WITHDRAWAL)}: France won.`)
-		log()
-		goto("end_battle", { drawn_battle: false, winner: FRANCE, loser: RUSSIA})
+		set_battle_winner(FRANCE, G.current_battle)
+		set_battle_loser(RUSSIA, G.current_battle)
+		goto("end_battle", { drawn_battle: false })
 	}
 
-	// RU #37: Enveloping Moves: If Russia has more SPs, the battle is considered a draw that is won by Russia.
+	// RU #37: Enveloping Moves: If Russia has more fresh SPs remaining, the battle is considered a draw that is won by Russia.
 	else if (is_battle_event_currently_active(ENVELOPING_MOVES) && (count_num_fresh_sps(RUSSIA, G.current_battle) > count_num_fresh_sps(FRANCE, G.current_battle))) {
 		log_h4("Tied Battle")
 		log(`${get_card_log_alias(ENVELOPING_MOVES)}: Russia won.`)
-		log()
-		goto("end_battle", { drawn_battle: true, winner: RUSSIA, loser: FRANCE})
+		set_battle_winner(RUSSIA, G.current_battle)
+		set_battle_loser(FRANCE, G.current_battle)
+		goto("end_battle", { drawn_battle: true })
 	}
 
-	// FR #27 Confusions and Delays: Regardless of losses, the French must retreat from battle, which is automatically considered tied
-	else if (is_battle_event_currently_active(CONFUSIONS_AND_DELAYS)) {
-		log_h4("Tied Battle")
-		log(`${get_card_log_alias(CONFUSIONS_AND_DELAYS)}: France lost.`)
-		log()
-		goto("end_battle", { drawn_battle: true, winner: RUSSIA, loser: FRANCE})
-	}
-
-	//Determine whether events influence a victory, or tie
+	// Tied Battle: determine whether events make it not a tie, else mark the battle as drawn
 	else if (L.count[RUSSIA] === L.count[FRANCE]) {
 		log_h4("Tied Battle")
+
 		// RU #35 Fickle Habsburgs: Russia wins even if tied.
 		if (is_battle_event_currently_active(FICKLE_HABSBURGS)) {
 			log(`${get_card_log_alias(FICKLE_HABSBURGS)}: Russia won.`)
-			log()
-			goto("end_battle", { drawn_battle: false, winner: RUSSIA, loser: FRANCE})
-		} 
+			set_battle_winner(RUSSIA, G.current_battle)
+			set_battle_loser(FRANCE, G.current_battle)
+			goto("pursuit")
+		}
+
+		// Standard tied battle: Defender wins if fortress, else the player with the Initiative wins
 		else {
 			let winner
 			if (is_fortress_town(G.current_battle) || did_all_attacking_forces_cross_bridges(G.current_battle)) {
@@ -6434,27 +6459,37 @@ P.determine_battle_winner = function() {
 				winner = get_who_has_initiative()
 				log(`Initiative: ${ROLES[winner]} won.`)
 			}
-			log()
-			goto("end_battle", { drawn_battle: true, winner: winner, loser: enemy(winner)})	
+			set_battle_winner(winner)
+			set_battle_loser(enemy(winner))
+			goto("end_battle", { drawn_battle: true })	
 		}
-
 	} 
+
+	// RU #41 Fierce Fighting: No pursuit after battle by either side
 	else if (is_battle_event_currently_active(FIERCE_FIGHTING_RU)) {
 		log(`${get_card_log_alias(FIERCE_FIGHTING_RU)}: No pursuit after battle.`)
-		goto("end_battle", { winner: get_battle_winner(L.count) })
+		let winner = find_battle_winner(L.count)
+		set_battle_winner(winner)
+		set_battle_loser(enemy(winner))
+		goto("end_battle", { drawn_battle: false })
 	}
+
 	// Decisive battle: Pursuit
 	else {
 		log_h4("Determine Winner")
+		let winner = find_battle_winner(L.count)
+		set_battle_winner(winner)
+		set_battle_loser(enemy(winner))
+
 		log(`${ROLES[RUSSIA]} inflicted ${L.count[FRANCE]} losses.`)
 		log(`${ROLES[FRANCE]} inflicted ${L.count[RUSSIA]} losses.`)
-		log(`${ROLES[get_battle_winner(L.count)]} won!`)
+		log(`${ROLES[winner]} won!`)
 		log()
-		if (can_play_event(STUBBORN_REARGUARD_RU) && (get_battle_winner(L.count) == FRANCE)) {
+
+		if (can_play_event(STUBBORN_REARGUARD_RU) && (winner === FRANCE))
 			goto("may_play_stubborn_rearguard_ru")
-		} else {
-			goto("pursuit", { winner: get_battle_winner(L.count) })
-		}
+		else
+			goto("pursuit")
 	}
 }
 
@@ -6462,7 +6497,7 @@ function has_fresh_sp(who, area) {
 	return get_area_troop_set(area, null)?.some(entry => decode_troop_entry_who(entry) === who && is_troop_type_fresh(decode_troop_entry_type(entry))) ?? false
 }
 
-function get_battle_winner(count) {
+function find_battle_winner(count) {
 	return (count[RUSSIA] > count[FRANCE]) ? FRANCE : RUSSIA
 }
 
@@ -6482,9 +6517,10 @@ function count_pursuit_cavalry(who, area) {
 
 P.pursuit = {
 	_begin() {
-		//L.winner
 		log_h4("Pursuit")
 		G.active = [RUSSIA, FRANCE]
+
+		L.winner = get_battle_winner(G.current_battle)
 		L.pursuit_cavalry = [count_pursuit_cavalry(RUSSIA, G.current_battle), count_pursuit_cavalry(FRANCE, G.current_battle)]
 	
 		//Murat's ability: counts as cavalry SP for pursuit purposes
@@ -6516,7 +6552,7 @@ P.pursuit = {
 			} else {
 				log(`Pursuit inconclusive!`)
 				log()
-				goto("end_battle", { winner: L.winner, loser: enemy(L.winner), drawn_battle: false })
+				goto("end_battle", { drawn_battle: false })
 			}
 		}
 	}
@@ -6559,7 +6595,7 @@ P.assign_pursuit_losses = {
 	},
 	done() {
 		log()
-		goto("end_battle", { winner: enemy(G.active), loser: G.active, drawn_battle: false })
+		goto("end_battle", { drawn_battle: false })
 	}
 }
 
@@ -6569,15 +6605,28 @@ function did_all_attacking_forces_cross_bridges(battle) {
 	return attacker_data.forces.every(force => force.bridge === true)
 }
 
+function get_battle_events(battle) {
+	return get_battle_entry(battle, null)?.events ?? null
+}
+
 //TODO: Response trigger for City Ablaze! if France take control of a key city
-//TODO: Draw a card if any battle events played
-//TODO: Konstantine's Corps, Cavalry Charge: Draw a card if battle won by RU
 P.end_battle = script(`
-	if (!L.drawn_battle) {
-		call battle_shift_vp_and_initiative { winner: L.winner }
+	eval {
+		L.winner = get_battle_winner(G.current_battle)
+		L.loser = get_battle_loser(G.current_battle)
 	}
-	if (has_friendly_troop(L.loser, G.current_battle)) {
-		call retreat { loser: L.loser }
+	if (!L.drawn_battle) { 
+		call battle_shift_vp_and_initiative { winner: L.winner } 
+	}
+	if (has_friendly_troop(L.loser, G.current_battle)) { 
+		call retreat { loser: L.loser } 
+	}
+	if (get_battle_events(G.current_battle).length > 0) {
+		call battle_draw_card_to_hand
+	}
+	eval { 
+		increase_devastation(G.current_battle)
+		log("Increased devastation at S" + G.current_battle + ".")
 	}
 	eval {
 		if (get_area_vp(G.current_battle) > 0 && is_battle_attacker(L.winner, G.current_battle)) {
@@ -6818,6 +6867,46 @@ P.retreat = {
 			end()
 	}
 }
+
+function calculate_num_post_battle_card_draws() {
+	let num_cards_to_draw = [0, 0]
+
+	for (let who = RUSSIA; who <= FRANCE; ++who) {
+		if (has_leader_in_battle(who, G.current_battle) && get_battle_events(G.current_battle).some(card => get_card_owner(card) === who))
+			++num_cards_to_draw[who]
+	}
+	
+	if (is_battle_event_currently_active(NAPOLEONS_MARSHALS) && get_battle_winner(G.current_battle) === FRANCE) {
+		log(`${get_card_log_alias(NAPOLEONS_MARSHALS)}: France draws an additional card.`)
+		++num_cards_to_draw[FRANCE]
+	}
+
+	if (is_battle_event_currently_active(KONSTANTINES_CORPS) && get_battle_winner(G.current_battle) === RUSSIA) {
+		log(`${get_card_log_alias(KONSTANTINES_CORPS)}: Russia draws an additional card.`)
+		++num_cards_to_draw[RUSSIA]
+	}
+
+	if (is_battle_event_currently_active(CAVALRY_CHARGE_RU) && get_battle_winner(G.current_battle) === RUSSIA) {
+		log(`${get_card_log_alias(CAVALRY_CHARGE_RU)}: Russia draws an additional card.`)
+		++num_cards_to_draw[RUSSIA]
+	}
+
+	return num_cards_to_draw
+}
+
+P.battle_draw_card_to_hand = script(`
+	log "$End of Battle"
+	eval { L.num_cards_to_draw = (calculate_num_post_battle_card_draws()) }
+	eval { clear_undo() }
+	for L.who in RUSSIA to FRANCE {
+		set G.active L.who
+		while (L.num_cards_to_draw[L.who] > 0) {
+			call draw_card_to_hand
+			decr L.num_cards_to_draw[L.who]
+		}
+	}
+`)
+//Discard: The Imperial Guard
 
 //=== 10. EXECUTE RALLY ORDERS ===
 P.rally = script(`
@@ -7119,7 +7208,7 @@ P.apply_cossack_raid = {
 
 //=== 12. EXECUTE PLACE DEPOT ORDERS ===
 P.place_depot = script(`
-	log "@Execute Place Depot"
+	log "@Place Depot"
 
 	if (get_placed_orders_of_type(PLACE_DEPOT).length === 0) {
 		log "No place depot orders placed."
@@ -7134,6 +7223,7 @@ P.place_depot = script(`
 P.execute_place_depot = {
 	_begin() {
 		//L.first_player
+		log_h3("Execute Orders", NONE)
 		G.active = L.first_player
 		L.has_passed = [false, false]
 		L.current_order = -1
@@ -7505,8 +7595,11 @@ function log_must_play_event(card, info) {
 
 P.event = script(`
 	eval {
+		console.log(L.card)
 		card_box_begin(L.card)
 		call(get_event_state_name(L.card))
+	}
+	eval {
 		card_box_end()
 		discard_or_remove_card(L.card)
 	}
@@ -8420,7 +8513,7 @@ P.stubborn_rearguard_ru = {
 	},
 	confirm() {
 		//TO CHECK: Do we even need to go to pursuit at this point?
-		goto("end_battle", { drawn_battle: false, winner: FRANCE, loser: RUSSIA})
+		goto("end_battle", { drawn_battle: false } )
 	}
 }
 

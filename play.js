@@ -531,6 +531,8 @@ function on_update() {
 	action_button_with_argument("remove_troop", EXHAUSTED_AUSTRIAN_INFANTRY, "- Exh. Au. Inf.")
 
 	action_button("select_all", "Select All")
+	action_button("shuffle", "Shuffle Deck")
+	action_button("discard_and_draw", "Discard & Draw")
 
 	action_button("place_order", "Place Order")
 	action_button("change_order", "Change Order")
