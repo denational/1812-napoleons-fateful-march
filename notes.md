@@ -18,6 +18,7 @@
 13. place orders must play
 14. if event says can't execute can you still place it?
 15. discards public?
+16. devastated countryside & devastated landscape stack?
 
 
 ## Known Bugs (to fix at a later time)

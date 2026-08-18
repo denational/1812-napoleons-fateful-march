@@ -440,6 +440,7 @@ function on_init() {
 	define_marker_list("devastation", 0, 80)
 	define_marker_list("depot", 0, 13, "ru")
 	define_marker_list("depot", 14, 20, "fr")
+	define_marker_list("attrition_checked", 0, 80)
 
 	/* TRACKS */
 	define_layout_track_v("track-vp", 0, 20, layout["VP Track"])
@@ -488,6 +489,12 @@ function on_update() {
 		action_button_with_argument(`leader_button`, leader, leaders[leader].log_name)
 	}
 
+	if (V.attrition_checked) {
+		let marker = 0
+		for (let area of V.attrition_checked)
+			populate("area_stack", area, "attrition_checked", marker++)
+	}
+
 	action_button_with_argument("troop", FRESH_INFANTRY, "Infantry")
 	action_button_with_argument("troop", EXHAUSTED_INFANTRY, "Exh. Infantry")
 	action_button_with_argument("troop", FRESH_CAVALRY, "Cavalry")
@@ -533,6 +540,7 @@ function on_update() {
 	action_button("select_all", "Select All")
 	action_button("shuffle", "Shuffle Deck")
 	action_button("discard_and_draw", "Discard & Draw")
+	action_button("add_1_to_attrition_distance")
 
 	action_button("place_order", "Place Order")
 	action_button("change_order", "Change Order")
@@ -542,6 +550,9 @@ function on_update() {
 
 	action_button("roll", "Roll")
 	action_button("eliminate", "Eliminate")
+
+	action_button("exhaust", "Exhaust")
+	action_button("eliminate_2", "Eliminate 2")
 
 	action_button("done", "Done")
 	action_button("next", "Next")
@@ -806,13 +817,18 @@ function escape_text(text) {
 	text = escape_tip_light(text, /L(\d+)/g, "tip", "leader", data.leaders.map(leader => leader.log_name))
 
 	text = escape_dice(text, /\b(battle_fr|battle_ru)([0-6])\b/g)
+	text = escape_dice(text, /\b([W])([0-6])\b/g)
 	return text
 }
 
 function on_log(text, ix) {
 	var p = document.createElement("div")
 
-	if (text.startsWith("HR") || text.startsWith("HF")) {
+	if ((text === "HR ") || (text === "HF ")) { //Intentional line-breaks
+		text = text.substring(2)
+		p.className = "br"
+		return p
+	} else if (text.startsWith("HR") || text.startsWith("HF")) {
 		text = text.substring(2)
 		if (text === "") {
 			p.hidden = true
@@ -846,11 +862,15 @@ function on_log(text, ix) {
 		p.className = 'h2'
 		break
 	case "#":
-		p.className = `h3 ${text.substring(1, 3)}`
-		text = text.substring(3)
+		text = text.substring(1)
+		p.className = 'h3'
 		break
 	case "$":
-		p.className = 'h4'
+		p.className = `h4 ${text.substring(1, 3)}`
+		text = text.substring(3)
+		break
+	case "%":
+		p.className = 'h5'
 		text = text.substring(1)
 		break
 	case ">":

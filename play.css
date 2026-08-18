@@ -80,14 +80,15 @@ body.Russia header.your_turn {background-color: var(--russia);}
     	text-align: center;
 		font-variant-caps: small-caps;
 	}
-	& .h3.ru, .h3.fr { 
-		text-align: left;
-		font-variant-caps: normal;
-	}
-	& .h3.ru { background-color: var(--russia_light); }
-	& .h3.fr { background-color: var(--france_light); }
 
-	& .h4 {
+	& .h4 { 
+		text-align: left;
+		background-color: lightgray;
+	}
+	& .h4.ru { background-color: var(--russia_light); }
+	& .h4.fr { background-color: var(--france_light); }
+
+	& .h5 {
 		text-decoration: underline;
 		font-weight: bold;
 	}
@@ -96,14 +97,6 @@ body.Russia header.your_turn {background-color: var(--russia);}
 		font-variant: small-caps; 
 		text-align: center; 
 		font-style: normal;
-	}
-	& .group.header.fr { background-color: var(--france_dark); }
-	& .group.header.ru { background-color: var(--russia_dark); }
-
-	& .group.fr { background-color: var(--france_light); }
-	& .group.ru { background-color: var(--russia_light); }
-
-	& .group.header {
 		padding: 4px 4px;
 	}
 
@@ -111,6 +104,14 @@ body.Russia header.your_turn {background-color: var(--russia);}
 		margin: 0 6px;
 		padding: 0px 8px;
 	}
+
+	& .group.header.fr { background-color: var(--france_dark); }
+	& .group.header.ru { background-color: var(--russia_dark); }
+
+	& .group.fr { background-color: var(--france_light); }
+	& .group.ru { background-color: var(--russia_light); }
+
+	
 
 	& .i {
 		text-indent: 14px;
@@ -498,6 +499,14 @@ body.Russia header.your_turn {background-color: var(--russia);}
 
 .marker.depot.ru { background-image: url(pieces/green_cube.svg);}
 .marker.depot.fr { background-image: url(pieces/blue_cube.svg);}
+
+.attrition_checked { 
+	width: 67px;
+	height: 67px;
+	background-size: cover;
+	background-image: url(pieces/attrition_checked.png);
+	pointer-events: auto;
+}
 
 /* CARDS */
 .card {

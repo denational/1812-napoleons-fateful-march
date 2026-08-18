@@ -1,9 +1,8 @@
 "use strict"
 
-//TODO: Battle events
+//MOSTLY DONE: Battle events
 //TODO: Fix & complete retreat
-//TODO: Draw card to hand after battle if any battle cards played
-//TODO: Attrition
+//MOSTLY DONE: Attrition
 //TODO: Attrition events
 //TODO: Resources Phase
 //TODO: New Living Rules updates (from notes.html)
@@ -434,7 +433,7 @@ const last_russia_depot = 13
 const first_france_depot = 14
 const last_france_depot = 20
 
-/* BATTLE DIE */
+/* DICE */
 const FRANCE_BATTLE_DIE = {
 	1: -1,
 	2: -1,
@@ -496,6 +495,65 @@ const BATTLE_TABLE = [
 function get_combat_losses_inflicted(combat_value) {
 	if (combat_value > 34) return 8
 	return BATTLE_TABLE.find(entry => (entry.min <= combat_value) && (combat_value <= entry.max)).hits
+}
+
+function get_summer_weather_die_result(who, roll) {
+	switch(roll) {
+	case 1: return -2
+	case 2: return -1
+	case 3:
+		if (who === RUSSIA) 
+			return -1
+		else 
+			return 0
+	case 4: return 0
+	case 5: return 1
+	case 6: return 1
+	}
+}
+
+function get_winter_weather_die_result(who, roll) {
+	switch(roll) {
+	case 1: return -1
+	case 2: return 0
+	case 3: 
+		if (who === RUSSIA)
+			return 0
+		else 
+			return 1
+	case 4: return 1
+	case 5: return 2
+	case 6: return 3
+	}
+}
+
+const ATTRITION_TABLE = [
+	[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 1], [0, 1]], //1
+	[[0, 0], [0, 0], [0, 0], [0, 0], [0, 1], [1, 1], [1, 1]], //2
+	[[0, 0], [0, 0], [0, 0], [0, 0], [1, 1], [1, 1], [2, 1]], //3
+	[[0, 0], [0, 0], [0, 0], [0, 1], [1, 1], [2, 1], [2, 2]], //4
+	[[0, 0], [0, 0], [0, 0], [1, 1], [1, 1], [2, 1], [2, 2]], //5
+	[[0, 0], [0, 0], [0, 1], [1, 1], [1, 1], [2, 2], [3, 2]], //6
+	[[0, 0], [0, 0], [1, 1], [1, 1], [2, 1], [2, 2], [4, 2]], //7-8
+	[[0, 0], [0, 1], [1, 1], [1, 1], [2, 2], [2, 2], [4, 3]], //9-11
+	[[0, 1], [1, 1], [1, 1], [2, 1], [2, 2], [3, 2], [5, 3]], //12-14
+	[[1, 1], [1, 1], [2, 1], [2, 2], [3, 2], [4, 3], [6, 3]], //15-20
+	[[1, 1], [2, 1], [2, 2], [3, 2], [4, 3], [5, 3], [7, 3]], //21+
+]
+
+function get_modified_size_row(modified_size) {
+	if (modified_size <= 1) return 0
+	else if (modified_size >= 2 && modified_size <= 6) return modified_size - 1
+	else if (modified_size >= 7 && modified_size <= 8) return 6
+	else if (modified_size >= 9 && modified_size <= 11) return 7
+	else if (modified_size >= 12 && modified_size <= 14) return 8
+	else if (modified_size >= 15 && modified_size <= 20) return 9
+	else return 10
+}
+
+function lookup_attrition_table(modified_size, distance_to_nearest_depot) {
+	distance_to_nearest_depot = Math.max(0, Math.min(6, distance_to_nearest_depot))
+	return ATTRITION_TABLE[get_modified_size_row(modified_size)][distance_to_nearest_depot].slice()
 }
 
 const SUPPLY_SOURCES = [
@@ -906,7 +964,7 @@ function has_austrian_sp(area) {
 
 function count_num_sps(who, area) {
 	let count = 0
-	for (let entry of get_area_troop_set(area))
+	for (let entry of get_area_troop_set(area, null))
 		if (decode_troop_entry_who(entry) === who)
 			count += decode_troop_entry_num(entry)
 	return count
@@ -1295,6 +1353,7 @@ function on_view() {
 	V.selected_orders = (G.selected_orders) ? G.selected_orders[R] : []
 	V.seniority = G.seniority
 	V.battles = G.battles
+	V.attrition_checked = G.attrition_checked
 }
 
 // === FRAMEWORK EXTENSIONS ===
@@ -1396,6 +1455,8 @@ function on_setup(scenario, options) {
 		leaders: [],
 		troops: []
 	}
+
+	G.attrition_checked = []
 
 	update_supply()
 
@@ -2011,13 +2072,13 @@ P.main = script(`
 function start_turn(turn) {
 	log_h1(`${get_month_name(G.turn)} ${get_turn_name(G.turn)}`, get_season(turn))
 	if (turn === JUNE_5) {
-		log_h4("French Logistic Preparations")
+		log_h5("French Logistic Preparations")
 		log_italic(`France receives a free Forced March and Place Depot order. As an exception to the rules, this Place Depot order may be placed in S${S_KOVNO}.`)
 		log()
 	}
 
 	if (turn === OCT_R || (G.start_turn >= OCT_R)) {
-		log_h4("Winter")
+		log_h5("Winter")
 		log_italic(`Initiative is shifted 1 in Russia's favor during each subsequent Resources Step.`)
 		log_italic(`The Winter Weather Die is used in the Attrition Step.`)
 		log()
@@ -3239,7 +3300,7 @@ P.do_place_orders = {
 P.determine_who_goes_first = {
 	_begin() {
 		//L.order_type
-		log_h3("First Player", NONE)
+		log_h3("First Player")
 		log()
 
 		//These events are mutually exclusive since Evasive Maneuvers is summer-only and Energetic Leadership is winter-only
@@ -3420,8 +3481,8 @@ P.change_orders = {
 	_begin() {
 		//L.current_order_type
 		//Defend doesn't have its own phase, so it might be unclear
-		if (L.current_order_type !== DEFEND) log_h3("Change Orders", NONE)
-		else log_h3("Change Orders – Defend", NONE)
+		if (L.current_order_type !== DEFEND) log_h3("Change Orders")
+		else log_h3("Change Orders – Defend")
 		log()
 
 		G.active = [RUSSIA, FRANCE]
@@ -3702,7 +3763,7 @@ P.forced_march = script(`
 P.execute_forced_marches = {
 	_begin() {
 		//L.first_player
-		log_h3("Execute Orders", NONE)
+		log_h3("Execute Orders")
 		G.active = L.first_player
 		L.has_passed = [false, false]
 		L.current_order = -1
@@ -3796,7 +3857,7 @@ P.march = script(`
 P.execute_marches = {
 	_begin() {
 		//L.first_player
-		log_h3("Execute Orders", NONE)
+		log_h3("Execute Orders")
 		G.active = L.first_player
 		L.has_passed = [false, false]
 		L.current_order = -1
@@ -3946,7 +4007,7 @@ P.select_force = {
 		}
 
 		log()
-		log_h3(`S${L.area}`, G.active)
+		log_h4(`S${L.area}`, G.active)
 	},
 	prompt() {
 		if (L.troops_at_area.every(num_troops_of_type => num_troops_of_type === 0)) {
@@ -4329,7 +4390,7 @@ function has_cavalry_or_cossack_in_area(who, area) {
 P.execute_cavalry_patrols = {
 	_begin() {
 		//L.first_player
-		log_h3("Execute Orders", NONE)
+		log_h3("Execute Orders")
 		G.active = L.first_player
 		L.has_passed = [false, false]
 		L.current_order = -1
@@ -4364,7 +4425,7 @@ P.execute_cavalry_patrols = {
 	order(order) {
 		push_undo()
 		let area = get_order_location(order)
-		log_h3(`S${area}`, G.active)
+		log_h4(`S${area}`, G.active)
 		remove_order(order)
 		L.current_order = order
 		if ((G.active === RUSSIA) && get_hand(RUSSIA).includes(CONFUSED_RETREAT))
@@ -4557,7 +4618,7 @@ P.execute_evade = {
 	order(order) {
 		push_undo()
 		let area = get_order_location(order)
-		log_h3(`S${area}`, G.active)
+		log_h4(`S${area}`, G.active)
 		remove_order(order)
 		L.current_order = order
 		call("do_evade", { area })
@@ -5381,7 +5442,7 @@ function sort_battles_by_type() {
 
 P.resolve_battles = {
 	_begin() {
-		log_h3("Resolve Battles", NONE)
+		log_h3("Resolve Battles")
 		G.active = get_who_has_initiative()
 
 		L.battles_by_type = sort_battles_by_type()
@@ -5424,7 +5485,7 @@ P.resolve_battles = {
 	area(area) {
 		clear_undo()
 		G.current_battle = area
-		log_h3(`S${area}`, get_battle_attacker(area))
+		log_h4(`Battle of S${area}`, get_battle_attacker(area))
 		log()
 		call("do_battle", { area: area, attacker: get_battle_attacker(area), defender: get_battle_defender(area) })
 	},
@@ -5442,7 +5503,7 @@ function has_friendly_order(who, area) {
 }
 
 P.do_battle = script(`
-	eval { log_h4("Reveal Defend Orders") }
+	eval { log_h5("Reveal Defend Orders") }
 	if (has_friendly_order(L.defender, L.area)) {
 		set G.active L.defender
 		call defend { area: L.area }
@@ -5621,7 +5682,7 @@ P.execute_battle_events = {
 }
 
 P.calculate_combat_value = script(`
-	eval { log_h4("Calculate Combat Value") }
+	eval { log_h5("Calculate Combat Value") }
 	call do_combat_value_calculations { attacker: L.attacker, defender: L.defender, area: L.area }
 
 	set G.active [RUSSIA, FRANCE]
@@ -5648,7 +5709,7 @@ P.do_combat_value_calculations = function() {
 		
 		combat_value[attacker.who] += find_combat_value(attacker.who, attacker.forces[entry])
 	}
-	log_h4(`${ROLES[attacker.who]} total: ${combat_value[attacker.who]}`)
+	log_h5(`${ROLES[attacker.who]} total: ${combat_value[attacker.who]}`)
 
 	let defender = get_defender_data(G.current_battle)
 	for (let entry = 0; entry < defender.forces.length; ++entry) {
@@ -5676,7 +5737,7 @@ P.do_combat_value_calculations = function() {
 		//log(`Outflanking: -${calculate_outflanking_strength(G.current_battle)}`)
 	}
 
-	log_h4(`${ROLES[defender.who]} total: ${combat_value[defender.who]}`)
+	log_h5(`${ROLES[defender.who]} total: ${combat_value[defender.who]}`)
 	log()
 	L.L.$ = combat_value.slice()
 	end()
@@ -6156,7 +6217,7 @@ P.assign_losses = {
 	_begin() {
 		//L.losses: Gives the count of number of hits total need to be taken
 		//L.attacker, L.defender
-		log_h4("Assign Losses")
+		log_h5("Assign Losses")
 		G.active = [RUSSIA, FRANCE]
 
 		//Running count of number of hits taken (used to determine elimination/exhaustion/cavalry hit)
@@ -6402,7 +6463,7 @@ P.determine_battle_winner = function() {
 	// FR #27 Confusions and Delays: The battle is considered tied, and the French MUST retreat from battle.
 	//	Clarification: Supersedes exhaustion victory (if all Russians are eliminated)
 	if (is_battle_event_currently_active(CONFUSIONS_AND_DELAYS)) {
-		log_h4("Tied Battle")
+		log_h5("Tied Battle")
 		log(`${get_card_log_alias(CONFUSIONS_AND_DELAYS)}: France must retreat.`)
 		set_battle_winner(RUSSIA, G.current_battle)
 		set_battle_loser(FRANCE, G.current_battle)
@@ -6430,7 +6491,7 @@ P.determine_battle_winner = function() {
 
 	// RU #37: Enveloping Moves: If Russia has more fresh SPs remaining, the battle is considered a draw that is won by Russia.
 	else if (is_battle_event_currently_active(ENVELOPING_MOVES) && (count_num_fresh_sps(RUSSIA, G.current_battle) > count_num_fresh_sps(FRANCE, G.current_battle))) {
-		log_h4("Tied Battle")
+		log_h5("Tied Battle")
 		log(`${get_card_log_alias(ENVELOPING_MOVES)}: Russia won.`)
 		set_battle_winner(RUSSIA, G.current_battle)
 		set_battle_loser(FRANCE, G.current_battle)
@@ -6439,7 +6500,7 @@ P.determine_battle_winner = function() {
 
 	// Tied Battle: determine whether events make it not a tie, else mark the battle as drawn
 	else if (L.count[RUSSIA] === L.count[FRANCE]) {
-		log_h4("Tied Battle")
+		log_h5("Tied Battle")
 
 		// RU #35 Fickle Habsburgs: Russia wins even if tied.
 		if (is_battle_event_currently_active(FICKLE_HABSBURGS)) {
@@ -6477,7 +6538,7 @@ P.determine_battle_winner = function() {
 
 	// Decisive battle: Pursuit
 	else {
-		log_h4("Determine Winner")
+		log_h5("Determine Winner")
 		let winner = find_battle_winner(L.count)
 		set_battle_winner(winner)
 		set_battle_loser(enemy(winner))
@@ -6518,7 +6579,7 @@ function count_pursuit_cavalry(who, area) {
 
 P.pursuit = {
 	_begin() {
-		log_h4("Pursuit")
+		log_h5("Pursuit")
 		G.active = [RUSSIA, FRANCE]
 
 		L.winner = get_battle_winner(G.current_battle)
@@ -6653,7 +6714,7 @@ P.battle_shift_vp_and_initiative = {
 	_begin() {
 		//L.winner
 		//console.log(get_battle_entry(G.current_battle, null))
-		log_h4("VP & Initiative Shifts")
+		log_h5("VP & Initiative Shifts")
 		G.active = L.winner
 		L.num_enemy_sps_eliminated = get_player_battle_data(enemy(G.active), G.current_battle).num_eliminated
 		L.has_shifted_vp = false
@@ -6748,7 +6809,7 @@ function could_any_end_battle_events_be_played() {
 
 P.end_battle_events = {
 	_begin() {
-		log_h4("Resolve Remaining Events")
+		log_h5("Resolve Remaining Events")
 
 		G.active = []
 		if (is_battle_event_currently_active(STOIC_INFANTRY) && has_russian_sp(G.current_battle))
@@ -6940,7 +7001,7 @@ function get_valid_defender_retreat_connections(battle) {
 P.retreat = {
 	_begin() {
 		//L.loser
-		log_h4("Retreat")
+		log_h5("Retreat")
 		G.active = L.loser
 		let possible_retreat_destinations = []
 		if (is_battle_attacker(L.loser, G.current_battle))
@@ -7115,7 +7176,7 @@ P.rally = script(`
 P.execute_rally = {
 	_begin() {
 		//L.first_player
-		log_h3("Execute Orders", NONE)
+		log_h3("Execute Orders")
 		G.active = L.first_player
 		L.has_passed = [false, false]
 		L.current_order = -1
@@ -7146,7 +7207,7 @@ P.execute_rally = {
 	order(order) {
 		push_undo()
 		let area = get_order_location(order)
-		log_h3(`S${area}`, G.active)
+		log_h4(`S${area}`, G.active)
 		remove_order(order)
 		L.current_order = order
 		call("do_rally", { area })
@@ -7249,7 +7310,7 @@ P.cossack_raid = script(`
 
 P.execute_cossack_raid = {
 	_begin() {
-		log_h3("Execute Orders", NONE)
+		log_h3("Execute Orders")
 		G.active = RUSSIA
 		L.current_order = -1
 		L.has_executed_order = false
@@ -7276,7 +7337,7 @@ P.execute_cossack_raid = {
 	order(order) {
 		push_undo()
 		let area = get_order_location(order)
-		log_h3(`S${area}`, G.active)
+		log_h4(`S${area}`, G.active)
 		remove_order(order)
 		L.current_order = order
 		call("do_cossack_raid", { area })
@@ -7401,7 +7462,6 @@ P.place_depot = script(`
 
 	if (get_placed_orders_of_type(PLACE_DEPOT).length === 0) {
 		log "No place depot orders placed."
-		eval { finish("WIP", "exit code 0") }
 	} else {
 		call determine_who_goes_first { order_type: PLACE_DEPOT }
 		call change_orders { current_order_type: PLACE_DEPOT }
@@ -7412,7 +7472,7 @@ P.place_depot = script(`
 P.execute_place_depot = {
 	_begin() {
 		//L.first_player
-		log_h3("Execute Orders", NONE)
+		log_h3("Execute Orders")
 		G.active = L.first_player
 		L.has_passed = [false, false]
 		L.current_order = -1
@@ -7445,7 +7505,7 @@ P.execute_place_depot = {
 	order(order) {
 		push_undo()
 		let area = get_order_location(order)
-		log_h3(`S${area}`, G.active)
+		log_h4(`S${area}`, G.active)
 		remove_order(order)
 		L.current_order = order
 		call("do_place_depot", { area })
@@ -7467,14 +7527,14 @@ P.execute_place_depot = {
 		L.current_order = -1
 
 		if (L.has_passed[RUSSIA] && L.has_passed[FRANCE]) {
-			finish("WIP", "exit code 0")
+			end()
 		} else {
 			G.active = enemy(G.active)
 		}
 	},
 	depot(depot) {
 		push_undo()
-		log_h3(`S${get_depot_location(depot)}`, G.active)
+		log_h4(`S${get_depot_location(depot)}`, G.active)
 		remove_depot(depot, get_depot_location(depot))
 	},
 }
@@ -7520,7 +7580,7 @@ P.do_place_depot = {
 	},
 	depot(depot) {
 		push_undo()
-		log_h3(`S${get_depot_location(depot)}`, G.active)
+		log_h4(`S${get_depot_location(depot)}`, G.active)
 		remove_depot(depot, get_depot_location(depot))
 	},
 	confirm() {
@@ -7530,6 +7590,510 @@ P.do_place_depot = {
 	pass() {
 		log("No depots in pool.")
 		end()
+	}
+}
+
+// === ATTRITION ===
+/*
+    Events
+    RUSSIA
+    RU #21 Overstretched Logistics		Beginning	- FR must EITHER: remove a depot or add 1 to attrition distance this turn
+    RU #30 Devastated Landscape			Beginning	- Both sides remove all 'Forage' orders. Double effect of Devastation markers this turn.
+    RU #44 Disease & Starvation			Beginning	- RU may eliminate up to 4 exhausted French SPs from any areas where Devastation is 2+.
+    RU #46 Devastated Countryside		Must-Play	- Effect of Devastation markers is 2x this turn.
+    RU #49 Cossack Patrols				Beginning	- In all FR areas adjacent to Cossack SPs, France must remove 1 Exhausted SP per such French area and remove all Forage orders.
+
+    FRANCE
+    FR #45 Much Needed Victuals			Beginning	- FR must remove a Depot marker - do not check Attrition there and immediately rally 2 exhausted infantry there
+    FR #48 Napoléon Returns to Paris	End			- Permanently remove Napoléon from the game at no VP cost
+*/
+
+P.attrition = script(`
+	eval { 
+		log_h2("Attrition") 
+		L.player_with_initiative = get_who_has_initiative()
+	}
+	
+	set G.active (1 - L.player_with_initiative)
+	call attrition_events
+	set G.active L.player_with_initiative
+	call attrition_events
+	
+	set G.active L.player_with_initiative
+	call roll_weather_die
+
+	set G.active [RUSSIA, FRANCE]
+	call do_attrition	
+`)
+
+function get_attrition_events(who) {
+	if (who === RUSSIA)
+		return [OVERSTRETCHED_LOGISTICS, DEVASTATED_LANDSCAPE, DISEASE_AND_STARVATION, COSSACK_PATROLS]
+	else
+		return [MUCH_NEEDED_VICTUALS]
+}
+
+P.attrition_events = {
+	_begin() {
+		L.events = get_attrition_events(G.active).filter(card => get_hand(G.active).includes(card))
+	},
+	prompt() {
+		if (L.events.length > 0) {
+			prompt(`You may play events (${join_array_with_or(L.events.map(card => get_card_log_alias(card)))}).`)
+			for (let card of L.events)
+				action_card(card)
+			button_pass()
+		} else {
+			prompt(`Play Events: All done.`)
+			button_done()
+		}
+	},
+	card(card) {
+		push_undo()
+		set_delete(L.events, card)
+		call("event", { card })
+	},
+	done() {
+		end()
+	},
+	pass() { end() }
+}
+
+P.roll_weather_die = {
+	_begin() {
+		log_h3("Roll Weather Die")
+		log()
+		L.roll = -1
+	},
+	prompt() {
+		if (L.roll === -1) {
+			prompt(`Roll the ${get_current_season() === SUMMER ? "Summer" : "Winter"} Weather Die.`)
+			button_roll()
+		} else {
+			prompt(`Weather Roll: ${L.roll}.`)
+			button_confirm()
+		}
+	},
+	roll() {
+		clear_undo()
+		L.roll = roll_d6()
+		G.weather_roll = L.roll
+		log(`Weather Die W${L.roll}.`)
+		log_weather_die_result(L.roll)
+	},
+	confirm() {
+		log()
+		end()
+	}
+}
+
+function log_weather_die_result(roll) {
+	let result = get_current_season() === SUMMER ? get_summer_weather_die_result(NONE, roll) : get_winter_weather_die_result(NONE, roll)
+	if (roll !== 3) {
+		logi(`${result >= 0 ? "+" : ""}${result} to Modified Size`)
+	} else {
+		if (get_current_season() == SUMMER) {
+			logi(`Russia: -1 to Modified Size`)
+			logi(`France: +0 to Modified Size`)
+		} else {
+			logi(`Russia: +0 to Modified Size`)
+			logi(`France: +1 to Modified Size`)
+		}
+	}
+}
+
+function get_areas_with_sps(who) {
+	let areas = []
+	map_for_each(G.troops, (area, entries) => {
+		if (entries.some(entry => decode_troop_entry_who(entry) === who) && (area >= FIRST_AREA) && (area <= LAST_AREA))
+			set_add(areas, area)
+	})
+	return areas
+}
+
+function calculate_modified_size(who, area) {
+	let size = 0
+
+	// Base: total number of SPs (exhausted and fresh)
+	size += count_num_sps(who, area)
+
+	// Apply weather effects
+	size += get_current_season() === SUMMER ? get_summer_weather_die_result(who, G.weather_roll) : get_winter_weather_die_result(who, G.weather_roll)
+
+	// Key City: -3 to Modified Size
+	if (is_key_city(area))
+		size = Math.max(0, size - 3)
+
+	// RU #30 Devastated Landscape, RU #46 Devastated Countryside: Double effect of Devastation markers
+	if (is_event_active(DEVASTATED_LANDSCAPE) || is_event_active(DEVASTATED_COUNTRYSIDE))
+		size += 2 * get_devastation(area)
+	else
+		size += get_devastation(area)
+
+	// Murat: +1 to Modified Size in his area
+	if ((who === FRANCE) && (get_leader_location(MURAT) === area))
+		size += 1
+
+	// Tormasov: -2 to Modified Size in his area
+	if ((who === RUSSIA) && (get_leader_location(TORMASOV) === area))
+		size = Math.max(0, size - 2)
+
+	return size
+}
+
+function log_attrition_info(who, area) {
+	log_only(who, `$S${area}`)
+
+	let size = calculate_modified_size(who, area)
+	let distance_to_nearest_depot = G.supply[who][area]
+	let weather_effect = get_current_season() === SUMMER ? get_summer_weather_die_result(who, G.weather_roll) : get_winter_weather_die_result(who, G.weather_roll)
+
+	log_only(who, `>Modified Size: ${size}`)
+	log_only(who, `<+${count_num_sps(who, area)} SPs`)
+	log_only(who, `<${weather_effect >= 0 ? "+" : ""}${weather_effect} Weather`)
+	if (is_key_city(area)) log_only(who, `<-3 Key City`)
+	
+	if (is_event_active(DEVASTATED_LANDSCAPE)) {
+		log_only(who, `<${get_card_log_alias(DEVASTATED_LANDSCAPE)}`)
+		log_only(who, `<+${2 * get_devastation(area)}`)
+	} else if (is_event_active(DEVASTATED_COUNTRYSIDE)) {
+		log_only(who, `<${get_card_log_alias(DEVASTATED_COUNTRYSIDE)}`)
+		log_only(who, `<+${2 * get_devastation(area)}`)
+	} else if (get_devastation(area) > 0) {
+		log_only(`>+${get_devastation(area)} Devastation`)
+	}
+
+	if ((who === FRANCE) && (get_leader_location(MURAT) === area)) log_only(who, `<+1 L${MURAT}`)
+	if ((who === RUSSIA) && (get_leader_location(TORMASOV) === area)) log_only(who, `<-2 L${TORMASOV}`)
+
+	log_only(who, `>Distance to nearest Depot: ${distance_to_nearest_depot}`)
+
+	log_only(who, `Attrition ${size} &times; ${distance_to_nearest_depot <= MAX_SUPPLY_DISTANCE ? distance_to_nearest_depot : "OOS"}: ${get_attrition_result_name(size, distance_to_nearest_depot)}`)
+
+	log_only(who, " ")
+}
+
+function get_attrition_result_name(modified_size, distance_to_nearest_depot) {
+	let result = lookup_attrition_table(modified_size, distance_to_nearest_depot)
+	return `${result[0]}${"D".repeat(result[1])}`
+}
+
+function lookup_attrition_losses(modified_size, distance_to_nearest_depot) {
+	return lookup_attrition_table(modified_size, distance_to_nearest_depot)[0]
+}
+
+function lookup_attrition_devastation(modified_size, distance_to_nearest_depot) {
+	return lookup_attrition_table(modified_size, distance_to_nearest_depot)[1]
+}
+
+function count_num_exhausted_sps(who, area) {
+	let count = 0
+	for (let entry of get_area_troop_set(area, null)) {
+		if ((decode_troop_entry_who(entry) === who) && is_troop_type_exhausted(decode_troop_entry_type(entry)))
+			count += decode_troop_entry_num(entry)
+	}
+	return count
+}
+
+// TODO: Apply restriction that one in three SPs affected must be cavalry (I haven't trapped a test case with 3+ hits yet)
+P.do_attrition = {
+	_begin() {
+		log_h3("Perform Attrition")
+		log()
+
+		update_supply(RUSSIA)
+		update_supply(FRANCE)
+
+		L.state = ["select_next_area", "select_next_area"]
+		L.undo = [[], []]
+
+		L.areas = [[], []]
+		G.attrition_checked = []
+
+		// Ignore areas with no attrition losses/devastation penalties (since 80% of stacks at any given time are unlikely to take any attrition penalties)
+		for (let who = RUSSIA; who <= FRANCE; ++who) {
+			for (let area of get_areas_with_sps(who)) {
+				let modified_size = calculate_modified_size(who, area)
+				let distance_to_nearest_depot = G.supply[who][area]
+				if ((lookup_attrition_losses(modified_size, distance_to_nearest_depot) === 0) && (lookup_attrition_devastation(modified_size, distance_to_nearest_depot) === 0)) {
+					set_add(G.attrition_checked, area)
+				} else {
+					set_add(L.areas[who], area)
+				}
+			}
+		}
+
+		L.attrition_data = [
+			{area: -1, num_losses_remaining: -1, devastation_increase: -1}, 
+			{area: -1, num_losses_remaining: -1, devastation_increase: -1}
+		]
+		L.count = [0, 0]
+	},
+	states: {
+		"select_next_area": {
+			prompt() {
+				prompt("Select next area to check attrition.")
+
+				if (L.areas[R].length <= 5) V.prompt += ` (${join_array_with_or(L.areas[R].map(area => `S${area}`))})` 
+
+				for (let area of L.areas[R]) 
+					action_area(area)
+			},
+			on_area(area) {
+				push_local_undo(R, "select_area")
+				L.attrition_data[R].area = area
+				L.attrition_data[R].num_losses_remaining = lookup_attrition_losses(calculate_modified_size(R, area), G.supply[R][area])
+				L.attrition_data[R].devastation_increase = lookup_attrition_devastation(calculate_modified_size(R, area), G.supply[R][area])
+				//log_attrition_info(R, area)
+
+				if (has_order_of_type(R, FORAGE, area))
+					L.state[R] = "reveal_forage_order"
+				else if (L.attrition_data[R].num_losses_remaining > 0)
+					L.state[R] = "assign_attrition_losses"
+				else if (L.attrition_data[R].devastation_increase > 0)
+					L.state[R] = "increase_devastation"
+				else
+					L.state[R] = "end_area" 
+			}
+		},
+		"reveal_forage_order": {
+			prompt(){
+				prompt(`Reveal Forage order to reduce Attrition losses by 2?`)
+				action_order(get_placed_orders_of_type(FORAGE).find(order => (get_order_owner(order) === R) && (get_order_location(order) === L.attrition_data[R].area)))
+				button_pass()
+			},
+			on_order(order) {
+				push_local_undo(R, "reveal_forage_order", { id: order, area: get_order_location(order), num_losses_before_forage: L.attrition_data[R].num_losses_remaining })
+				G.orders[order] = POOL
+				L.attrition_data[R].num_losses_remaining = Math.max(0, L.attrition_data[R].num_losses_remaining - 2)
+
+				if (L.attrition_data[R].num_losses_remaining > 0)
+					L.state[R] = "assign_attrition_losses"
+				else if (L.attrition_data[R].devastation_increase > 0)
+					L.state[R] = "increase_devastation"
+				else
+					L.state[R] = "end_area" 
+			},
+			on_pass() {
+				push_local_undo(R, "pass")
+
+				if (L.attrition_data[R].num_losses_remaining > 0)
+					L.state[R] = "assign_attrition_losses"
+				else if (L.attrition_data[R].devastation_increase > 0)
+					L.state[R] = "increase_devastation"
+				else
+					L.state[R] = "end_area" 
+			}
+		},
+		"assign_attrition_losses": {
+			prompt() {
+				prompt(`Assign attrition losses: ${L.attrition_data[R].num_losses_remaining} remaining.`)
+				if (has_fresh_sp(R, L.attrition_data[R].area))
+					button("exhaust")
+				if (count_num_exhausted_sps(R, L.attrition_data[R].area) >= 2 || count_num_sps(R, L.attrition_data[R].area) === count_num_exhausted_sps(R, L.attrition_data[R].area))
+					button("eliminate_2")
+			},
+			on_exhaust() {
+				push_local_undo(R, "choose_attrition_option", { option: "exhaust" })
+				L.state[R] = "exhaust_sp"
+			},
+			on_eliminate_2() {
+				push_local_undo(R, "choose_attrition_option", { option: "eliminate_2" })
+				L.count[R] = 2
+				L.state[R] = "eliminate_2_exhausted"
+			}
+		},
+		"exhaust_sp": {
+			prompt() {
+				prompt(`Exhaust 1 fresh SP at S${L.attrition_data[R].area}.`)
+				for (let type of get_troop_types_at_area(R, L.attrition_data[R].area))
+					if (is_troop_type_fresh(type))
+						action_troop(type)
+			},
+			on_troop(type) {
+				push_local_undo(R, "exhaust", { type })
+				exhaust_troop(R, L.attrition_data[R].area, type)
+
+				if (--L.attrition_data[R].num_losses_remaining > 0)
+					L.state[R] = "assign_attrition_losses"
+				else if (L.attrition_data[R].devastation_increase > 0)
+					L.state[R] = "increase_devastation"
+				else
+					L.state[R] = "end_area" 
+			}
+		},
+		"eliminate_2_exhausted": {
+			prompt() {
+				if (has_friendly_troop(R, L.attrition_data[R].area)) {
+					prompt(`Eliminate ${L.count[R]} exhausted SPs at S${L.attrition_data[R].area}.`)
+					for (let type of get_all_exhausted_sp_types(R, L.attrition_data[R].area))
+						action_troop(type)
+				} else {
+					prompt(`No more SPs at S${L.attrition_data[R].area} to eliminate.`)
+					button_confirm()
+				}
+			},
+			on_troop(type) {
+				push_local_undo(R, "eliminate", { type })
+				eliminate_troop(R, L.attrition_data[R].area, type)
+
+				if (--L.count[R] === 0) {
+					if (--L.attrition_data[R].num_losses_remaining > 0)
+						L.state[R] = "assign_attrition_losses"
+					else if (L.attrition_data[R].devastation_increase > 0)
+						L.state[R] = "increase_devastation"
+					else
+						L.state[R] = "end_area"
+				}
+			},
+			on_confirm() {
+				push_local_undo(R, "confirm", { num_losses_remaining: L.attrition_data[R].num_losses_remaining })
+				L.attrition_data[R].num_losses_remaining = 0
+				if (L.attrition_data[R].devastation_increase > 0)
+					L.state[R] = "increase_devastation"
+				else
+					L.state[R] = "end_area"
+			}
+		},
+		"increase_devastation": {
+			prompt() {
+				if (get_devastation(L.attrition_data[R].area) < 3) {
+					prompt(`Increase Devastation at S${L.attrition_data[R].area} by ${L.attrition_data[R].devastation_increase}.`)
+					action_area(L.attrition_data[R].area)
+				} else {
+					prompt(`Devastation at S${L.attrition_data[R].area} cannot be increased further.`)
+					button_confirm()
+				}
+				
+			},
+			on_area(area) {
+				push_local_undo(R, "increase_devastation", { old_devastation: get_devastation(area) })
+				let final_devastation = get_devastation(area) + L.attrition_data[R].devastation_increase
+				set_devastation(area, Math.min(final_devastation, 3))
+
+				L.attrition_data[R].devastation_increase = 0
+				if (final_devastation > 3) {
+					L.attrition_data[R].num_losses_remaining = 1
+					L.state[R] = "assign_attrition_losses"
+				} else
+					L.state[R] = "end_area"
+			},
+			on_confirm() {
+				push_local_undo(R, "confirm", { num_losses_remaining: L.attrition_data[R].num_losses_remaining, devastation_increase: L.attrition_data[R].devastation_increase })
+				L.attrition_data[R].devastation_increase = 0
+				L.attrition_data[R].num_losses_remaining = 1
+				L.state[R] = "assign_attrition_losses"
+			}
+		},
+		"end_area": {
+			prompt() {
+				prompt(`Attrition at S${L.attrition_data[R].area}: All done.`)
+				button_next()
+			},
+			on_next() {
+				push_local_undo(R, "next", { attrition_data: object_copy(L.attrition_data[R]) })
+				set_delete(L.areas[R], L.attrition_data[R].area)
+				G.attrition_checked.push(L.attrition_data[R].area)
+				L.attrition_data[R].area = -1
+				L.attrition_data[R].num_losses_remaining = -1
+				L.attrition_data[R].devastation_increase = -1
+				
+				if (L.areas[R].length > 0)
+					L.state[R] = "select_next_area"
+				else
+					L.state[R] = "attrition_done"
+			}
+		},
+		"attrition_done": {
+			prompt() {
+				prompt(`Attrition: All done.`)
+				button_confirm()
+			},
+			on_confirm() {
+				set_delete(G.active, R)
+				if (G.active.length === 0) {
+					G.attrition_checked.length = 0
+					log()
+					end()
+				}
+			}
+		}
+	},
+	prompt() { 
+		this.states[L.state[R]].prompt()
+		button_undo(L.undo[R].length > 0)
+	},
+	undo() {
+		let previous_action = L.undo[R].pop()
+		L.state[R] = previous_action.state
+
+		switch(previous_action.action) {
+		case "select_area":
+			L.attrition_data[R].area = -1
+			L.attrition_data[R].num_losses_remaining = -1
+			L.attrition_data[R].devastation_increase = -1
+			//TODO: Figure out how to undo log, if at all
+			return
+		case "reveal_forage_order":
+			G.orders[previous_action.info.id] = previous_action.info.area
+			L.attrition_data[R].num_losses_remaining = previous_action.info.num_losses_before_forage
+			return
+		case "pass":
+			return
+		case "choose_attrition_option":
+			if (previous_action.info.option === "eliminate_2") 
+				L.count[R] = 0		
+			return
+		case "exhaust":
+			rally_troop(R, L.attrition_data[R].area, previous_action.info.type + 1)
+			++L.attrition_data[R].num_losses_remaining
+			return
+		case "eliminate":
+			add_troop(R, L.attrition_data[R].area, previous_action.info.type, 1)
+			++L.count[R]
+			++L.attrition_data[R].num_losses_remaining
+			return
+		case "increase_devastation":
+			set_devastation(L.attrition_data[R].area, previous_action.info.old_devastation)
+			L.attrition_data[R].devastation_increase = lookup_attrition_devastation(calculate_modified_size(R, L.attrition_data[R].area), G.supply[R][L.attrition_data[R].area])
+			return
+		case "confirm":
+			if (previous_action.state === "eliminate_2_exhausted") {
+				L.attrition_data[R].num_losses_remaining = previous_action.info.num_losses_remaining
+			} else {
+				L.attrition_data[R].devastation_increase = previous_action.info.devastation_increase
+				L.attrition_data[R].num_losses_remaining = previous_action.info.num_losses_remaining
+			}
+			return
+		case "next":
+			set_add(L.areas[R], previous_action.info.attrition_data.area)
+			G.attrition_checked.pop()
+			L.attrition_data[R].area = previous_action.info.attrition_data.area
+			L.attrition_data[R].num_losses_remaining = previous_action.info.attrition_data.num_losses_remaining
+			L.attrition_data[R].devastation_increase = previous_action.info.attrition_data.devastation_increase
+			return
+		default:
+			throw new Error(`Unknown action: ${previous_action.action}`)
+		}
+	},
+	area(area) 		{ this.states[L.state[R]].on_area(area) },
+	exhaust() 		{ this.states[L.state[R]].on_exhaust() },
+	eliminate_2() 	{ this.states[L.state[R]].on_eliminate_2() },
+	troop(type)		{ this.states[L.state[R]].on_troop(type) },
+	order(order)	{ this.states[L.state[R]].on_order(order) },
+	next()			{ this.states[L.state[R]].on_next() },
+	pass()			{ this.states[L.state[R]].on_pass() },
+	confirm()		{ this.states[L.state[R]].on_confirm() },
+}
+
+// === LINES OF COMMUNICATIONS ===
+P.lines_of_communications = {
+	_begin() {
+		log_h2("Lines of Communications")
+		G.active = [RUSSIA, FRANCE]
+	},
+	prompt() {
+		prompt("todo")
 	}
 }
 
@@ -7940,7 +8504,7 @@ function increase_devastation(area, amount = 1) {
 //RU #4: Evasive Maneuvers
 P.evasive_maneuvers = {
 	_begin() {
-		log_h3("Execute Orders", NONE)
+		log_h3("Execute Orders")
 		G.active = RUSSIA
 		L.current_order = -1
 		L.has_executed_order = false
@@ -8562,6 +9126,55 @@ P.flying_columns = {
 	}
 }
 
+// RU #21 Overstretched Logistics
+P.overstretched_logistics = {
+	_begin() { 
+		L.has_russia_confirmed = false
+		L.has_france_confirmed = false
+	},
+	prompt() {
+		if (!L.has_russia_confirmed) {
+			prompt_card(OVERSTRETCHED_LOGISTICS, "France must either remove a depot marker or add 1 to the distance to the nearest Depot marker when checking for Attrition. Confirm?")
+			button_confirm()
+		} else if (!L.has_france_confirmed) {
+			if (has_depot_on_map(FRANCE)) {
+				prompt_card(OVERSTRETCHED_LOGISTICS, `Remove a depot marker or add 1 to the distance to the nearest Depot marker when checking for Attrition.`)
+				for (let depot = get_first_depot(FRANCE); depot <= get_last_depot(FRANCE); ++depot)
+					if (is_depot_on_map(depot)) action_depot(depot)
+			} else {
+				prompt_card(OVERSTRETCHED_LOGISTICS, `Add 1 to the distance to the nearest Depot marker when checking for Attrition.`)
+				button("add_1_to_attrition_distance")
+			}
+		} else {
+			prompt_card(OVERSTRETCHED_LOGISTICS, "All done.")
+			button_done()
+		}
+	},
+	confirm() {
+		G.active = FRANCE
+		L.has_russia_confirmed = true
+	},
+	depot(depot) {
+		push_undo()
+		log(`Removed from S${get_depot_location(depot)}`)
+		logi("1 depot marker")
+		remove_depot(depot, get_depot_location(depot))
+		L.has_france_confirmed = true
+	},
+	add_1_to_attrition_distance() {
+		push_undo()
+		log(`France adds 1 to the distance to the nearest Depot marker when checking for Attrition.`)
+		add_persistent_event(OVERSTRETCHED_LOGISTICS)
+		L.has_france_confirmed = true
+	},
+	done() {
+		if (G.active === FRANCE)
+			G.active = RUSSIA
+		else
+			end()
+	}
+}
+
 // RU #22: City Ablaze!
 P.russia_may_play_city_ablaze = {
 	//L.area
@@ -8829,6 +9442,71 @@ P.cavalry_screening = {
 	}
 }
 
+// RU #30: Devastated Landscape
+P.devastated_landscape = {
+	prompt() {
+		prompt_card(DEVASTATED_LANDSCAPE, `Confirm event play? (cannot be undone)`)
+		button_confirm()
+	},
+	confirm() {
+		goto("execute_devastated_landscape")
+	},
+	done() {
+		push_undo()
+		end()
+	}
+}
+
+// TODO: undo
+P.execute_devastated_landscape = {
+	_begin() {
+		G.active = [RUSSIA, FRANCE]
+		L.forage_orders = [get_placed_orders_of_type(FORAGE).filter(order => get_order_owner(order) === RUSSIA), get_placed_orders_of_type(FORAGE).filter(order => get_order_owner(order) === FRANCE)]
+		L.has_confirmed_devastation = [false, false]
+		L.removed_orders = [[], []]
+	},
+	prompt() {
+		if (L.forage_orders[R].length > 0) {
+			if (L.forage_orders[R].length > 0) {
+				prompt_card(DEVASTATED_LANDSCAPE, `Remove Forage orders from ${join_array_with_and(L.forage_orders[R].map(order => `S${get_order_location(order)}`))}.`)
+				for (let order of L.forage_orders[R]) 
+					action_order(order)
+			}
+		} else if (!L.has_confirmed_devastation[R]) {
+			prompt_card(DEVASTATED_LANDSCAPE, `The effect of all Devastation markers is doubled this turn.`)
+			button_next()
+		} else {
+			prompt_card(DEVASTATED_LANDSCAPE, `All done.`)
+			button_confirm()
+		}
+		button_undo(L.removed_orders[R].length > 0 || L.has_confirmed_devastation[R])
+	},
+	order(order) {
+		L.removed_orders[R].push({ order, area: get_order_location(order) })
+		remove_order(order)
+		set_delete(L.forage_orders[R], order)
+	},
+	next() {
+		L.has_confirmed_devastation[R] = true
+	},
+	undo() {
+		if (L.has_confirmed_devastation[R]) {
+			L.has_confirmed_devastation[R] = false
+		} else {
+			let previously_removed = L.removed_orders[R].pop()
+			G.orders[previously_removed.order] = previously_removed.area
+			set_add(L.forage_orders[R], previously_removed.order)
+		}
+	},
+	confirm() {
+		set_delete(G.active, R)
+		if (G.active.length === 0) {
+			add_persistent_event(DEVASTATED_LANDSCAPE)
+			end()
+		}
+	}
+}
+
 // RU #31: Stoic Infantry
 E.stoic_infantry = function() { return is_battle_defender(RUSSIA, G.current_battle) && (count_num_infantry(RUSSIA, G.current_battle) > 0) }
 
@@ -9035,6 +9713,35 @@ P.exhausted_horses = { //TODO
 	_begin() {
 		end()
 	}
+}
+
+// RU #44 Disease & Starvation
+P.disease_and_starvation = {
+	_begin() {
+		L.num_enemy_sps_eliminated = 0
+
+		L.areas = []
+		for (let area = FIRST_AREA; area <= LAST_AREA; ++area)
+			if (get_devastation(area) >= 2 && has_friendly_troop(FRANCE, area))
+				set_add(L.areas, area)
+	},
+	prompt() {
+		if (L.num_enemy_sps_eliminated < 4) {
+			if (L.areas.length > 0) {
+				prompt_card(DISEASE_AND_STARVATION, `Select an area with a Devastation level of 2 or more to eliminate up to ${4 - L.num_enemy_sps_eliminated} SPs.`)
+				if (L.areas.length <= 5) V.prompt += ` ${join_array_with_or(L.areas.map(area => `S${area}`))}`
+
+				for (let area of L.areas) 
+					action_area(area)
+			} else {
+				prompt_card(DISEASE_AND_STARVATION, `No more areas with a Devastation level of 2 or more to eliminate French SPs.`)
+				button_done()
+			}
+		} else {
+			prompt_card(DISEASE_AND_STARVATION, "All done.")
+			button_done()
+		}
+	},
 }
 
 // RU #47: Treacherous Allies
@@ -10317,6 +11024,10 @@ function map_decrement(map, key, amount = 1) {
 		map_set(map, key, current - amount)
 }
 
+function roll_d6() {
+	return random(6) + 1
+}
+
 //=== PROMPT HELPERS ===
 function prompt_leader(leader, text) {
 	prompt(`L${leader}: ${text}`)
@@ -10380,13 +11091,18 @@ function log_h2(text) {
 	log()
 }
 
-function log_h3(text, who = 2) {
+function log_h3(text) {
 	log()
-	log(`#${get_abbreviation(who)}${text}`)
+	log(`#${text}`)
 }
 
-function log_h4(text) {
-	log("$" + text)
+function log_h4(text, who = BOTH) {
+	log()
+	log(`$${get_abbreviation(who)}${text}`)
+}
+
+function log_h5(text) {
+	log("%" + text)
 }
 
 function logi(text) {
@@ -10437,6 +11153,10 @@ function log_russia_only(text) {
 
 function log_france_only(text) {
 	log("HF" + text)
+}
+
+function log_roll(roll) { //Uses fallback white die defined in world.js
+	log(`W${roll}`)
 }
 
 //=== COMMON FRAMEWORK - DO NOT EDIT ===
