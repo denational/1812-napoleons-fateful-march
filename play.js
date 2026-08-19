@@ -442,6 +442,9 @@ function on_init() {
 	define_marker_list("depot", 14, 20, "fr")
 	define_marker_list("attrition_checked", 0, 80)
 
+	define_marker_list("half_strength_ru", 0, 15)
+	define_marker_list("half_strength_fr", 0, 15)
+
 	/* TRACKS */
 	define_layout_track_v("track-vp", 0, 20, layout["VP Track"])
 	define_marker("vp", 0)
@@ -699,13 +702,36 @@ function update_leaders() {
 	}
 }
 
+function has_bridge(from, to) {
+	return data.areas[from].bridge.includes(to)
+}
+
 function update_troops() {
 	map_for_each(G.troops, (area, entries) => {
+		let half_strength_connections = []
+		let half_strength_areas = []
 		for (let entry of entries) {
 			//Unraveling bitmasks
 			let who = decode_troop_entry_who(entry)
 			let type = decode_troop_entry_type(entry)
 			let num = decode_troop_entry_num(entry)
+
+			if (has_battle(area) && is_battle_attacker(who, area)) {
+				for (let entry of get_attacker_data(area).forces) {
+					let connection = find_connection(entry.from, area)
+					if (!set_has(half_strength_connections, connection) && entry.move_type === 0)
+						populate_generic("connection_stack", connection, `half_strength_${get_abbreviation(who)}`, 1)
+					if (!set_has(half_strength_connections, connection) && has_bridge(entry.from, area))
+						populate_generic("connection_stack", connection, `half_strength_${get_abbreviation(who)}`, 1)
+					set_add(half_strength_connections, connection)
+				}
+			} else {
+				if (map_has(V.moved, area) && map_get(V.moved, area).some(entry => entry.move_type === 0) && !set_has(half_strength_areas, area)) {
+					populate_generic("area_stack", area, `half_strength_${get_abbreviation(who)}`, 1)
+					set_add(half_strength_areas, area)
+				}
+			}
+			
 
 			//Updating the marker to its 'fresh' or 'exhausted' side
 			if (is_fresh(type)) {
@@ -726,7 +752,8 @@ function update_troops() {
 							update_keyword(get_troop_name(type), get_used(who, type), "exhausted")
 						}
 
-						let connection = find_connection(area, entry.from)
+						let connection = find_connection(area, entry.from)						
+
 						if (entry.leaders.length === 0) {
 							populate("connection_stack", connection, get_troop_name(type), get_used(who, type))
 						} else {

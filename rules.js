@@ -616,6 +616,18 @@ function get_hand(who) {
 	return G.hand[who]
 }
 
+function get_non_dummy_cards_in_hand(who) {
+	return get_hand(who).filter(card => !is_card_dummy(card))
+}
+
+function count_non_dummy_cards_in_hand(who) {
+	return array_count(get_hand(who), card => !is_card_dummy(card))
+}
+
+function hand_has(who, card) {
+	return set_has(get_hand(who), card)
+}
+
 function get_deck(who) {
 	return G.deck[who]
 }
@@ -630,10 +642,6 @@ function get_removed(who) {
 
 function get_dummy(who) {
 	return (who === RUSSIA) ? C_DUMMY_RU : C_DUMMY_FR
-}
-
-function count_non_dummy_cards_in_hand(who) {
-	return G.hand[who].includes(get_dummy(who)) ? G.hand[who].length - 1 : G.hand[who].length
 }
 
 /* AREAS */
@@ -1181,22 +1189,30 @@ function find_connection(a, b) {
 
 //=== STATE-MANIPULATING FUNCTIONS ===
 /* CARDS */
+function add_to_hand(who, card) {
+	set_add(get_hand(who), card)
+}
+
+function remove_card_from_hand(who, card) {
+	set_delete(get_hand(who), card)
+}
+
 function draw_card(who) {
 	let drawn_card = get_deck(who).pop()
-	get_hand(who).push(drawn_card)
+	add_to_hand(who, drawn_card)
 	log(`${ROLES[who]} drew a card.`)
 	return drawn_card
 }
 
 function discard_card(c) {
-	let card_owner = get_card_owner(c)
-	array_delete_item(get_hand(card_owner), c)
-	set_add(get_discard(card_owner), c)
+	let who = get_card_owner(c)
+	remove_card_from_hand(who, c)
+	set_add(get_discard(who), c)
 }
 
 function remove_card(c) {
 	let who = get_card_owner(c)
-	array_delete_item(get_hand(who), c)
+	remove_card_from_hand(who, c)
 	set_add(get_removed(who), c)
 }
 
@@ -1205,11 +1221,11 @@ function discard_or_remove_card(c) {
 }
 
 function return_dummy_to_hand(who) {
-	array_insert(get_hand(who), 0, get_dummy(who))
+	add_to_hand(who, get_dummy(who))
 }
 
 function has_card_in_hand(who) {
-	return get_hand(who).some(card => !is_card_dummy(card)) && (get_hand(who).length > 0)
+	return get_non_dummy_cards_in_hand(who).length > 0
 }
 
 /* TROOPS */
@@ -1273,33 +1289,26 @@ function move_formation(leaders, troops, from, to) {
 			move_troop(G.active, from, to, type, troops[type])
 }
 
-function mark_already_moved(who, area, leaders, troops) {
-	for (let leader of leaders)
-		set_add(G.already_moved.leaders, leader)
+function mark_already_moved(who, path, move_type, leaders, troops) {
+	let destination = path[path.length - 1]
 
-	if (!map_has(G.already_moved.troops, area)) map_set(G.already_moved.troops, area, [])
-	for (let type = 0; type < troops.length; ++type) {
-		if (troops[type] > 0)
-			add_troop_to_already_moved(who, area, type, troops[type])
-	}
-}
-
-function add_troop_to_already_moved(who, area, type, num) {
-	if (!map_has(G.already_moved.troops, area)) map_set(G.already_moved.troops, area, [])
+	if (!map_has(G.moved, destination)) map_set(G.moved, destination, [])
 	
-	let entry = map_get(G.already_moved.troops, area, null)?.find(entry => (decode_troop_entry_who(entry) === who) && (decode_troop_entry_type(entry) === type)) ?? null
-	if (entry !== null)
-		set_already_moved(who, area, type, decode_troop_entry_num(entry) + num)
-	else
-		set_already_moved(who, area, type, num)
-}
+	let entry = 
+	{
+		faction: who,
+		from: path[path.length - 2],
+		move_type: move_type,
+		river_crossing: has_bridge(path[path.length - 2], destination),
+		leaders: [],
+		troops: Array(NUM_TROOP_TYPES).fill(0)
+	}
 
-function set_already_moved(who, area, type, num) {
-	let entry = map_get(G.already_moved.troops, area, null)?.find(entry => (decode_troop_entry_who(entry) === who) && (decode_troop_entry_type(entry) === type)) ?? null
-	if (entry !== null)
-		set_delete(map_get(G.already_moved.troops, area, null), entry)
+	for (let leader of leaders) set_add(entry.leaders, leader)
+	for (let type = 0; type < troops.length; ++type) entry.troops[type] += troops[type]
 
-	set_add(map_get(G.already_moved.troops, area, null), construct_troop_entry(who, type, num))
+	map_get(G.moved, destination, null).push(entry)
+	console.log(JSON.stringify(G.moved, null, 2))
 }
 
 /* ORDERS */
@@ -1354,6 +1363,7 @@ function on_view() {
 	V.seniority = G.seniority
 	V.battles = G.battles
 	V.attrition_checked = G.attrition_checked
+	V.moved = G.moved
 }
 
 // === FRAMEWORK EXTENSIONS ===
@@ -1443,6 +1453,7 @@ function on_setup(scenario, options) {
 	G.enemy_orders = []
 	G.selected_orders = [[], []]
 
+	G.moved = []
 	G.battles = []
 
 	//To track who commands who (particularly in cases where both leaders have the same seniority)
@@ -1451,10 +1462,7 @@ function on_setup(scenario, options) {
 		[L_NAPOLEON, L_JEROME, L_DE_BEAUHARNAIS, L_DAVOUT, L_MURAT, L_SCHWARZENBERG]
 	]
 
-	G.already_moved = {
-		leaders: [],
-		troops: []
-	}
+	
 
 	G.attrition_checked = []
 
@@ -1988,9 +1996,7 @@ P.setup_hand = {
 			button_undo(L.discarded_cards[R].length > 0)
 			button("shuffle", num_non_dummy_cards[R] <= L.hand_size[R])
 
-			for (let card of get_hand(R))
-				if (!is_card_dummy(card))
-					action_card(card)
+			get_non_dummy_cards_in_hand(R).forEach(action_card)
 		} else {
 			if ((num_non_dummy_cards[R] === L.hand_size[R]) && (L.drawn_card[R] === -1)) {
 				prompt(`Setup hand – All done.`)
@@ -2013,10 +2019,10 @@ P.setup_hand = {
 	},
 	card(card) {
 		L.discarded_cards[R].push(card)
-		array_delete_item(get_hand(R), card)
+		remove_card_from_hand(R, card)
 	},
 	undo() {
-		set_add(get_hand(R), L.discarded_cards[R].pop())
+		add_to_hand(R, L.discarded_cards[R].pop())
 	},
 	shuffle() {
 		for (let card of L.discarded_cards[R])
@@ -2446,7 +2452,8 @@ P.draw_card_to_hand = {
 						if (has_card_in_hand(R)) {
 							prompt_card(C_VULNERABLE_SUPPLY_LINES, "Discard a card from your hand.")
 							for (let card of get_hand(R))
-								if (!is_card_dummy(card) && card !== C_VULNERABLE_SUPPLY_LINES) action_card(card)
+								if (!is_card_dummy(card) && card !== C_VULNERABLE_SUPPLY_LINES) 
+									action_card(card)
 						} else {
 							prompt_card(C_VULNERABLE_SUPPLY_LINES, "No cards in hand to discard.")
 							button_next()
@@ -2496,7 +2503,7 @@ P.draw_card_to_hand = {
 			on_undo() {
 				if (get_event_step(C_VULNERABLE_SUPPLY_LINES) === 0) { //undo discard
 					set_delete(get_discard(R), get_event_data(C_VULNERABLE_SUPPLY_LINES).discarded_card)
-					get_hand(R).push(get_event_data(C_VULNERABLE_SUPPLY_LINES).discarded_card)
+					add_to_hand(R, get_event_data(C_VULNERABLE_SUPPLY_LINES).discarded_card)
 					get_event_data(C_VULNERABLE_SUPPLY_LINES).discarded_card = -1
 					decrement_event_tracker(C_VULNERABLE_SUPPLY_LINES)
 				} else {
@@ -2688,26 +2695,24 @@ P.play_card_for_orders = {
 	prompt() {
 		if (L.played_card[R] === -1) {
 			prompt("Play a card for additional orders, or play a Dummy.")
-			for (let c of get_hand(R)) {
-				action_card(c)
-			}
+			get_hand(R).forEach(card => action_card(card))
 		} else {
 			prompt(`You played ${get_card_log_alias(L.played_card[R])} for ${L.ops_played[R]} additional orders.`)
 			button_confirm()
 			button_undo()
 		}
 	},
-	card(c) {
-		L.played_card[R] = c
-		L.ops_played[R] = get_card_ops(c)
-		array_delete_item(get_hand(R), c)
+	card(card) {
+		L.played_card[R] = card
+		L.ops_played[R] = get_card_ops(card)
+		discard_card(card)
 	},
 	undo() {
-		if (is_card_dummy(L.played_card[R])) {
+		if (is_card_dummy(L.played_card[R]))
 			return_dummy_to_hand(R)
-		} else {
-			get_hand(R).push(L.played_card[R])
-		}
+		else
+			add_to_hand(R, L.played_card[R])
+
 		L.played_card[R] = -1
 		L.ops_played[R] = -1
 	},
@@ -2767,7 +2772,7 @@ P.play_events_with_ops_card = {
 			[C_WELL_DISCIPLINED_RETREAT, C_OPOLCHENIE, C_SCORCHED_EARTH, C_GARRISON_TROOPS, C_PRIDE_AND_HESITATION, C_KUTUZOV_APPOINTED, C_THE_FINLAND_CORPS, C_TREATY_OF_BUCHAREST, C_THE_CZAR_LEAVES_THE_ARMY],
 			[C_HARD_MARCHING_1, C_HARD_MARCHING_2, C_WAR_WEARINESS, C_HOLY_MOTHER_RUSSIA_FR, C_POLISH_SUPPORT, C_PEACE_OFFER, C_DAVOUT_TAKES_COMMAND, C_IX_CORPS_ARRIVES, C_XI_CORPS_ARRIVES],
 		]
-		L.events_could_be_played = L.events[G.active].filter(c => can_play_event(c) && (get_hand(G.active).includes(c)))
+		L.events_could_be_played = L.events[G.active].filter(card => can_play_event(card) && hand_has(G.active, card))
 		L.has_played_event = false
 	},
 	prompt() {
@@ -3117,7 +3122,7 @@ P.place_orders = script(`
 	log "@Place Orders"
 	
 	set G.active FRANCE
-	if (is_event_active(COMMAND_FRICTION)) {
+	if (is_event_active(C_COMMAND_FRICTION)) {
 		call command_friction
 	}
 	call place_orders_events { time: "beginning" }
@@ -3126,7 +3131,7 @@ P.place_orders = script(`
 	call do_place_orders
 
 	set G.active RUSSIA
-	if (is_event_active(POOR_COMMUNICATIONS)) {
+	if (is_event_active(C_POOR_COMMUNICATIONS)) {
 		call poor_communications
 	}
 	call place_orders_events { time: "end" }
@@ -3138,7 +3143,7 @@ P.place_orders_events = {
 	_begin() {
 		//L.time
 		L.events = (L.time === "beginning") ? [C_INFIGHTING_AND_INTRIGUE, C_LETHARGIC_PURSUIT] : [C_NEW_POSTING, C_EXHAUSTED_HORSES, C_DISORDERLY_MARCH]
-		L.playable_events = L.events.filter(card => can_play_event(card) && get_hand(G.active).includes(card))
+		L.playable_events = L.events.filter(card => can_play_event(card) && hand_has(G.active, card))
 		L.has_played_event = false
 	},
 	prompt() {
@@ -3327,7 +3332,7 @@ P.determine_who_goes_first = {
 				prompt_card(C_EVASIVE_MANEUVERS, "Russia executes all forced march orders first this turn, but may not end moves in or adjacent to enemy-occupied areas.")
 				button_confirm()
 			} else {
-				if (get_hand(RUSSIA).includes(C_EVASIVE_MANEUVERS)) {
+				if (hand_has(G.active, C_EVASIVE_MANEUVERS)) {
 					prompt(`You may play ${get_card_log_alias(C_EVASIVE_MANEUVERS)}.`)
 					action_card(C_EVASIVE_MANEUVERS)
 					button_pass()
@@ -3347,7 +3352,7 @@ P.determine_who_goes_first = {
 					button_confirm()
 				}
 			} else {
-				if (get_hand(FRANCE).includes(C_ENERGETIC_LEADERSHIP)) {
+				if (hand_has(G.active, C_ENERGETIC_LEADERSHIP)) {
 					prompt(`You may play ${get_card_log_alias(C_ENERGETIC_LEADERSHIP)}.`)
 					action_card(C_ENERGETIC_LEADERSHIP)
 					button_pass()
@@ -3580,9 +3585,7 @@ P.change_orders = {
 	prompt_discard_card_to_place(type) {
 		if (L.step[R] === -1) {
 			prompt_leader(L.selected_leader[R], `Discard a card in order to place '${get_order_type_name(type)}'.`)
-			for (let c of get_hand(R)) 
-				if (!is_card_dummy(c)) 
-					action_card(c)
+			get_non_dummy_cards_in_hand(R).forEach(action_card)
 		} else {
 			let leader_location = get_leader_location(L.selected_leader[R])
 			prompt_leader(L.selected_leader[R], `Place a '${get_order_type_name(type)}' order at S${leader_location}.`)
@@ -3656,7 +3659,7 @@ P.change_orders = {
 			} else {
 				if ((L.selected_leader[R] === L_CHICHAGOV) || (L.selected_leader[R] === L_SCHWARZENBERG)) {
 					set_delete(get_discard(R), L.discarded_card[R])
-					get_hand(R).push(L.discarded_card[R])
+					add_to_hand(R, L.discarded_card[R])
 					L.discarded_card[R] = -1
 				} else if (L.selected_leader[R] === L_NAPOLEON) {
 					place_order(L.removed_orders[R].pop(), get_leader_location(L_NAPOLEON))
@@ -3752,7 +3755,7 @@ P.forced_march = script(`
 		log ""
 	} else {
 		call determine_who_goes_first { order_type: FORCED_MARCH }
-		if (is_event_active(EVASIVE_MANEUVERS)) {
+		if (is_event_active(C_EVASIVE_MANEUVERS)) {
 			goto evasive_maneuvers
 		} else {
 			call execute_forced_marches { first_player: L.$ }
@@ -3796,7 +3799,7 @@ P.execute_forced_marches = {
 		let area = get_order_location(order)
 		remove_order(order)
 		L.current_order = order
-		if ((G.active === RUSSIA) && (get_leader_location(L_BAGRATION) === area) && can_play_event(C_BAGRATIONS_RETREAT) && get_hand(RUSSIA).includes(C_BAGRATIONS_RETREAT)) 
+		if ((G.active === RUSSIA) && (get_leader_location(L_BAGRATION) === area) && can_play_event(C_BAGRATIONS_RETREAT) && hand_has(G.active, C_BAGRATIONS_RETREAT)) 
 			call("may_play_bagrations_retreat", { type: FORCED_MARCH, area: area})
 		else
 			call("select_force", { type: FORCED_MARCH, area: area})
@@ -3937,7 +3940,27 @@ P.execute_marches = {
 			FR #53	Lethargic Pursuit		- RU may not enter areas with a french leader
 */
 
+/*
+	G.moved: plain array map
+	[area, [entries], area, [entries]]
+
+	entry: {
+		forced_march: false
+		did_cross_bridge: false
+		leaders: []
+		troops: Array(12)
+	}
+*/
+
 /* SELECT FORCE */
+function has_leader_moved(leader) {
+	let area = get_leader_location(leader)
+
+	if (!map_has(G.moved, area)) return false
+
+	return map_get(G.moved, area, null).some(entry => set_has(entry.leaders, leader))
+}
+
 function get_all_movable_troops_in_area(who, area) {
 	let list = Array(NUM_TROOP_TYPES).fill(0)
 	if (!has_friendly_troop(who, area)) return list
@@ -3948,13 +3971,11 @@ function get_all_movable_troops_in_area(who, area) {
 			let num = decode_troop_entry_num(entry)
 			list[type] = num
 
-			if (map_has(G.already_moved.troops, area)) {
-				let already_moved_entries = map_get(G.already_moved.troops, area, [])
-
-				let ent = already_moved_entries.find(e => (decode_troop_entry_who(e) === who) && (decode_troop_entry_type(e) === type)) ?? -1
-				if (ent > -1) {
-					list[decode_troop_entry_type(ent)] -= decode_troop_entry_num(ent)
-					continue
+			if (map_has(G.moved, area)) {
+				let entries =  map_get(G.moved, area, null)
+				for (let entry of entries) {
+					for (let type = 0; type < entry.troops.length; ++type)
+						list[type] -= entry.troops[type] 
 				}
 			}
 		}
@@ -3988,6 +4009,7 @@ P.select_force = {
 		//Leaders at area and troops eligible for movement (not those that have moved previously)
 		L.leaders_at_area = get_leaders_at_area(G.active, L.area)
 		L.troops_at_area = get_all_movable_troops_in_area(G.active, L.area)		
+
 		L.num_troops_selected = 0
 
 		L.move = {
@@ -4024,7 +4046,7 @@ P.select_force = {
 
 			if (L.leaders_at_area.length > L.move.leaders.length) {
 				for (let leader of L.leaders_at_area) {
-					if (!set_has(L.move.leaders, leader) && !set_has(G.already_moved.leaders, leader))
+					if (!set_has(L.move.leaders, leader) && !has_leader_moved(leader))
 						button_leader(leader)
 				}
 			}
@@ -4050,7 +4072,7 @@ P.select_force = {
 			prompt(`Select up to 4 SPs (at least 1) to move from S${L.area}.`)
 
 			for (let leader of L.leaders_at_area)
-				if (!set_has(G.already_moved.leaders, leader))
+				if (!has_leader_moved(leader))
 					button_leader(leader)
 
 			for (let type of get_troop_types_at_area(G.active, L.area)) {
@@ -4096,7 +4118,7 @@ P.select_force = {
 	},
 	done() {
 		push_undo()
-		if ((L.type === MARCH) && (G.active === FRANCE) && (get_hand(FRANCE).includes(C_PONIATOWSKIS_V_CORPS))) 
+		if ((L.type === MARCH) && (G.active === FRANCE) && hand_has(FRANCE, C_PONIATOWSKIS_V_CORPS)) 
 			goto("may_play_poniatowskis_v_corps", { move: L.move })
 		else
 			goto("move", { move: L.move })
@@ -4157,6 +4179,7 @@ P.move = {
 		L.confirm_battle = false
 	},
 	prompt() {
+		console.log(JSON.stringify(G.moved, null, 2))
 		if (L.confirm_battle) {
 			prompt("This move may trigger a battle. Confirm?")
 			button_confirm()
@@ -4240,7 +4263,7 @@ P.move = {
 	}, 
 	done() {
 		push_undo()
-		mark_already_moved(G.active, L.move.path[L.move.path.length - 1], L.move.leaders, L.move.troops)
+		mark_already_moved(G.active, L.move.path, L.move.type, L.move.leaders, L.move.troops)
 		//TODO: Attrition losses not yet implemented
 		end()
 	},
@@ -4254,19 +4277,35 @@ P.move = {
 			decrease_vp(G.active, get_area_vp(previous_area))
 		}
 
-		mark_already_moved(G.active, L.current_area, L.move.leaders, L.move.troops)
-
 		if (!has_battle(L.current_area))
 			log(`Battle declared at S${L.current_area}.`)
 
-		if (!has_battle(L.current_area)) {
+		if (!has_battle(L.current_area) && !map_has(G.moved, L.current_area)) {
 			add_attacker_to_battle(G.active, previous_area, L.current_area, L.move.type, L.move.leaders.slice(), L.move.troops.slice())
 			add_defender_to_battle(enemy(G.active), L.current_area, L.current_area, -1, get_leaders_at_area(enemy(G.active), L.current_area), get_troop_list_by_type(enemy(G.active), L.current_area))
+		} else if (!has_battle(L.current_area) && map_has(G.moved, L.current_area)) {
+			add_attacker_to_battle(G.active, previous_area, L.current_area, L.move.type, L.move.leaders.slice(), L.move.troops.slice())
+			let leaders = get_leaders_at_area(enemy(G.active), L.current_area)
+			let troops = get_troop_list_by_type(enemy(G.active), L.current_area)
+			for (let entry of map_get(G.moved, L.current_area, null)) {
+				if (entry.faction === enemy(G.active)) {
+					add_defender_to_battle(enemy(G.active), L.current_area, L.current_area, entry.move_type, entry.leaders, entry.troops)
+					for (let leader of leaders) set_delete(leaders, leader)
+					for (let type = 0; type < troops.length; ++type)
+						troops[type] -= entry.troops[type]
+				}
+			}
+			if (troops.some(type => type > 0) || leaders.length > 0)
+				add_defender_to_battle(enemy(G.active), L.current_area, L.current_area, -1, leaders, troops)
 		} else if (has_battle(L.current_area) && (get_battle_attacker(L.current_area) === G.active)) {
 			add_attacker_to_battle(G.active, previous_area, L.current_area, L.move.type, L.move.leaders.slice(), L.move.troops.slice())
 		} else if (has_battle(L.current_area) && (get_battle_defender(L.current_area) === G.active)) {
 			add_defender_to_battle(G.active, previous_area, L.current_area, L.move.type, L.move.leaders.slice(), L.move.troops.slice())
 		}
+
+		mark_already_moved(G.active, L.move.path, L.move.type, L.move.leaders, L.move.troops)
+
+		console.log(JSON.stringify(G.battles, null, 2))
 	
 		if (is_event_active(C_HARD_MARCHING_1)) {
 			add_battle_event(L.current_area, C_HARD_MARCHING_1)
@@ -4305,8 +4344,7 @@ P.remove_depot = {
 		} else if (!L.has_discarded) {
 			if (count_non_dummy_cards_in_hand(G.active) > 0) {
 				prompt(`Discard a card from your hand.`)
-				for (let c of get_hand(G.active)) 
-					if (!is_card_dummy(c)) action_card(c)
+				get_non_dummy_cards_in_hand(G.active).forEach(action_card)
 			} else {
 				prompt(`No cards in hand to discard.`)
 				button_pass()
@@ -4428,7 +4466,7 @@ P.execute_cavalry_patrols = {
 		log_h4(`S${area}`, G.active)
 		remove_order(order)
 		L.current_order = order
-		if ((G.active === RUSSIA) && get_hand(RUSSIA).includes(C_CONFUSED_RETREAT))
+		if ((G.active === RUSSIA) && hand_has(RUSSIA, C_CONFUSED_RETREAT))
 			call("may_play_confused_retreat", { area })
 		else
 			call("do_cavalry_patrols", { area })
@@ -4556,28 +4594,25 @@ P.evade = script(`
 //TODO: Unexpected Retreat
 P.may_play_evade_events = {
 	_begin() {
-		L.events = [C_UNEXPECTED_RETREAT, C_CAVALRY_SCREENING]
-		L.events_in_hand = L.events.filter(card => get_hand(RUSSIA).includes(card))
-		L.played_event = false
+		L.events = [C_UNEXPECTED_RETREAT, C_CAVALRY_SCREENING].filter(card => hand_has(RUSSIA, card))
+		L.has_played_event = false
 	},
 	prompt() {
-		if ((L.events_in_hand.length === 0)) {
-			if (L.played_event) {
-				prompt(`Play Events: All done.`)
-				button_done()
-			} else {
-				prompt(`You do not have ${get_card_log_alias(C_UNEXPECTED_RETREAT)} or ${get_card_log_alias(C_CAVALRY_SCREENING)} in hand.`)
-				button_pass()
-			}
-		} else {
+		if (L.events.length > 0) {
 			prompt(`You may play ${join_array_with_and(L.events_in_hand.map(card => get_card_log_alias(card)))}.`)
+			L.events.forEach(action_card)
 			button_pass()
-			for (let card of L.events_in_hand) action_card(card)
+		} else if (L.has_played_event) {
+			prompt(`Play Events: All done.`)
+			button_done()
+		} else {
+			prompt(`You do not have ${get_card_log_alias(C_UNEXPECTED_RETREAT)} or ${get_card_log_alias(C_CAVALRY_SCREENING)} in hand.`)
+			button_pass()
 		}
 	},
 	card(card) {
 		push_undo()
-		L.played_event = true
+		L.has_played_event = true
 		set_delete(L.events_in_hand, card)
 		call("event", { card })
 	},
@@ -5485,7 +5520,7 @@ P.resolve_battles = {
 	area(area) {
 		clear_undo()
 		G.current_battle = area
-		log_h4(`Battle of S${area}`, get_battle_attacker(area))
+		log_h4(`S${area}`, get_battle_attacker(area))
 		log()
 		call("do_battle", { area: area, attacker: get_battle_attacker(area), defender: get_battle_defender(area) })
 	},
@@ -5568,14 +5603,14 @@ function get_num_battle_events_could_by_played(who, area) {
 }
 
 P.play_battle_events = script(`
-	log "$Play Battle Events"
+	log "%Play Battle Events"
 	set G.played_cards [[], []]
 	set G.active L.attacker
 	call commit_battle_events { area: L.area }
 	set G.active L.defender
 	call commit_battle_events { area: L.area }	
 	call reveal_battle_events
-	if (is_battle_event_currently_active(THE_IMPERIAL_GUARD) && get_hand(RUSSIA).includes(INDECISION)) {
+	if (is_battle_event_currently_active(C_THE_IMPERIAL_GUARD) && hand_has(RUSSIA, C_INDECISION)) {
 		call may_play_indecision { response_to: "the_imperial_guard" }
 	}
 	
@@ -5618,13 +5653,14 @@ P.commit_battle_events = {
 		} else {
 			prompt(`You may play any battle cards, or a dummy.`)
 			for (let card of get_hand(G.active)) 
-				if ((is_battle_card(card) && can_play_event(card)) || is_card_dummy(card)) action_card(card)
+				if ((is_battle_card(card) && can_play_event(card)) || is_card_dummy(card)) 
+					action_card(card)
 			button_done()
 		}
 	},
 	card(card) {
 		push_undo()
-		array_delete_item(get_hand(G.active), card)
+		remove_card_from_hand(G.active, card)
 		set_add(G.played_cards[G.active], card)
 		L.num_battle_events_in_hand--
 	},
@@ -5709,7 +5745,7 @@ P.do_combat_value_calculations = function() {
 		
 		combat_value[attacker.who] += find_combat_value(attacker.who, attacker.forces[entry])
 	}
-	log_h5(`${ROLES[attacker.who]} total: ${combat_value[attacker.who]}`)
+	log(`${ROLES[attacker.who]} base: ${combat_value[attacker.who]}`)
 
 	let defender = get_defender_data(G.current_battle)
 	for (let entry = 0; entry < defender.forces.length; ++entry) {
@@ -5737,7 +5773,7 @@ P.do_combat_value_calculations = function() {
 		//log(`Outflanking: -${calculate_outflanking_strength(G.current_battle)}`)
 	}
 
-	log_h5(`${ROLES[defender.who]} total: ${combat_value[defender.who]}`)
+	log(`${ROLES[defender.who]} base: ${combat_value[defender.who]}`)
 	log()
 	L.L.$ = combat_value.slice()
 	end()
@@ -6521,8 +6557,8 @@ P.determine_battle_winner = function() {
 				winner = get_who_has_initiative()
 				log(`Initiative: ${ROLES[winner]} won.`)
 			}
-			set_battle_winner(winner)
-			set_battle_loser(enemy(winner))
+			set_battle_winner(winner, G.current_battle)
+			set_battle_loser(enemy(winner), G.current_battle)
 			goto("end_battle", { drawn_battle: true })	
 		}
 	} 
@@ -6531,8 +6567,8 @@ P.determine_battle_winner = function() {
 	else if (is_battle_event_currently_active(C_FIERCE_FIGHTING_RU)) {
 		log(`${get_card_log_alias(C_FIERCE_FIGHTING_RU)}: No pursuit after battle.`)
 		let winner = find_battle_winner(L.count)
-		set_battle_winner(winner)
-		set_battle_loser(enemy(winner))
+		set_battle_winner(winner, G.current_battle)
+		set_battle_loser(enemy(winner), G.current_battle)
 		goto("end_battle", { drawn_battle: false })
 	}
 
@@ -6540,8 +6576,8 @@ P.determine_battle_winner = function() {
 	else {
 		log_h5("Determine Winner")
 		let winner = find_battle_winner(L.count)
-		set_battle_winner(winner)
-		set_battle_loser(enemy(winner))
+		set_battle_winner(winner, G.current_battle)
+		set_battle_loser(enemy(winner), G.current_battle)
 
 		log(`${ROLES[RUSSIA]} inflicted ${L.count[FRANCE]} losses.`)
 		log(`${ROLES[FRANCE]} inflicted ${L.count[RUSSIA]} losses.`)
@@ -7635,7 +7671,7 @@ function get_attrition_events(who) {
 
 P.attrition_events = {
 	_begin() {
-		L.events = get_attrition_events(G.active).filter(card => get_hand(G.active).includes(card))
+		L.events = get_attrition_events(G.active).filter(card => hand_has(G.active, card))
 	},
 	prompt() {
 		if (L.events.length > 0) {
@@ -7760,7 +7796,7 @@ function log_attrition_info(who, area) {
 		log_only(who, `<${get_card_log_alias(C_DEVASTATED_COUNTRYSIDE)}`)
 		log_only(who, `<+${2 * get_devastation(area)}`)
 	} else if (get_devastation(area) > 0) {
-		log_only(`>+${get_devastation(area)} Devastation`)
+		log_only(who, `>+${get_devastation(area)} Devastation`)
 	}
 
 	if ((who === FRANCE) && (get_leader_location(L_MURAT) === area)) log_only(who, `<+1 L${L_MURAT}`)
@@ -8367,7 +8403,7 @@ P.may_play_confused_retreat = {
 	//L.area
 	inactive: "play C2",
 	prompt() {
-		if (get_hand(RUSSIA).includes(C_CONFUSED_RETREAT)) {
+		if (hand_has(RUSSIA, C_CONFUSED_RETREAT)) {
 			prompt(`You may play ${get_card_log_alias(C_CONFUSED_RETREAT)}.`)
 			action_card(C_CONFUSED_RETREAT)
 			button_pass()
@@ -8555,7 +8591,7 @@ P.idle_reserves = {
 P.may_play_bagrations_retreat = {
 	inactive: "play C6",
 	prompt() {
-		if (get_hand(RUSSIA).includes(C_BAGRATIONS_RETREAT)) {
+		if (hand_has(RUSSIA, C_BAGRATIONS_RETREAT)) {
 			prompt(`You may play ${get_card_log_alias(C_BAGRATIONS_RETREAT)}}.`)
 			action_card(C_BAGRATIONS_RETREAT)
 		} else {
@@ -8677,7 +8713,7 @@ P.scorched_earth = {
 	prompt() {
 		if (L.step === -1) {
 			if (get_who_has_initiative() === FRANCE) {
-				prompt_card(C_SCORCHED_EARTH, "Reduce French Initiative by 1")
+				prompt_card(C_SCORCHED_EARTH, "Reduce French Initiative by 1.")
 				action_initiative_marker()
 			} else {
 				prompt_card(C_SCORCHED_EARTH, "France does not have the initiative.")
@@ -9031,7 +9067,7 @@ P.the_czar_leaves_the_army = {
 P.may_play_flying_columns = {
 	inactive: "play C20",
 	prompt() {
-		if (get_hand(RUSSIA).includes(C_FLYING_COLUMNS)) {
+		if (hand_has(RUSSIA, C_FLYING_COLUMNS)) {
 			prompt(`You may play ${get_card_log_alias(C_FLYING_COLUMNS)}.`)
 			action_card(C_FLYING_COLUMNS)
 			button_pass()
@@ -9186,7 +9222,7 @@ P.may_play_city_ablaze = {
 	},
 	inactive: "to play C22",
 	prompt() {
-		if (get_hand(RUSSIA).includes(C_CITY_ABLAZE)) {
+		if (hand_has(RUSSIA, C_CITY_ABLAZE)) {
 			prompt(`You may play ${get_card_log_alias(C_CITY_ABLAZE)}.`)
 			action_card(C_CITY_ABLAZE)
 		} else {
@@ -9280,7 +9316,7 @@ P.may_play_stubborn_rearguard_ru = {
 		G.active = RUSSIA
 	},
 	prompt() {
-		if (get_hand(RUSSIA).includes(C_STUBBORN_REARGUARD_RU)) {
+		if (hand_has(RUSSIA, C_STUBBORN_REARGUARD_RU)) {
 			prompt(`You may play ${get_card_log_alias(C_STUBBORN_REARGUARD_RU)} to cancel any losses from pursuit after this battle.`)
 			action_card(C_STUBBORN_REARGUARD_RU)
 		} else {
@@ -9694,6 +9730,52 @@ P.fierce_fighting_ru = {
 		push_undo()
 		log("Both sides' losses +2.")
 		log("No pursuit after battle.")
+		end()
+	}
+}
+
+// RU #42: Command Friction
+P.command_friction = {
+	_begin() {
+		card_box_begin(C_COMMAND_FRICTION)
+		L.selected_area = -1
+
+		L.areas_with_multiple_russian_leaders = []
+		for (let area of G.leaders.slice(first_russia_leader, last_russia_leader + 1)) {
+			if (array_count(G.leaders.slice(first_russia_leader, last_russia_leader + 1), loc => loc === area) >= 2) {
+				set_add(L.areas_with_multiple_russian_leaders, area)
+			}
+		}
+	},
+	inactive: "start a fight",
+	prompt() {
+		if (L.selected_area > -1) {
+			prompt_card(C_COMMAND_FRICTION, `You selected S${L.selected_area}.`)
+			button_confirm()
+		} else {
+			if (L.areas_with_multiple_russian_leaders.length === 0) {
+				prompt_card(C_COMMAND_FRICTION, `No areas with multiple Russian leaders.`)
+				button_pass()
+			} else {
+				prompt_card(C_COMMAND_FRICTION, `Select an area with multiple Russian leaders. (${join_array_with_or(L.areas_with_multiple_russian_leaders.map(area => `S${area}`))}).`)
+				for (let area of L.areas_with_multiple_russian_leaders) {
+					action_area(area)
+				}
+			}
+		}
+	},
+	area(area) {
+		push_undo()
+		L.selected_area = area
+	},
+	pass() {
+		log("No areas with multiple Russian leaders.")
+		card_box_end()
+		end()
+	},
+	confirm() {
+		log("France selected S" + L.selected_area + ".") 
+		card_box_end()
 		end()
 	}
 }
@@ -10412,7 +10494,7 @@ P.poor_coordination_fr = {
 P.may_play_good_leadership = {
 	inactive: "play C79",
 	prompt() {
-		if (get_hand(FRANCE).includes(C_GOOD_LEADERSHIP)) {
+		if (hand_has(FRANCE, C_GOOD_LEADERSHIP)) {
 			prompt(`You may play ${get_card_log_alias(C_GOOD_LEADERSHIP)}.`)
 			action_card(C_GOOD_LEADERSHIP)
 			button_pass()
@@ -10794,7 +10876,7 @@ function count_num_exhausted_infantry(who, area) {
 P.may_play_poniatowskis_v_corps = {
 	inactive: "play C91",
 	prompt() {
-		if (get_hand(FRANCE).includes(C_PONIATOWSKIS_V_CORPS)) {
+		if (hand_has(FRANCE, C_PONIATOWSKIS_V_CORPS)) {
 			prompt(`You may play ${get_card_log_alias(C_PONIATOWSKIS_V_CORPS)}.`)
 			action_card(C_PONIATOWSKIS_V_CORPS)
 			button_pass()
@@ -10996,9 +11078,9 @@ P.lethargic_pursuit = {
 //=== MISC HELPERS ===
 function array_count(array, callback) {
 	let count = 0
-	for (let elt of array) {
-		if (callback(elt)) { ++count }
-	}
+	for (let item of array)
+		if (callback(item))
+			++count
 	return count
 }
 
