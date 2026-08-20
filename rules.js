@@ -752,7 +752,7 @@ function is_leader_on_map(leader) {
 	return (get_leader_location(leader) !== POOL) && (get_leader_location(leader) !== OUT_OF_PLAY)
 }
 
-function set_leader(who, where) { //TO REFACTOR
+function set_leader(who, where) {
 	G.leaders[who] = where
 }
 
@@ -850,12 +850,12 @@ function has_non_dummy_order_at_area(who, area) {
 /* TROOPS */
 /*
 	G.troops is a plain array map, using the map functions from the framework.
-	Each key in the 'map' corresponds to an area id, where there are troops. This is intentionally sparse to save storage area, areas with no troops will be culled.
+	Each key in the 'map' corresponds to an area id where there are troops present. Areas with no troops will be culled.
 	Each value in the 'map' is a 'set', using the set functions in the framework.
 
 	Each set is a sorted plain array of bitpacked troop data.
 
-	Each bitpacked entry follows the following format: (NOTE: For simplicity, I've fudged the Prussian and Austrian SPs as separate 'types' of troops, not separate nationalities.)
+	Each bitpacked entry follows the following format: (NOTE: For programming simplicity, I've fudged the Prussian and Austrian SPs as separate 'types' of troops, not separate nationalities.)
 		Player owner		1 bit 		Uses player mnemonics RUSSIA and FRANCE.
 		Type 				4 bits 		Corresponds to the 12 (8 type + 4 allies) constants defined in the "Troops" section of constants
 		Number of troops	6 bits  	Safe estimate of max. troops of a specific nationality and type in an area.
@@ -1299,7 +1299,7 @@ function mark_already_moved(who, path, move_type, leaders, troops) {
 		faction: who,
 		from: path[path.length - 2],
 		move_type: move_type,
-		river_crossing: has_bridge(path[path.length - 2], destination),
+		river_crossing: has_bridge(path[path.length - 2], destination) ,
 		leaders: [],
 		troops: Array(NUM_TROOP_TYPES).fill(0)
 	}
@@ -1308,7 +1308,6 @@ function mark_already_moved(who, path, move_type, leaders, troops) {
 	for (let type = 0; type < troops.length; ++type) entry.troops[type] += troops[type]
 
 	map_get(G.moved, destination, null).push(entry)
-	console.log(JSON.stringify(G.moved, null, 2))
 }
 
 /* ORDERS */
@@ -2067,7 +2066,7 @@ function place_card_at_the_top_of_the_deck(card) {
 P.main = script(`
 	for G.turn in G.start_turn to G.end_turn {
 		if (is_resource_turn(G.turn)) {
-			call resource_phase
+			call resources_phase
 		} else {
 			call turn	
 		}
@@ -2076,7 +2075,11 @@ P.main = script(`
 `)
 
 function start_turn(turn) {
-	log_h1(`${get_month_name(G.turn)} ${get_turn_name(G.turn)}`, get_season(turn))
+	if (is_resource_turn(turn))
+		log_h1(`${get_month_name(G.turn)} – Resources Phase`, get_season(turn))
+	else
+		log_h1(`${get_month_name(G.turn)} ${get_turn_name(G.turn)}`, get_season(turn))
+
 	if (turn === JUNE_5) {
 		log_h5("French Logistic Preparations")
 		log_italic(`France receives a free Forced March and Place Depot order. As an exception to the rules, this Place Depot order may be placed in S${S_KOVNO}.`)
@@ -2091,11 +2094,306 @@ function start_turn(turn) {
 	}
 	log()
 
-	G.active = [RUSSIA, FRANCE]
-	log_h2("Draw a Card")
-	log()
+	if (!is_resource_turn(turn)) {
+		G.active = [RUSSIA, FRANCE]
+		log_h2("Draw a Card")
+		log()
+	}
 }
 
+// === RESOURCE PHASES ===
+P.resources_phase = script(`
+	eval { start_turn(G.turn) }
+	call free_replacements
+	call additional_replacements
+	call select_new_cards
+
+	log "@Draw Cards"
+	set G.active [RUSSIA, FRANCE]
+	log
+	call draw_card_to_hand { num_cards_to_draw: L.$ }
+`)
+
+P.free_replacements = {
+	_begin() {
+		log_h2("Free Replacements")
+
+		G.active = [RUSSIA, FRANCE]
+
+		L.free_replacements_areas = [[S_KIEV, S_SMOLENSK, S_KALUGA, S_MOSCOW], [S_KOVNO]]
+		L.areas = [[], []]
+		for (let who = RUSSIA; who <= FRANCE; ++who)
+			L.areas[who] = L.free_replacements_areas[who].filter(area => is_friendly_controlled(who, area))
+
+		L.has_gained_free_cossack = false
+	},
+	prompt() {
+		if (L.areas[R].length > 0) {
+			prompt(`Receive 1 Infantry SP in ${join_array_with_and(L.areas[R].map(area => `S${area}`))}.`)
+			L.areas[R].forEach(area => action_area(area))
+		} else if (R === RUSSIA && !L.has_gained_free_cossack) {
+			prompt(`Receive 1 Cossack SP at S${S_VORONEZH}.`)
+			action_area(S_VORONEZH)
+		} else {
+			prompt(`Free Replacements: All done.`)
+			button_done()
+		}
+	},
+	area(area) {
+		if (L.areas[R].length > 0) {
+			add_troop(R, area, FRESH_INFANTRY, 1)
+			set_delete(L.areas[R], area)
+		} else {
+			add_troop(R, area, FRESH_COSSACK, 1)
+			L.has_gained_free_cossack = true
+		}
+	},
+	done() {
+		set_delete(G.active, R)
+		if (G.active.length === 0) {
+			for (let who = RUSSIA; who <= FRANCE; ++who) {
+				log(`${ROLES[who]}`)
+				if ((who === FRANCE) && L.free_replacements_areas[FRANCE].every(area => !is_friendly_controlled(area))) {
+					logi("Nothing")
+					break
+				}
+				for (let area of L.free_replacements_areas[who]) {
+					if (is_friendly_controlled(who, area)) {
+						logi(`S${area}`)
+						log(`<1 Infantry`)
+					}
+				}
+				if (who === RUSSIA) {
+					logi(`S${S_VORONEZH}`)
+					log(`<1 Cossack`)
+				}
+			}
+			log()
+			end()
+		}	
+	}
+}
+
+function count_total_sp_amount_on_map(who, type) {
+	let count = 0
+	let exhausted_version = type + 1
+
+	map_for_each(G.troops, (area, entries) => {
+		for (let entry of entries) {
+			if ((decode_troop_entry_who(entry) === who) && [type, exhausted_version].includes(decode_troop_entry_type(entry))) 
+				count += decode_troop_entry_num(entry)
+		}
+	})
+
+	return count
+}
+
+function could_receive_sp(who, type) {
+	if (is_infantry(type))
+		return count_total_sp_amount_on_map(who, type) + 2 <= data.max_sp_amounts[who][get_troop_type_name(type)]
+
+	return count_total_sp_amount_on_map(who, type) + 1 <= data.max_sp_amounts[who][get_troop_type_name(type)]
+}
+
+P.additional_replacements = {
+	_begin() {
+		log_h2("Additional Replacements")
+
+		G.active = [RUSSIA, FRANCE]
+
+		L.state = [null, null]
+		for (let who = RUSSIA; who <= FRANCE; ++who)
+			L.state[who] = has_card_in_hand(who) ? "discard_card" : "all_done"
+
+		L.num_cards_discarded = [0, 0]
+		L.has_discarded_card = [false, false]
+		L.selected_type = [-1, -1]
+		L.count = [0, 0]
+	},
+	states: {
+		"discard_card": 
+		{
+			prompt() {
+				prompt(`You may discard a card to gain additional replacements, or pass.`)
+				get_non_dummy_cards_in_hand(R).forEach(card => action_card(card))
+				button_pass()
+			},
+			on_card(card) {
+				remove_card_from_hand(R, card)
+				set_add(get_discard(R), card)
+				++L.num_cards_discarded[R]
+
+				L.state[R] = "select_reinforcement_sp"
+			},
+		},
+		"select_reinforcement_sp": 
+		{
+			prompt() {
+				prompt(`Select an SP type to reinforce.`)
+				for (let type = 0; type < NUM_TROOP_TYPES; ++type) {
+					if (is_troop_type_fresh(type) && could_receive_sp(R, type)) {
+						if (is_infantry(type))
+							action("troop_2x", type)
+						else
+							action_troop(type)
+					}
+				}
+			},
+			on_troop(type) {
+				L.selected_type[R] = type
+				L.count[R] = is_infantry(type) ? 2 : 1
+				L.state[R] = "place_sp"
+			},
+			on_troop_2x(type) {
+				this.on_troop(type)
+			}
+		},
+		"place_sp": 
+		{
+			prompt() {
+				prompt(`Select a location to place ${get_troop_type_name(L.selected_type[R])}. (${L.count[R]} remaining).`)
+				for (let area = FIRST_AREA; area <= LAST_AREA; ++area)
+					if (has_friendly_leader(R, area) || (is_key_city(area) && is_friendly_controlled(area)) || has_friendly_depot(R, area))
+						if (is_area_in_supply(R, area))
+							action_area(area)
+			},
+			on_area(area) {
+				add_troop(R, area, L.selected_type[R], 1)
+				if (--L.count[R] === 0)
+					if (has_card_in_hand(R))
+						L.state[R] = "discard_card"
+					else
+						L.state[R] = "all_done"
+			}
+		},
+		"all_done": 
+		{
+			prompt() {
+				prompt(`Receive additional reinforcements: All done.`)
+				button_done()
+			}
+		}
+	},
+	prompt() {
+		this.states[L.state[R]].prompt()
+	},
+	pass() {
+		this.done()
+	},
+	done() {
+		set_delete(G.active, R)
+		if (G.active.length === 0) {
+			for (let who = RUSSIA; who <= FRANCE; ++who)
+				if (L.num_cards_discarded[who] > 0)
+					log(`${ROLES[who]} discarded ${L.num_cards_discarded[who]} cards.`)
+				else
+					log(`${ROLES[who]} did not discard cards.`)
+			log()
+			end()
+		}	
+	},
+	card(card)		{ this.states[L.state[R]].on_card(card) },
+	area(area)		{ this.states[L.state[R]].on_area(area) },
+	troop(type)		{ this.states[L.state[R]].on_troop(type) },
+	troop_2x(type)	{ this.states[L.state[R]].on_troop_2x(type) },
+}
+
+const DESIGNATED_CARD_CHOICES = [
+	null,
+	{
+		"Russia": [C_THE_CZAR_LEAVES_THE_ARMY, C_SCORCHED_EARTH],
+		"France": [C_DAVOUT_TAKES_COMMAND, C_HARD_MARCHING_2]
+	},
+	{
+		"Russia": [C_THE_FINLAND_CORPS, C_KUTUZOV_APPOINTED],
+		"France": [C_INFIGHTING_AND_INTRIGUE, C_HOLY_MOTHER_RUSSIA_FR]
+	},
+	{
+		"Russia": [C_TREATY_OF_BUCHAREST, C_EXHAUSTING_MARCH_2],
+		"France": [C_PEACE_OFFER, C_IX_CORPS_ARRIVES],
+	},
+	{
+		"Russia": [C_PRIDE_AND_HESITATION, C_DISORDERLY_MARCH],
+		"France": [C_XI_CORPS_ARRIVES, C_LETHARGIC_PURSUIT],
+	},
+	{
+		"Russia": [C_COSSACK_PATROLS, C_EXHAUSTING_MARCH_1],
+		"France": [C_COURAGE_OF_DESPERATION, C_NEYS_ESCAPE],
+	}
+]
+
+function get_designated_card_choices(who, month) {
+	return DESIGNATED_CARD_CHOICES[month][ROLES[who]]
+}
+
+P.select_new_cards = {
+	_begin() {
+		log_h2("Select Card")
+		
+		G.active = [RUSSIA, FRANCE]
+		L.has_combined_draw_and_discard = false
+		L.selected_card = [-1, -1]
+
+		L.card_choices = [get_designated_card_choices(RUSSIA, get_current_month()), get_designated_card_choices(FRANCE, get_current_month())]
+		for (let who = RUSSIA; who <= FRANCE; ++who)
+			L.card_choices[who] = L.card_choices[who].filter(card => get_deck(who).includes(card) || set_has(get_discard(who), card))
+	},
+	prompt() {
+		if (!L.has_combined_draw_and_discard) {
+			prompt(`Combine draw and discard piles.`)
+			button("combine")
+		} else if (L.selected_card[R] === -1) {
+			if (L.card_choices[R].length > 0) {
+				prompt(`Select a card for this month. (${join_array_with_or(L.card_choices[R].map(card => get_card_log_alias(card)))})`)
+				L.card_choices[R].forEach(card => action("card_button", card))
+			} else {
+				prompt(`The designated cards for this month are in your hand or already played.`)
+				button_confirm()
+			}
+		} else {
+			prompt(`Confirm selection of ${get_card_log_alias(L.selected_card[R])}.`)
+			button_confirm()
+		}
+	},
+	combine() {
+		G.deck[R] = G.deck[R].concat(G.discard[R])
+		G.discard[R] = []
+		L.has_combined_draw_and_discard = true
+	},
+	card_button(card) {
+		L.selected_card[R] = card
+	},
+	confirm() {
+		set_delete(G.active, R)
+		add_to_hand(R, L.selected_card[R])
+		array_delete_item(get_deck(R), L.selected_card[R])
+		shuffle(get_deck(R))
+
+		if (L.selected_card[R] > -1) {
+			log_only(R, `Selected`)
+			log_only(R, `>${get_card_log_alias(L.selected_card[R])}`)
+		} else {
+			log_only(R, `No cards selected.`)
+		}
+
+		log(`${ROLES[R]} deck reshuffled.`)
+		if (G.active.length === 0) {
+			let num_cards_to_draw = []
+			for (let who = RUSSIA; who <= FRANCE; ++who)
+				if (L.selected_card === -1) 
+					num_cards_to_draw.push(3)
+				else 
+					num_cards_to_draw.push(2)
+			
+			log()
+			end(num_cards_to_draw)
+		}
+	}
+}
+
+// Draw card needs refactor to allow same player to draw multiple cards
+
+// === NORMAL TURNS ===
 const TURN_PHASES = [
 	"draw_card_to_hand",
 	"play_card_for_additional_orders",
@@ -2115,11 +2413,40 @@ const TURN_PHASES = [
 
 P.turn = script(`
 	eval { start_turn(G.turn) }
-	for G.phase in 0 to TURN_PHASES.length {
+	for G.phase in 0 to (TURN_PHASES.length - 1) {
 		call (TURN_PHASES[G.phase])
 	}
 	goto end_turn
 `)
+
+P.end_turn = function() {
+	log_h2(`End of Turn`)
+	
+	map_clear(G.moved)
+	map_clear(G.battles)
+
+	//Reset orders
+	log("Removed all orders.")
+	G.orders_by_type.length = 0
+	for (let order = FIRST_ORDER; order <= LAST_ORDER; ++order)
+		if (get_order_location(order) !== POOL || get_order_location(order) !== OUT_OF_PLAY)
+			G.orders[order] = POOL
+
+	if (is_event_active(C_HOLY_MOTHER_RUSSIA_RU)) {
+		let key_controller = is_fr_controlled(get_event_keyword(C_HOLY_MOTHER_RUSSIA_RU, "key")) ? FRANCE: RUSSIA
+		log(`${get_card_log_alias(C_HOLY_MOTHER_RUSSIA_RU)}`)
+		increase_vp(key_controller, 1)
+	}
+
+	let events_to_clear = []
+	map_for_each(G.persistent_events, (evt, info) => {
+		if (info.remove === G.turn)
+			set_add(events_to_clear, evt)
+	})
+	events_to_clear.forEach(evt => map_delete(G.persistent_events, evt))
+
+	end()
+}
 
 //=== 1. DRAW CARD TO HAND ===
 /* 
@@ -2178,6 +2505,11 @@ function get_event_step(card) {
 }
 
 function finish_state(player) {
+	if (--L.num_cards_to_draw[R] > 0) {
+		L.state[R] = "draw_card"
+		return
+	}
+
 	if (player === FRANCE && map_has(L.event_tracker, C_HOLY_MOTHER_RUSSIA_RU) && (get_event_step(C_HOLY_MOTHER_RUSSIA_RU) === 1)) {
 		L.state[FRANCE] = "holy_mother_russia_ru"
 		return
@@ -2205,6 +2537,8 @@ P.draw_card_to_hand = {
 		L.event_tracker = []
 		//Cache of persistent events played throughout the state
 		L.persistent_events = []
+
+		L.num_cards_to_draw = L.num_cards_to_draw ?? [1, 1]
 	},
 	states: {
 		"draw_card":
@@ -2402,7 +2736,7 @@ P.draw_card_to_hand = {
 				prompt_card(C_POOR_COMMUNICATIONS, "At the end of the 'Place Orders' phase, RU may designate 1 placed FR order to remove.")
 				button("confirm")
 			},
-			confirm() {
+			on_confirm() {
 				log_must_play_event(C_POOR_COMMUNICATIONS)
 				discard_or_remove_card(C_POOR_COMMUNICATIONS)
 				finish_state(R)
@@ -4179,7 +4513,6 @@ P.move = {
 		L.confirm_battle = false
 	},
 	prompt() {
-		console.log(JSON.stringify(G.moved, null, 2))
 		if (L.confirm_battle) {
 			prompt("This move may trigger a battle. Confirm?")
 			button_confirm()
@@ -4304,16 +4637,6 @@ P.move = {
 		}
 
 		mark_already_moved(G.active, L.move.path, L.move.type, L.move.leaders, L.move.troops)
-
-		console.log(JSON.stringify(G.battles, null, 2))
-	
-		if (is_event_active(C_HARD_MARCHING_1)) {
-			add_battle_event(L.current_area, C_HARD_MARCHING_1)
-		}
-
-		if (is_event_active(C_HARD_MARCHING_2)) {
-			add_battle_event(L.current_area, C_HARD_MARCHING_2)
-		}
 
 		end()
 	}
@@ -4440,7 +4763,7 @@ P.execute_cavalry_patrols = {
 			L.orders_by_side[who] = L.orders_by_side[who].filter(order => 
 				has_friendly_troop(who, get_order_location(order)) 
 				&& has_cavalry_or_cossack_in_area(who, get_order_location(order))
-				&& (has_enemy_sp(get_order_location(order)) || get_all_adjacent_areas(get_order_location(order)).some(area => has_enemy_sp(area)))
+				&& (has_enemy_sp(who, get_order_location(order)) || get_all_adjacent_areas(get_order_location(order)).some(area => has_enemy_sp(who, area)))
 			)
 		}
 	},
@@ -5277,7 +5600,7 @@ function update_battle_losses(who, area, amt) {
 }
 
 function has_bridge(from, to) {
-	return areas[from].bridge.includes(to)
+	return areas[from]?.bridge.includes(to) ?? false
 }
 
 function add_battle_event(area, event) {
@@ -6776,7 +7099,7 @@ P.battle_shift_vp_and_initiative = {
 			}
 		} else if (!L.has_finished) {
 			if (G.active === get_who_has_initiative()) {
-				if ((get_current_initiative_level() < 4) && (L.num_enemy_sps_eliminated > get_current_initiative_level())) {
+				if ((get_current_initiative_level() < 4) && (L.num_enemy_sps_eliminated >= get_current_initiative_level())) {
 					prompt(`Shift Initiative Marker 1 in your favor for eliminating more losing SPs than the current Initiative level.`)
 					action_initiative_marker()
 				} else if (get_current_initiative_level() === 4) {
@@ -7159,7 +7482,7 @@ function calculate_num_post_battle_card_draws() {
 	let num_cards_to_draw = [0, 0]
 
 	for (let who = RUSSIA; who <= FRANCE; ++who) {
-		if (has_leader_in_battle(who, G.current_battle) && get_battle_events(G.current_battle).some(card => get_card_owner(card) === who))
+		if (has_leader_in_battle(who, G.current_battle) && get_battle_events(G.current_battle).some(card => (get_card_owner(card) === who) && !is_card_dummy(card)))
 			++num_cards_to_draw[who]
 	}
 	
@@ -7182,7 +7505,7 @@ function calculate_num_post_battle_card_draws() {
 }
 
 P.battle_draw_card_to_hand = script(`
-	log "$End of Battle"
+	log "%End of Battle"
 	eval { L.num_cards_to_draw = (calculate_num_post_battle_card_draws()) }
 	eval { clear_undo() }
 	for L.who in RUSSIA to FRANCE {
@@ -8127,9 +8450,32 @@ P.lines_of_communications = {
 	_begin() {
 		log_h2("Lines of Communications")
 		G.active = [RUSSIA, FRANCE]
+		
+		L.depots_to_remove = [check_lines_of_communication(RUSSIA), check_lines_of_communication(FRANCE)]
+		L.removed_depots = [[], []]
 	},
 	prompt() {
-		prompt("todo")
+		console.log(L.depots_to_remove)
+		if (L.depots_to_remove[R].length > 0) {
+			prompt(`Remove depots at ${join_array_with_and(L.depots_to_remove[R].map(area => `S${area}`))}.`)
+			for (let area of L.depots_to_remove[R]) action_depot(find_depot_at_location(R, area))
+		} else {
+			prompt(`Check Lines of Communications: All done.`)
+			button_confirm()
+		}
+	},
+	depot(depot) {
+		set_delete(L.depots_to_remove[R], get_depot_location(depot))
+		remove_depot(depot, get_depot_location(depot))
+	},
+	confirm() {
+		set_delete(G.active, R)
+		if (G.active.length === 0) {
+			for (let who = RUSSIA; who <= FRANCE; ++who)
+				if (L.removed_depots[R].length === 0)
+					log(`All ${ROLES[who]} depots are in supply.`)
+			end()
+		}
 	}
 }
 
@@ -8213,10 +8559,7 @@ function check_lines_of_communication(who) {
 		set_add(depots, depot)
 	}
 
-	let depot_status = [] //Map pairing depots with whether they are in-supply or OOS
-	for (let depot of depots) {
-		map_set(depot_status, depot, false)
-	}
+	let out_of_supply_depots = depots.slice()
 
 	let queue = sources.slice()
 	let distance = new Array(NUM_SPACES).fill(999)
@@ -8228,16 +8571,16 @@ function check_lines_of_communication(who) {
 		let current = queue.shift()
 
 		//Cannot trace through enemy SPs & max. distance of 4
-		if (has_enemy_sp(who, current) || distance[current] > MAX_LOC_DISTANCE) { 
+		if (has_enemy_sp(who, current) || distance[current] > MAX_LOC_DISTANCE)
 			continue
-		}
 
+		// Logic inverted from the rules: We start from supply sources and add depots as supply sources as they are encountered
 		for (let s of get_adjacent_areas_by_road(current)) { //Can trace only via road, not track
 			if ((distance[s] > distance[current] + 1)) {
 				queue.push(s)
 				if (set_has(depots, s) && !set_has(sources, s)) { //If a new in-supply depot is encountered, make it a source
 					set_add(sources, s)
-					map_set(depot_status, s, true)
+					set_delete(out_of_supply_depots, s)
 					distance[s] = 0
 				} else {
 					distance[s] = distance[current] + 1
@@ -8246,7 +8589,7 @@ function check_lines_of_communication(who) {
 		}
 	}
 
-	return depot_status
+	return out_of_supply_depots
 }
 
 /* ATTRITION - TODO */

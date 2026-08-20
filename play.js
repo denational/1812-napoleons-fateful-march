@@ -28,6 +28,29 @@ function get_area_name(area) {
 	return areas[area].name
 }
 
+/* CARDS */
+const C_SCORCHED_EARTH = 10
+const C_PRIDE_AND_HESITATION = 15
+const C_KUTUZOV_APPOINTED = 16
+const C_THE_FINLAND_CORPS = 17
+const C_TREATY_OF_BUCHAREST = 18
+const C_THE_CZAR_LEAVES_THE_ARMY = 19
+const C_EXHAUSTING_MARCH_1 = 25
+const C_EXHAUSTING_MARCH_2 = 26
+const C_DISORDERLY_MARCH = 48
+const C_COSSACK_PATROLS = 49
+
+const C_HARD_MARCHING_2 = 56
+const C_HOLY_MOTHER_RUSSIA_FR = 58
+const C_INFIGHTING_AND_INTRIGUE = 62
+const C_PEACE_OFFER = 69
+const C_DAVOUT_TAKES_COMMAND = 71
+const C_IX_CORPS_ARRIVES = 73
+const C_XI_CORPS_ARRIVES = 74
+const C_COURAGE_OF_DESPERATION = 104
+const C_NEYS_ESCAPE = 106
+const C_LETHARGIC_PURSUIT = 107
+
 /* LEADERS */
 const ALEXANDER_I = 0
 const KUTUZOV = 1
@@ -511,9 +534,12 @@ function on_update() {
 	action_button_with_argument("troop", FRESH_AUSTRIAN_INFANTRY, "Au. Infantry")
 	action_button_with_argument("troop", EXHAUSTED_AUSTRIAN_INFANTRY, "Exh. Au. Infantry")
 
+	action_button_with_argument("troop_2x", FRESH_INFANTRY, "2x Infantry")
+	action_button_with_argument("troop_2x", FRESH_PRUSSIAN_INFANTRY, "2x Pr. Infantry")
+	action_button_with_argument("troop_2x", FRESH_AUSTRIAN_INFANTRY, "2x Au. Infantry")
 	action_button_with_argument("troop_2x", EXHAUSTED_INFANTRY, "2x Exh. Infantry")
 	action_button_with_argument("troop_2x", EXHAUSTED_PRUSSIAN_INFANTRY, "2x Exh. Pr. Infantry")
-	action_button_with_argument("troop_2x", FRESH_AUSTRIAN_INFANTRY, "2x Exh. Au. Infantry")
+	action_button_with_argument("troop_2x", EXHAUSTED_AUSTRIAN_INFANTRY, "2x Exh. Au. Infantry")
 
 	action_button_with_argument("add_troop", FRESH_INFANTRY, "+ Inf.")
 	action_button_with_argument("remove_troop", FRESH_INFANTRY, "- Inf.")
@@ -543,6 +569,7 @@ function on_update() {
 	action_button("select_all", "Select All")
 	action_button("shuffle", "Shuffle Deck")
 	action_button("discard_and_draw", "Discard & Draw")
+	action_button("combine", "Combine")
 	action_button("add_1_to_attrition_distance")
 
 	action_button("place_order", "Place Order")
@@ -566,6 +593,28 @@ function on_update() {
 	action_button("russia", "Russia")
 	action_button("france", "France")
 	action_button("pass", "Pass")
+
+	action_button_with_argument("card_button", C_SCORCHED_EARTH, "#10 Scorched Earth")
+	action_button_with_argument("card_button", C_PRIDE_AND_HESITATION, "#15 Pride and Hesitation")
+	action_button_with_argument("card_button", C_KUTUZOV_APPOINTED, "#16 Kutuzov Appointed")
+	action_button_with_argument("card_button", C_THE_FINLAND_CORPS, "#17 The Finland Corps")
+	action_button_with_argument("card_button", C_TREATY_OF_BUCHAREST, "#18 Treaty of Bucharest")
+	action_button_with_argument("card_button", C_THE_CZAR_LEAVES_THE_ARMY, "#19 The Czar Leaves The Army")
+	action_button_with_argument("card_button", C_EXHAUSTING_MARCH_1, "#25 Exhausting March")
+	action_button_with_argument("card_button", C_EXHAUSTING_MARCH_2, "#26 Exhausting March")
+	action_button_with_argument("card_button", C_DISORDERLY_MARCH, "#48 Disorderly March")
+	action_button_with_argument("card_button", C_COSSACK_PATROLS, "#49 Cossack Patrols")
+	
+	action_button_with_argument("card_button", C_HARD_MARCHING_2, "#2 Hard Marching")
+	action_button_with_argument("card_button", C_HOLY_MOTHER_RUSSIA_FR, "#4 Holy Mother Russia")
+	action_button_with_argument("card_button", C_INFIGHTING_AND_INTRIGUE, "#8 Infighting amp; Intrigue")
+	action_button_with_argument("card_button", C_PEACE_OFFER, "#15 Peace Offer")
+	action_button_with_argument("card_button", C_DAVOUT_TAKES_COMMAND, "#16 Davout Takes Command")
+	action_button_with_argument("card_button", C_IX_CORPS_ARRIVES, "#19 IX Corps Arrives")
+	action_button_with_argument("card_button", C_XI_CORPS_ARRIVES, "#20 XI Corps Arrives")
+	action_button_with_argument("card_button", C_COURAGE_OF_DESPERATION, "#50 Courage of Desperation")
+	action_button_with_argument("card_button", C_NEYS_ESCAPE, "#52 Ney's Escape")
+	action_button_with_argument("card_button", C_LETHARGIC_PURSUIT, "#53 Lethargic Pursuit")
 
 	action_button("undo", "Undo")
 
@@ -726,7 +775,7 @@ function update_troops() {
 					set_add(half_strength_connections, connection)
 				}
 			} else {
-				if (map_has(V.moved, area) && map_get(V.moved, area).some(entry => entry.move_type === 0) && !set_has(half_strength_areas, area)) {
+				if (map_has(V.moved, area) && map_get(V.moved, area).some(entry => entry.faction === who && entry.move_type === 0) && !set_has(half_strength_areas, area)) {
 					populate_generic("area_stack", area, `half_strength_${get_abbreviation(who)}`, 1)
 					set_add(half_strength_areas, area)
 				}

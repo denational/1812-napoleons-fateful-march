@@ -6655,6 +6655,20 @@ const data = {
 			"owner": 1,
 			"type": 9
 		}
+	],
+	"max_sp_amounts": [
+		{
+			"Infantry": 133,
+			"Cavalry": 14,
+			"Cossack": 14
+		},
+		{
+			"Infantry": 112,
+			"Cavalry": 14,
+			"Guard": 4,
+			"Prussian": 5,
+			"Austrian": 6
+		}
 	]
 }
 if (typeof module !== 'undefined') module.exports = data

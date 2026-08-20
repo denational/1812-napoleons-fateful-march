@@ -414,6 +414,22 @@ fs.createReadStream(names)
 				define_order(FRANCE, PLACE_DEPOT, 1)
 				define_order(FRANCE, FORAGE, 3)
 				define_order(FRANCE, DUMMY_ORDER, 4)
+
+				// === TROOPS ===
+				data.max_sp_amounts = [
+					{
+						"Infantry": 133,
+						"Cavalry": 14,
+						"Cossack": 14,
+					},
+					{
+						"Infantry": 112,
+						"Cavalry": 14,
+						"Guard": 4,
+						"Pr. Infantry": 5,
+						"Au. Infantry": 6,
+					}
+				]
 				
 				fs.writeFileSync("data.js", "const data = " + JSON.stringify(data, 0, 2) + "\nif (typeof module !== 'undefined') module.exports = data\n", "utf8")
 			})
