@@ -19,6 +19,7 @@
 14. if event says can't execute can you still place it?
 15. discards public?
 16. devastated countryside & devastated landscape stack?
+17. can you change an order to the same type with good leadership
 
 
 ## Known Bugs (to fix at a later time)
@@ -40,4 +41,4 @@
 16. capture leaders after battle if alone
 17. Troops that forced march to an area before enemy moves there would still fight at X1
 18. Eugène's IV Corps is playable despite him not being there
-19. 
+19.  BUG: A force with no fresh SPs must die at the beginning of a battle

@@ -4851,7 +4851,7 @@ const data = {
 			"id": 63,
 			"who": 1,
 			"name": "Fast Marching",
-			"state_name": "fast_marching_1",
+			"state_name": "fast_marching",
 			"season": 0,
 			"type": 1,
 			"ops": 3,
@@ -4862,7 +4862,7 @@ const data = {
 			"id": 64,
 			"who": 1,
 			"name": "Fast Marching",
-			"state_name": "fast_marching_2",
+			"state_name": "fast_marching",
 			"season": 0,
 			"type": 1,
 			"ops": 3,
@@ -6666,8 +6666,8 @@ const data = {
 			"Infantry": 112,
 			"Cavalry": 14,
 			"Guard": 4,
-			"Prussian": 5,
-			"Austrian": 6
+			"Pr. Infantry": 5,
+			"Au. Infantry": 6
 		}
 	]
 }
