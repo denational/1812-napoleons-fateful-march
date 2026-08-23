@@ -568,7 +568,7 @@ function on_update() {
 
 	action_button("select_all", "Select All")
 	action_button("shuffle", "Shuffle Deck")
-	action_button("discard_and_draw", "Discard & Draw")
+	action_button("discard_and_redraw", "Discard & Redraw")
 	action_button("combine", "Combine")
 	action_button("add_1_to_attrition_distance")
 

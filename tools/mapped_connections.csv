@@ -115,7 +115,7 @@ id,space1,space2,type,bridge
 114,56,80,road,0
 115,61,80,track,1
 116,61,83,track,1
-117,60,83,track,1
+117,60,83,road,1
 118,60,86,road,0
 119,64,85,road,0
 120,70,91,road,0

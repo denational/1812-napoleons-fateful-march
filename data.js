@@ -1198,11 +1198,11 @@ const data = {
 			"depot": true,
 			"vp": 1,
 			"track": [
-				59,
-				83
+				59
 			],
 			"road": [
 				63,
+				83,
 				86,
 				58
 			],
@@ -1665,10 +1665,10 @@ const data = {
 			"vp": 0,
 			"track": [
 				61,
-				60,
 				80
 			],
 			"road": [
+				60,
 				82
 			],
 			"bridge": [
