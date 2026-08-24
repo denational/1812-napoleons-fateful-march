@@ -1365,6 +1365,7 @@ function on_view() {
 	V.battles = G.battles
 	V.attrition_checked = G.attrition_checked
 	V.moved = G.moved
+	V.move = G.move
 }
 
 // === FRAMEWORK EXTENSIONS ===
@@ -2432,7 +2433,6 @@ function is_order_turn(turn) {
 P.turn = script(`
 	eval { start_turn(G.turn) }
 	for G.phase in 0 to (TURN_PHASES.length - 1) {
-		eval { console.log(TURN_PHASES[G.phase]) }
 		if (is_order_turn(G.phase)) {
 			call execute_orders { type: TURN_PHASES[G.phase] }
 		} else {
@@ -4085,6 +4085,10 @@ P.execute_orders = script(`
 		if (L.type === CAVALRY_PATROLS) {
 			set G.active RUSSIA
 			call may_play_flying_columns
+		} 
+		if (L.type === EVADE) {
+			set G.active RUSSIA
+			call may_play_evade_events 
 		}
 		
 		set G.active L.$
@@ -4130,7 +4134,7 @@ function filter_orders(who, type) {
 			// Keep only the orders where there is (1) a friendly SP, and (2) at least one of those SPs haven't moved previously this turn
 			// TODO: May be less confusing to filter out the second case at a later stage?
 			let area = get_order_location(order)
-			return has_friendly_troop(G.active, area) && (!map_has(G.moved, area) || get_all_movable_troops_in_area(G.active, area).some(type => type > 0))
+			return has_friendly_troop(G.active, area) && (!map_has(G.moved, area) || get_movable_sps_in_area(G.active, area).some(type => type > 0))
 		})
 		return
 	case CAVALRY_PATROLS:
@@ -4248,7 +4252,7 @@ P.end_order = {
 	prompt() {
 		prompt(`Execute ${get_order_type_name(L.type)} order — All done.`)
 
-		if (L.type === FORCED_MARCH && G.active === FRANCE && L.move.path.length > 1)
+		if (L.type === FORCED_MARCH && G.active === FRANCE && G.move.path.length > 1)
 			V.prompt += ` Russia may play ${get_card_log_alias(C_EXHAUSTING_MARCH_1)}.` // Putting in just one of the 'Exhausting March' cards
 
 		button_confirm()
@@ -4259,13 +4263,13 @@ P.end_order = {
 				if (is_depot_on_map(depot)) 
 					action("depot", depot)
 	},
-	confirm() {
+	confirm() {		
 		if (L.type === FORCED_MARCH && G.active === RUSSIA && is_event_active(C_EVASIVE_MANEUVERS) && has_executable_order(RUSSIA, FORCED_MARCH)) {
 			goto("execute_next_order", { type: L.type })
 		} 
 		else if (L.type === FORCED_MARCH && G.active === FRANCE) {
 			G.active = enemy(G.active)
-			goto("may_play_exhausting_march", { move: L.move })
+			goto("may_play_exhausting_march")
 		}
 		else if (has_executable_order(enemy(G.active), L.type)) {
 			G.active = enemy(G.active)
@@ -4368,14 +4372,11 @@ P.execute_march = function() {
 
 /* SELECT FORCE */
 function has_leader_moved(leader) {
-	let area = get_leader_location(leader)
-
-	if (!map_has(G.moved, area)) return false
-
-	return map_get(G.moved, area, null).some(entry => set_has(entry.leaders, leader))
+	if (!map_has(G.moved, get_leader_location(leader))) return false
+	return map_get(G.moved, get_leader_location(leader), null).some(entry => set_has(entry.leaders, leader))
 }
 
-function get_all_movable_troops_in_area(who, area) {
+function get_movable_sps_in_area(who, area) {
 	let list = Array(NUM_TROOP_TYPES).fill(0)
 	if (!has_friendly_troop(who, area)) return list
 
@@ -4403,147 +4404,186 @@ function can_alexander_be_babysitted() {
 	// Additional clarifications on the topic:
 	// https://boardgamegeek.com/thread/3743026/fairly-basic-clarification-on-alexanders-stacking
 	if (G.active !== RUSSIA) return true
-	if (!set_has(L.leaders_at_area, L_ALEXANDER)) return true
+	if (!set_has(L.movable_leaders, L_ALEXANDER)) return true
 
 	// Alexander may not move alone if there are other leaders in the area
-	if (L.move.leaders.length === 1 && set_has(L.move.leaders, L_ALEXANDER) && L.leaders_at_area.length > 0)
+	if (G.move.leaders.length === 1 && set_has(G.move.leaders, L_ALEXANDER) && L.movable_leaders.length > 0)
 		return false
 	
 	// No leader may willingly leave Alexander behind
-	if ((L.leaders_at_area.length - L.move.leaders.length === 1) && !set_has(L.move.leaders, L_ALEXANDER))
+	if ((L.movable_leaders.length - G.move.leaders.length === 1) && !set_has(G.move.leaders, L_ALEXANDER))
 		return false
 
 	return true
 }
 
-//TODO: Pinning
 P.select_force = {
 	_begin() {
-		//L.type, L.area
-		//Leaders at area and troops eligible for movement (not those that have moved previously)
-		L.leaders_at_area = get_leaders_at_area(G.active, L.area)
-		L.troops_at_area = get_all_movable_troops_in_area(G.active, L.area)	
+		// L.type, L.area
+		// Leaders and SPs eligible for movement
+		L.movable_leaders = get_leaders_at_area(G.active, L.area)
+		L.movable_sps = get_movable_sps_in_area(G.active, L.area)
 
-		L.num_troops_selected = 0
+		// Running count of number of SPs selected in total (to save on repeated traversals)
+		L.num_sps_selected = 0
+		// Count of how many SPs are eligible to move away from the area: by default, all SPs are eligible
+		L.max_sps_selectable = L.movable_sps.reduce((a, b) => (a + b), 0)
 
-		L.move = {
+		// Assemble move object
+		G.move = {
+			// FORCED_MARCH or MARCH
 			type: L.type,
-			path: [L.area],
+			// Move path
+			path: [ L.area ],
+			// Pinned status
 			pinned: false,
+			// Moving leaders (set)
 			leaders: [],
-			troops: Array(NUM_TROOP_TYPES).fill(0),
+			// Moving SPs
+			sps: Array(NUM_TROOP_TYPES).fill(0)
 		}
 
-		//Pinning
-		if (count_num_sps(enemy(G.active), L.area) > 0) {
-			L.move.pinned = true //Flag to indicate to the next state to avoid connections used by the attacker
-			L.max_troops_selectable = Math.max(L.troops_at_area.reduce((a, b) => (a + b), 0) - count_num_sps(enemy(G.active), L.area), 0)
-		} else {
-			L.max_troops_selectable = L.troops_at_area.reduce((a, b) => (a + b), 0)
+		// Determine whether any or all SPs at the area are pinned
+		if (has_enemy_sp(G.active, L.area)) {
+			G.move.pinned = true
+			// The number of SPs pinned is equal to the number of enemy SPs in the area
+			L.max_sps_selectable = Math.max(0, L.max_sps_selectable - count_num_sps(enemy(G.active), L.area))
 		}
 	},
 	prompt() {
-		if (L.troops_at_area.every(num_troops_of_type => num_troops_of_type === 0)) {
-			prompt(`No movable SPs at S${L.area}.`)
+		if (L.max_sps_selectable === 0) {
+			if (G.move.pinned)
+				prompt(`All friendly SPs at S${L.area} are pinned.`)
+			else
+				prompt(`All friendly SPs at S${L.area} have previously moved.`)
 			button_pass()
-		} else if (L.move.pinned && (L.max_troops_selectable === 0)) {
-			prompt(`Pinned: May not move any SPs from S${L.area}.`)
-			button_pass()
-		} else if (L.move.leaders.length > 0) {
-			prompt(`Select any number of SPs to move from S${L.area}.`)
+		} 
+		else if (G.move.leaders.length > 0) {
+			prompt(`Select any or all leaders and SPs to move from S${L.area}.`)
 
-			if (set_has(L.leaders_at_area, L_ALEXANDER) && L.leaders_at_area.length > 1) V.prompt += " Alexander may not be activated alone or left behind without another leader."
-			if (L.move.leaders.length === 1 && set_has(L.move.leaders, L_PLATOV)) V.prompt += " Platov may only command Cavalry and Cossack SPs."
+			// Alexander ability: Must always, if possible, stack and move with another Russian leader.
+			// No Russian leader may leave him behind alone.
+			// See can_alexander_be_babysitted() for more clarifications on this
+			if (set_has(L.movable_leaders, L_ALEXANDER) && L.movable_leaders.length > 1 && (!set_has(G.move.leaders, L_ALEXANDER) || G.move.leaders.length === 1)) 
+				V.prompt += ` L${L_ALEXANDER} may not be activated alone or left behind without another leader.`
 
-			if (L.leaders_at_area.length > L.move.leaders.length) {
-				for (let leader of L.leaders_at_area) {
-					if (!set_has(L.move.leaders, leader) && !has_leader_moved(leader))
+			// Platov ability: May only command Cavalry and Cossack SPs.
+			if (G.move.leaders.length === 1 && set_has(G.move.leaders, L_PLATOV)) 
+				V.prompt += ` L${L_PLATOV} may only command Cavalry and Cossack SPs.`
+
+			if (L.movable_leaders.length > G.move.leaders.length) {
+				for (let leader of L.movable_leaders)
+					if (!set_has(G.move.leaders, leader))
 						button_leader(leader)
-				}
 			}
 
-			for (let type of get_troop_types_at_area(G.active, L.area)) {
-				if (L.move.leaders.length === 1 && set_has(L.move.leaders, L_PLATOV)) {
-					if ((L.move.troops[type] < L.troops_at_area[type]) && (L.num_troops_selected < L.max_troops_selectable) && (is_cavalry(type) || is_cossack(type)))
-						action("add_troop", type)
-				} else {
-					if ((L.move.troops[type] < L.troops_at_area[type]) && (L.num_troops_selected < L.max_troops_selectable))
-						action("add_troop", type)
+			for (let type = 0; type < G.move.sps.length; ++type) {
+				// Platov leader ability: He may only command Cavalry and Cossack SPs
+				if (G.move.leaders.length === 1 && set_has(G.move.leaders, L_PLATOV)) {
+					if (!is_cavalry(type) && !is_cossack(type))
+						continue
 				}
-				
-				if (L.move.troops[type] > 0)
+
+				if (L.movable_sps[type] > 0
+					&& G.move.sps[type] < L.movable_sps[type]
+					&& L.num_sps_selected < L.max_sps_selectable
+				) {
+					action("add_troop", type)
+				}
+
+				if (G.move.sps[type] > 0)
 					action("remove_troop", type)
 			}
 
-			if (L.num_troops_selected < L.max_troops_selectable)
+			if (L.movable_leaders.length > G.move.leaders.length || L.num_sps_selected < L.max_sps_selectable)
 				button("select_all")
 
-			button_done(L.num_troops_selected >= 1 && can_alexander_be_babysitted())
-		} else {
+			button_done(L.num_sps_selected >= 1 && can_alexander_be_babysitted())
+		}
+		else {
 			prompt(`Select up to 4 SPs (at least 1) to move from S${L.area}.`)
 
-			for (let leader of L.leaders_at_area)
-				if (!has_leader_moved(leader))
+			for (let leader of L.movable_leaders) {
+				if (!set_has(G.move.leaders, leader))
 					button_leader(leader)
+			}
 
-			for (let type of get_troop_types_at_area(G.active, L.area)) {
-				if ((L.move.troops[type] < L.troops_at_area[type]) && (L.num_troops_selected < 4))
+			for (let type = 0; type < G.move.sps.length; ++type) {
+				if (L.movable_sps[type] > 0
+					&& G.move.sps[type] < L.movable_sps[type]
+					&& L.num_sps_selected < L.max_sps_selectable
+				) {
 					action("add_troop", type)
-				if (L.move.troops[type] > 0)
+				}
+
+				if (G.move.sps[type] > 0)
 					action("remove_troop", type)
 			}
 
-			button_done(L.num_troops_selected >= 1 && can_alexander_be_babysitted())
+			if (L.movable_leaders.length === 0 && L.num_sps_selected < L.max_sps_selectable && L.max_sps_selectable <= 4)
+				button("select_all")
+
+			button_done(L.num_sps_selected >= 1 && can_alexander_be_babysitted())
 		}
+	},
+	pass() {
+		push_undo()
+
+		if (G.move.pinned)
+			log("All SPs are pinned.")
+		else
+			log("No movable SPs.")
+
+		log()
+		goto("end_order", { type: G.move.type })
 	},
 	leader_button(leader) {
 		push_undo()
-		set_toggle(L.move.leaders, leader)
-		if (L.move.leaders.length === 1 && set_has(L.move.leaders, L_PLATOV)) {
-			for (let type = FRESH_INFANTRY; type <= EXHAUSTED_AUSTRIAN_INFANTRY; ++type) {
-				if (!is_cavalry(type) && !is_cossack(type)) {
-					L.num_troops_selected -= L.move.troops[type]
-					L.move.troops[type] = 0
+		set_toggle(G.move.leaders, leader)
+
+		// If a leader is removed and the only remaining leader is Platov, remove all non-Cavalry and non-Cossack SPs
+		if (G.move.leaders.length === 1 && set_has(G.move.leaders, L_PLATOV)) {
+			for (let type = 0; type < G.move.sps.length; ++type) {
+				if ((!is_cavalry(type) && !is_cossack(type)) && G.move.sps[type] > 0) {
+					L.num_sps_selected -= G.move.sps[type]
+					G.move.sps[type] = 0
 				}
 			}
 		}
 	},
 	add_troop(type) {
 		push_undo()
-		++L.move.troops[type]
-		++L.num_troops_selected
+		++G.move.sps[type]
+		++L.num_sps_selected
 	},
 	remove_troop(type) {
 		push_undo()
-		--L.move.troops[type]
-		--L.num_troops_selected
+		--G.move.sps[type]
+		--L.num_sps_selected
 	},
 	select_all() {
 		push_undo()
-		for (let type = 0; type < NUM_TROOP_TYPES; ++type) {
-			if (L.troops_at_area[type] > 0) {
-				L.move.troops[type] = L.troops_at_area[type]
-				L.num_troops_selected += L.troops_at_area[type]
+		for (let leader of L.movable_leaders) {
+			if (!set_has(G.move.leaders, leader))
+				set_add(G.move.leaders, leader)
+		}
+
+		for (let type = 0; type < G.move.sps.length; ++type) {
+			// If Platov is the only leader at the area, don't select SPs that are not Cavalry or Cossack
+			if ((L.movable_leaders.length === 1 && set_has(G.move.leaders, L_PLATOV)) && (!is_cavalry(type) && !is_cossack(type))) {
+				continue
+			} else {
+				G.move.sps[type] = L.movable_sps[type]
+				L.num_sps_selected += L.movable_sps[type]
 			}
 		}
 	},
 	done() {
 		push_undo()
 		if ((L.type === MARCH) && (G.active === FRANCE) && hand_has(FRANCE, C_PONIATOWSKIS_V_CORPS)) 
-			goto("may_play_poniatowskis_v_corps", { move: L.move })
+			goto("may_play_poniatowskis_v_corps")
 		else
-			goto("move", { move: L.move })
-	},
-	pass() {
-		push_undo()
-
-		if (L.move.pinned && (L.max_troops_selectable === 0))
-			log("Pinned.")
-		else 
-			log("No movable SPs.")
-		
-		log()
-		goto("end_order", { type: L.move.type, move: L.move })
+			goto("move")
 	}
 }
 
@@ -4566,47 +4606,118 @@ function calculate_move_allowance(who, move_type, troops) {
 	return allowance
 }
 
+function filter_areas(callback) {
+	let areas = []
+	for (let area = FIRST_AREA; area <= LAST_AREA; ++area)
+		if (callback(area))
+			set_add(areas, area)
+	return areas
+}
+
+function get_movable_areas_in_radius(source, radius, callback = function(area) { return true }) {
+	let queue = [ source ]
+	let distance = []
+	map_set(distance, source, 0)
+	let areas = []
+
+	while (queue.length > 0) {
+		let current = queue.shift()
+
+		if (map_get(distance, current, null) > radius)
+			break
+
+		if (has_enemy_sp(G.active, current))
+			continue
+
+		for (let adj of get_all_adjacent_areas(current)) {
+			if (!can_enter_area(G.active, adj)) continue
+
+			if (map_get(distance, current, null) < radius && !map_has(distance, adj) && callback(adj))
+				set_add(areas, adj)
+
+			if (!queue.includes(adj) && !map_has(distance, adj)) {
+				queue.push(adj)
+				map_set(distance, adj, map_get(distance, current, null) + 1)
+			}
+		}
+	}
+
+	return areas
+}
+
+// TO CONFIRM: Which event takes precedence when both Evasive Maneuvers and Infighting & Intrigue are active?
+// TODO: Alexander must move towards the closest Russian leader if he doesn't have a babysitter
+function get_move_destinations(current_area, allowance) {
+	// RU #4 Evasive Maneuvers: Russia may not end moves in, or adjacent to areas with French SPs
+	if (is_event_active(C_EVASIVE_MANEUVERS) && G.active === RUSSIA && G.move.type === FORCED_MARCH) {
+		let possible_destinations = get_movable_areas_in_radius(current_area, allowance, (area) => {
+			return can_enter_area(G.active, area)
+				&& !has_enemy_sp(G.active, area) 
+				&& get_all_adjacent_areas(area).every(loc => !has_enemy_sp(G.active, loc))
+		})
+
+		return get_movable_areas_in_radius(current_area, 1, (area) => {
+			return can_enter_area(G.active, area) 
+				&& possible_destinations.some(destination => find_path_distance(area, destination) <= allowance - 1)
+		})
+	}
+	// FR #8 Infighting & Intrigue: Russian leaders in the target area may only execute a 'Forced March' order if they end up in a French-occupied area
+	if (is_event_active(C_INFIGHTING_AND_INTRIGUE) && G.active === RUSSIA && G.move.path[0] === map_get(G.persistent_events, C_INFIGHTING_AND_INTRIGUE, null).area && G.move.leaders.length > 0) {
+		let possible_destinations = get_movable_areas_in_radius(current_area, allowance, (area) => {
+			return can_enter_area(G.active, area) && has_enemy_sp(G.active, area) 
+		})
+
+		return get_movable_areas_in_radius(current_area, 1, (area) => {
+			return can_enter_area(G.active, area) 
+				&& possible_destinations.some(destination => find_path_distance(area, destination) <= allowance - 1)
+		})
+
+	}
+	else {
+		return get_movable_areas_in_radius(current_area, 1, area => can_enter_area(G.active, area))
+	}
+}
+
 P.move = {
 	_begin() {
-		//L.move
-		L.allowance = calculate_move_allowance(G.active, L.move.type, L.move.troops)
-		
-		L.current_area = L.move.path[L.move.path.length - 1]
-		log("Moved from S" + L.move.path[L.move.path.length - 1])
-		if (L.move.leaders.length > 0) {
-			logi(`L${L.move.leaders[0]}`) //Seniormost leader
-			for (let type = 0; type < L.move.troops.length; ++type) {
-				if (L.move.troops[type] > 0) {
-					log_only(G.active, "<" + L.move.troops[type] + " " + get_troop_type_name(type))
+		// Number of areas left to move
+		L.move_allowance = calculate_move_allowance(G.active, G.move.type, G.move.sps)
+		// Tracks which area the moving force is currently in
+		L.current_area = G.move.path[G.move.path.length - 1]
+		// Flag to show 'confirm battle' prompt
+		L.confirm_battle = false
+
+		// Log start of move
+		log(`Moved from S${L.current_area}`)
+		if (G.move.leaders.length > 0) {
+			logi(`L${get_seniormost_leader_from_list(G.active, G.move.leaders)}`) //Seniormost leader
+			for (let type = 0; type < G.move.sps.length; ++type) {
+				if (G.move.sps[type] > 0) {
+					log_only(G.active, "<" + G.move.sps[type] + " " + get_troop_type_name(type))
 				}
 			}
 		} else {
-			for (let type = 0; type < L.move.troops.length; ++type) {
-				if (L.move.troops[type] > 0) {
-					log("<" + L.move.troops[type] + " " + get_troop_type_name(type))
+			for (let type = 0; type < G.move.sps.length; ++type) {
+				if (G.move.sps[type] > 0) {
+					log("<" + G.move.sps[type] + " " + get_troop_type_name(type))
 				}
 			}
 		}
-		L.confirm_battle = false
 	},
 	prompt() {
 		if (L.confirm_battle) {
-			prompt("This move may trigger a battle. Confirm?")
+			if (has_battle(L.current_area))
+				prompt(`This force will join the battle at S${L.current_area}. Confirm?`)
+			else
+				prompt("This move may trigger a battle. Confirm?")
 			button_confirm()
-		} else if (L.allowance > 0) {
-			prompt(`Select destination for move (${L.allowance} remaining MPs).`)
-			for (let area of get_all_adjacent_areas(L.move.path[L.move.path.length - 1])) {
-				if ((L.move.type === FORCED_MARCH) && is_event_active(C_EVASIVE_MANEUVERS) && (G.active === RUSSIA)) {
-					if (!is_fr_controlled(area) && !get_all_adjacent_areas(area).some(a => is_fr_controlled(a)) && can_enter_area(G.active, area))
-						action_area(area)
-				} else {
-					if (can_enter_area(G.active, area))
-						action_area(area)
-				}
-			}
-			button_done(L.move.path.length > 1) // Cannot not move from starting area
-		} else {
-			prompt(`Move: All done.`)
+		}
+		else if (L.move_allowance > 0) {
+			prompt(`Select destination for move (${L.move_allowance} remaining MPs).`)
+			get_move_destinations(L.current_area, L.move_allowance).forEach(action_area)
+		}
+		else {
+			prompt(`Move force: All done.`)
 			button_done()
 		}
 	},
@@ -4615,42 +4726,47 @@ P.move = {
 		logi("to S" + area)
 		let could_play_city_ablaze = ((G.active === FRANCE) && is_key_city(area) && !has_troop(area))
 
+		// If the destination is a VP area, increase VP
 		if (is_vp_area(area) && !is_friendly_controlled(G.active, area) && !has_enemy_sp(G.active, area)) {
 			increase_vp(G.active, get_area_vp(area))
 		} 
 
-		if ((L.current_area === S_MOSCOW) && is_event_active(C_PRIDE_AND_HESITATION) && (L.move.leaders.length > 0) && (G.active === FRANCE)) {
+		// RU #15 Pride and Hesitation: Russia gains +1 VP if any French leaders leave Moscow.
+		if ((L.current_area === S_MOSCOW) && is_event_active(C_PRIDE_AND_HESITATION) && (G.move.leaders.length > 0) && (G.active === FRANCE)) {
 			log_card(C_PRIDE_AND_HESITATION)
 			increase_vp(RUSSIA)
 		}
 
+		// FR #4 Holy Mother Russia: France gains +1 VP for each force that leaves the selected area
 		if (is_event_active(C_HOLY_MOTHER_RUSSIA_FR) && (map_get(G.persistent_events, C_HOLY_MOTHER_RUSSIA_FR, -1).area === L.current_area) && (G.active === RUSSIA)) { //TO CHECK: Does this stack on the same move or only once per move?
 			log_card(C_HOLY_MOTHER_RUSSIA_FR)
 			increase_vp(FRANCE)
 		}
 
+		// FR #48 Disorderly March: France must stop after entering the target area.
 		if ((G.active === FRANCE) && (is_event_active(C_DISORDERLY_MARCH)) && (map_get(G.persistent_events, C_DISORDERLY_MARCH, null).area === area)) {
 			log_card(C_DISORDERLY_MARCH)
-			L.allowance = 0
+			L.move_allowance = 0
 		}
 
+		// Determine the new seniormost leader if multiple leaders occupy the target area
 		let determine_seniority = []
-		if (has_friendly_leader(G.active, area) && L.move.leaders.length > 0 && (get_leader_seniority(get_seniormost_leader(G.active, area)) === get_leader_seniority(get_seniormost_leader_from_list(G.active, L.move.leaders)))) {
+		if (has_friendly_leader(G.active, area) && G.move.leaders.length > 0 && (get_leader_seniority(get_seniormost_leader(G.active, area)) === get_leader_seniority(get_seniormost_leader_from_list(G.active, G.move.leaders)))) {
 			for (let leader of get_leaders_at_area(G.active, area)) {
 				if (get_leader_seniority(leader) === get_leader_seniority(get_seniormost_leader(G.active, area)))
 					set_add(determine_seniority, leader)
 			}
 			
-			set_add(determine_seniority, get_seniormost_leader_from_list(G.active, L.move.leaders))
+			set_add(determine_seniority, get_seniormost_leader_from_list(G.active, G.move.leaders))
 		}
 
 		if (has_enemy_sp(G.active, area)) {
 			L.confirm_battle = true
 			L.current_area = area
 		} else {
-			move_formation(L.move.leaders, L.move.troops, L.move.path[L.move.path.length - 1], area)
-			L.move.path.push(area)
-			L.allowance = Math.max(--L.allowance, 0)
+			move_formation(G.move.leaders, G.move.sps, G.move.path[G.move.path.length - 1], area)
+			G.move.path.push(area)
+			L.move_allowance = Math.max(--L.move_allowance, 0)
 
 			if (is_vp_area(L.current_area) && !is_friendly_controlled(G.active, L.current_area)) {
 				log(`S${L.current_area} abandoned!`)
@@ -4673,15 +4789,15 @@ P.move = {
 	}, 
 	done() {
 		push_undo()
-		mark_already_moved(G.active, L.move.path, L.move.type, L.move.leaders, L.move.troops)
+		mark_already_moved(G.active, G.move.path, G.move.type, G.move.leaders, G.move.sps)
 		//TODO: Attrition losses not yet implemented
-		goto("post_move_exhaustion", { move: L.move })
+		goto("post_move_exhaustion")
 	},
 	confirm() {
 		push_undo()
-		let previous_area = L.move.path[L.move.path.length - 1]
-		move_formation(L.move.leaders, L.move.troops, previous_area, L.current_area)
-		L.move.path.push(L.current_area)
+		let previous_area = G.move.path[G.move.path.length - 1]
+		move_formation(G.move.leaders, G.move.sps, previous_area, L.current_area)
+		G.move.path.push(L.current_area)
 
 		if (is_vp_area(previous_area) && !is_friendly_controlled(G.active, previous_area)) {
 			log(`S${previous_area} abandoned!`)
@@ -4692,10 +4808,10 @@ P.move = {
 			log(`Battle declared at S${L.current_area}.`)
 
 		if (!has_battle(L.current_area) && !map_has(G.moved, L.current_area)) {
-			add_attacker_to_battle(G.active, previous_area, L.current_area, L.move.type, L.move.leaders.slice(), L.move.troops.slice())
+			add_attacker_to_battle(G.active, previous_area, L.current_area, G.move.type, G.move.leaders.slice(), G.move.sps.slice())
 			add_defender_to_battle(enemy(G.active), L.current_area, L.current_area, -1, get_leaders_at_area(enemy(G.active), L.current_area), get_troop_list_by_type(enemy(G.active), L.current_area))
 		} else if (!has_battle(L.current_area) && map_has(G.moved, L.current_area)) {
-			add_attacker_to_battle(G.active, previous_area, L.current_area, L.move.type, L.move.leaders.slice(), L.move.troops.slice())
+			add_attacker_to_battle(G.active, previous_area, L.current_area, G.move.type, G.move.leaders.slice(), G.move.sps.slice())
 			let leaders = get_leaders_at_area(enemy(G.active), L.current_area)
 			let troops = get_troop_list_by_type(enemy(G.active), L.current_area)
 			for (let entry of map_get(G.moved, L.current_area, null)) {
@@ -4709,14 +4825,14 @@ P.move = {
 			if (troops.some(type => type > 0) || leaders.length > 0)
 				add_defender_to_battle(enemy(G.active), L.current_area, L.current_area, -1, leaders, troops)
 		} else if (has_battle(L.current_area) && (get_battle_attacker(L.current_area) === G.active)) {
-			add_attacker_to_battle(G.active, previous_area, L.current_area, L.move.type, L.move.leaders.slice(), L.move.troops.slice())
+			add_attacker_to_battle(G.active, previous_area, L.current_area, G.move.type, G.move.leaders.slice(), G.move.sps.slice())
 		} else if (has_battle(L.current_area) && (get_battle_defender(L.current_area) === G.active)) {
-			add_defender_to_battle(G.active, previous_area, L.current_area, L.move.type, L.move.leaders.slice(), L.move.troops.slice())
+			add_defender_to_battle(G.active, previous_area, L.current_area, G.move.type, G.move.leaders.slice(), G.move.sps.slice())
 		}
 
-		mark_already_moved(G.active, L.move.path, L.move.type, L.move.leaders, L.move.troops)
+		mark_already_moved(G.active, G.move.path, G.move.type, G.move.leaders, G.move.sps)
 
-		goto("post_move_exhaustion", { move: L.move })
+		goto("post_move_exhaustion")
 	}
 }
 
@@ -4816,17 +4932,17 @@ function get_post_move_exhaustion_events(who, move_type) {
 
 function has_fresh_moving_sp() {
 	for (let type = 0; type < NUM_TROOP_TYPES; ++type)
-		if (is_troop_type_fresh(type) && L.move.troops[type] > 0)
+		if (is_troop_type_fresh(type) && G.move.sps[type] > 0)
 			return true
 	return false
 }
 
 P.post_move_exhaustion = {
 	_begin() {
-		//L.move
-		L.events = get_post_move_exhaustion_events(G.active, L.move.type)
+		//G.move
+		L.events = get_post_move_exhaustion_events(G.active, G.move.type)
 		if (L.events.length === 0) 
-			goto("end_order", { type: L.move.type, move: L.move })
+			goto("end_order", { type: G.move.type })
 		else
 			L.current_event = L.events.shift()
 	},
@@ -4834,8 +4950,8 @@ P.post_move_exhaustion = {
 		if (L.current_event > 0) {
 			if (has_fresh_moving_sp()) {
 				prompt_card(L.current_event, `Exhaust an SP in the moving force.`)
-				for (let type = 0; type < L.move.troops.length; ++type)
-					if (is_troop_type_fresh(type) && L.move.troops[type] > 0) 
+				for (let type = 0; type < G.move.sps.length; ++type)
+					if (is_troop_type_fresh(type) && G.move.sps[type] > 0) 
 						action("troop", type)
 			} else {
 				prompt_card(L.current_event, `No fresh SPs in the moving force.`)
@@ -4848,7 +4964,7 @@ P.post_move_exhaustion = {
 	},
 	troop(type) {
 		push_undo()
-		exhaust_troop(G.active, L.move.path[L.move.path.length - 1], type)
+		exhaust_troop(G.active, G.move.path[G.move.path.length - 1], type)
 		log()
 		log(`${get_card_log_alias(L.current_event)}`)
 		log(`>Exhausted`)
@@ -4866,7 +4982,7 @@ P.post_move_exhaustion = {
 	},
 	done() {
 		push_undo()
-		goto("end_order", { type: L.move.type, move: L.move })
+		goto("end_order", { type: G.move.type })
 	}
 }
 
@@ -4983,7 +5099,7 @@ P.may_play_evade_events = {
 	},
 	prompt() {
 		if (L.events.length > 0) {
-			prompt(`You may play ${join_array_with_and(L.events.map(card => get_card_log_alias(card)))}.`)
+			prompt(`You may play ${join_array_with_or(L.events.map(card => get_card_log_alias(card)))}.`)
 			L.events.forEach(action_card)
 			button_pass()
 		} else if (L.has_played_event) {
@@ -5354,6 +5470,8 @@ function find_path_distance(a, b, connection_type = -1) {
 		}
 
 		set_add(visited, current)
+
+		if (has_enemy_sp(G.active, current)) continue
 
 		let current_distance = get_distance(current)
 		let adjacencies = (connection_type === ROAD) ? get_adjacent_areas_by_road(current) : get_all_adjacent_areas(current)
@@ -9635,7 +9753,7 @@ P.may_play_exhausting_march = {
 	},
 	card(card) {
 		push_undo()
-		goto("exhausting_march", { card, move: L.move })
+		goto("exhausting_march", { card })
 	},
 	pass() {
 		push_undo()
@@ -9657,17 +9775,17 @@ function is_track_connection(a, b) {
 
 P.exhausting_march = {
 	_begin() {
-		// L.card, L.move
+		// L.card, G.move
 		card_box_begin(C_EXHAUSTING_MARCH_1)
 		L.num_losses = 0
 		L.sp_losses = 0
 
-		L.move.troops.forEach(amt => L.sp_losses += amt)
+		G.move.sps.forEach(amt => L.sp_losses += amt)
 		L.sp_losses = Math.ceil(L.sp_losses / 5)
 		L.num_losses += L.sp_losses
 
-		for (let i = 0; i < L.move.path.length - 1; ++i)
-			if (is_track_connection(L.move.path[i], L.move.path[i + 1])) 
+		for (let i = 0; i < G.move.path.length - 1; ++i)
+			if (is_track_connection(G.move.path[i], G.move.path[i + 1])) 
 				++L.num_losses
 	},
 	prompt() {
@@ -10961,6 +11079,7 @@ P.good_leadership = {
 	},
 	done() {
 		card_box_end()
+		discard_or_remove_card(C_GOOD_LEADERSHIP)
 		end()
 	}
 }
@@ -11210,22 +11329,22 @@ P.may_play_poniatowskis_v_corps = {
 	},
 	card(card) {
 		push_undo()
-		goto("poniatowskis_v_corps", { move: L.move })
+		goto("poniatowskis_v_corps")
 	},
 	pass() {
 		push_undo()
-		goto("move", { move: L.move })
+		goto("move")
 	}
 }
 
 
 P.poniatowskis_v_corps = {
 	_begin() {
-		//L.move
-		L.has_exhausted_infantry_sp = [EXHAUSTED_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY].some(type => L.move.troops[type] > 0)
+		//G.move
+		L.has_exhausted_infantry_sp = [EXHAUSTED_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY].some(type => G.move.sps[type] > 0)
 		L.count = 0
 		for (let type of [EXHAUSTED_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY])
-			L.count += L.move.troops[type]
+			L.count += G.move.sps[type]
 		L.has_rallied = false
 		card_box_begin(C_PONIATOWSKIS_V_CORPS)
 	},
@@ -11239,17 +11358,17 @@ P.poniatowskis_v_corps = {
 		} else {
 			prompt_card(C_PONIATOWSKIS_V_CORPS, `Rally exhausted infantry SPs in the moving force (${L.count} remaining).`)
 			for (let type of [EXHAUSTED_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY])
-				if (L.move.troops[type] > 0)
+				if (G.move.sps[type] > 0)
 					action("troop", type)
 		}
 	},
 	troop(type) {
 		push_undo()
-		rally_troop(G.active, L.move.path[L.move.path.length - 1], type)
-		--L.move.troops[type]
-		++L.move.troops[type - 1]
+		rally_troop(G.active, G.move.path[G.move.path.length - 1], type)
+		--G.move.sps[type]
+		++G.move.sps[type - 1]
 		log("Rallied")
-		logi(`S${L.move.path[L.move.path.length -1]}`)
+		logi(`S${G.move.path[G.move.path.length -1]}`)
 		log("<1 Exh. Infantry")
 		--L.count
 	},
@@ -11258,13 +11377,13 @@ P.poniatowskis_v_corps = {
 		log("No exhausted SPs to rally.")
 		card_box_end()
 		discard_or_remove_card(C_PONIATOWSKIS_V_CORPS)
-		goto("move", { move: L.move })
+		goto("move")
 	},
 	done() {
 		push_undo()
 		card_box_end()
 		discard_or_remove_card(C_PONIATOWSKIS_V_CORPS)
-		goto("move", { move: L.move })
+		goto("move")
 	}
 }
 
@@ -11417,6 +11536,11 @@ function map_decrement(map, key, amount = 1) {
 	let current = map_get(map, key, null)
 	if (current !== null)
 		map_set(map, key, current - amount)
+}
+
+function object_clear(obj) {
+	for (let key of Object.keys(obj))
+		delete obj[key]
 }
 
 function roll_d6() {
