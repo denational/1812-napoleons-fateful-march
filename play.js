@@ -394,7 +394,7 @@ function on_init() {
 	}
 
 	for (let connection = FIRST_CONNECTION; connection <= LAST_CONNECTION; ++connection) {
-		define_space("connection", connection, layout[`Connection${connection}`])
+		define_space("connection", connection, layout[`Connection${connection}`]).tooltip(`Connection${connection}`)
 		define_stack("connection_stack", connection, layout[`Connection${connection}`], -20, -20, 0, -58, 0, 36, 1, 4, 0.5, 0.5)
 	}
 
@@ -645,7 +645,7 @@ function update_tracks() {
 	} else {
 		update_keyword("vp", 0, "ru")
 	}
-	populate("track-vp", Math.abs(V.vp), "vp", 0)
+	populate("track-vp", Math.min(Math.max(0, Math.abs(V.vp)), 20), "vp", 0)
 
 	//Initiative
 	if (V.initiative >= 0) {

@@ -1621,13 +1621,12 @@ const data = {
 			"vp": 0,
 			"track": [
 				80,
+				82,
 				100,
 				102,
 				79
 			],
-			"road": [
-				82
-			],
+			"road": [],
 			"bridge": [],
 			"zone": "D3"
 		},
@@ -1641,11 +1640,11 @@ const data = {
 			"depot": false,
 			"vp": 0,
 			"track": [
-				80
+				80,
+				81
 			],
 			"road": [
 				83,
-				81,
 				84,
 				103
 			],

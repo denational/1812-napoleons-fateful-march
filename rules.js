@@ -3840,8 +3840,11 @@ P.change_orders = {
 	_begin() {
 		//L.current_order_type
 		//Defend doesn't have its own phase, so it might be unclear
-		if (L.current_order_type !== DEFEND) log_h3("Change Orders")
-		else log_h3("Change Orders – Defend")
+		if (L.current_order_type === DEFEND || L.current_order_type === FORAGE) 
+			log_h3(`Change Orders – ${get_order_type_name(L.current_order_type)}`)
+		else
+			log_h3("Change Orders")
+			
 		log()
 
 		G.active = [RUSSIA, FRANCE]
@@ -4495,7 +4498,7 @@ P.select_force = {
 					action("remove_troop", type)
 			}
 
-			if (L.movable_leaders.length > G.move.leaders.length || L.num_sps_selected < L.max_sps_selectable)
+			if (!G.move.pinned && L.movable_leaders.length > G.move.leaders.length || L.num_sps_selected < L.max_sps_selectable)
 				button("select_all")
 
 			button_done(L.num_sps_selected >= 1 && can_alexander_be_babysitted())
@@ -4520,7 +4523,7 @@ P.select_force = {
 					action("remove_troop", type)
 			}
 
-			if (L.movable_leaders.length === 0 && L.num_sps_selected < L.max_sps_selectable && L.max_sps_selectable <= 4)
+			if (!G.move.pinned && L.movable_leaders.length === 0 && L.num_sps_selected < L.max_sps_selectable && L.max_sps_selectable <= 4)
 				button("select_all")
 
 			button_done(L.num_sps_selected >= 1 && can_alexander_be_babysitted())
@@ -4645,7 +4648,9 @@ function get_movable_areas_in_radius(source, radius, callback = function(area) {
 	return areas
 }
 
-// TO CONFIRM: Which event takes precedence when both Evasive Maneuvers and Infighting & Intrigue are active?
+// NOTE: Brian rules that Evasive Maneuvers takes precedence over (and basically cancels) Infighting & Intrigue
+// Brian's ruling: "Evasive Maneuvres is placed last and thus takes precedence :)"
+
 // TODO: Alexander must move towards the closest Russian leader if he doesn't have a babysitter
 function get_move_destinations(current_area, allowance) {
 	// RU #4 Evasive Maneuvers: Russia may not end moves in, or adjacent to areas with French SPs
@@ -4673,8 +4678,11 @@ function get_move_destinations(current_area, allowance) {
 		})
 
 	}
+	else if (has_battle(current_area) && is_battle_defender(G.active, current_area)) {
+		return get_all_adjacent_areas(current_area).filter(area => !get_connections_used_by_attacker(current_area).includes(area))
+	}
 	else {
-		return get_movable_areas_in_radius(current_area, 1, area => can_enter_area(G.active, area))
+		return get_all_adjacent_areas(current_area)
 	}
 }
 
@@ -4715,6 +4723,7 @@ P.move = {
 		else if (L.move_allowance > 0) {
 			prompt(`Select destination for move (${L.move_allowance} remaining MPs).`)
 			get_move_destinations(L.current_area, L.move_allowance).forEach(action_area)
+			button_done()
 		}
 		else {
 			prompt(`Move force: All done.`)
@@ -5164,13 +5173,17 @@ P.do_evade = {
 				}
 			}
 			logi("to S" + L.selected_area)
+			evade_defending_formation(G.active, L.evade.leaders, L.evade.troops, L.area, L.selected_area)
 			L.has_finished = true
 
+			if (is_vp_area(L.area) && !has_friendly_troop(G.active, L.area)) {
+				log(`Abandoned S${L.area}!`)
+				decrease_vp(G.active, get_area_vp(L.area))
+			}
+
 			if (has_friendly_depot(G.active, L.area)) {
-				evade_defending_formation(G.active, L.evade.leaders, L.evade.troops, L.area, L.selected_area)
 				call("remove_depot", { area: L.area })
 			} else {
-				evade_defending_formation(G.active, L.evade.leaders, L.evade.troops, L.area, L.selected_area)
 				goto("end_order", { type: EVADE })
 			}
 		}
@@ -5978,9 +5991,13 @@ P.resolve_battles = {
 	},
 	_resume() {
 		set_delete(L.battles_by_type[L.current_battle_type], G.current_battle)
-		while (L.current_battle_type < BATTLES_WHERE_BOTH_SIDES_HAVE_LEADERS)
+		while (L.current_battle_type < BATTLES_WHERE_BOTH_SIDES_HAVE_LEADERS) {
 			if (L.battles_by_type[L.current_battle_type].length === 0)
 				++L.current_battle_type
+			else
+				break
+		}
+
 		G.current_battle = -1
 	}
 }
@@ -6010,6 +6027,7 @@ P.defend = {
 		L.has_confirmed = false
 	},
 	prompt() {
+		console.log(G.hand)
 		if (!L.has_defend_order) {
 			prompt(`You do not have a defend order at S${L.area}.`)
 			button_pass()
@@ -7545,7 +7563,7 @@ P.retreat = {
 			}
 
 			button("select_all")
-			button_confirm(L.retreat.total_num > 0 || (L.retreat_destinations.length === 0 && (L.retreat.total_num > count_num_sps(G.active, G.current_battle))))
+			button_confirm(L.retreat_destinations.length > 1 || (L.retreat_destinations.length === 1 && (count_num_sps(G.active, G.current_battle) === L.retreat.total_num)))
 		} else {
 			prompt(`Retreat: All done.`)
 			button_done()
@@ -7554,7 +7572,6 @@ P.retreat = {
 	area(area) {
 		push_undo()
 		L.selected_area = area
-		set_delete(L.retreat_destinations, L.selected_area)
 	},
 	leader_button(leader) {
 		push_undo()
@@ -7585,7 +7602,7 @@ P.retreat = {
 	confirm() {
 		push_undo()
 		move_formation(L.retreat.leaders, L.retreat.troops, G.current_battle, L.selected_area)
-		
+		set_delete(L.retreat_destinations, L.selected_area)
 		log("Retreated from S" + G.current_battle)
 		if (L.retreat.leaders.length > 0) {
 			logi(`L${L.retreat.leaders[0]}`) //Seniormost leader
@@ -7614,11 +7631,8 @@ P.retreat = {
 		}
 	},
 	done() {
-		if (has_friendly_depot(G.active, G.current_battle)) {
-			push_undo()
-			goto("remove_depot", {area: G.current_battle})
-		} else
-			end()
+		log()
+		end()
 	}
 }
 
@@ -7640,8 +7654,8 @@ P.eliminate_leader = {
 	leader(leader) {
 		push_undo()
 		logi(`L${leader}`)
-		eliminate_leader(leader)
 		set_delete(L.leaders_to_eliminate, leader)
+		eliminate_leader(leader)
 	},
 	done() {
 		log()
@@ -7936,6 +7950,8 @@ P.attrition = script(`
 		log_h2("Attrition") 
 		L.player_with_initiative = get_who_has_initiative()
 	}
+	
+	call change_orders { current_order_type: FORAGE }
 	
 	set G.active (1 - L.player_with_initiative)
 	call attrition_events
@@ -10504,8 +10520,7 @@ P.war_weariness = {
 	},
 	vp() {
 		push_undo()
-		G.vp += L.french_vp
-		log(`France +${L.french_vp} VP.`)
+		increase_vp(FRANCE, L.french_vp)
 		for (let s of L.controlled_areas) {
 			logi(`+1 S${s}`)
 		}
@@ -10742,6 +10757,11 @@ function increase_vp(who, amount = 1) {
 		G.vp -= amount
 	else
 		G.vp += amount
+
+	if (Math.abs(G.vp) >= 20) {
+		log_h1("The End")
+		finish(who, `Sudden Death: ${ROLES[who]} won with ${Math.abs(G.vp)} VP.`)
+	}
 }
 
 function decrease_vp(who, amount = 1) {
@@ -10750,6 +10770,11 @@ function decrease_vp(who, amount = 1) {
 		G.vp += amount
 	else
 		G.vp -= amount
+
+	if (Math.abs(G.vp) >= 20) {
+		log_h1("The End")
+		finish(enemy(who), `Sudden Death: ${ROLES[enemy(who)]} won ${Math.abs(G.vp)} VP.`)
+	}
 }
 
 // FR #15: Peace Offer
@@ -11187,9 +11212,9 @@ P.the_imperial_guard = {
 	_begin() { L.step = -1 },
 	prompt() {
 		if (L.step === -1)
-			prompt(C_THE_IMPERIAL_GUARD, `All Imperial Guard SPs fight at X3 instead of X1.5.`)
+			prompt_card(C_THE_IMPERIAL_GUARD, `All Imperial Guard SPs fight at X3 instead of X1.5.`)
 		else
-			prompt(C_THE_IMPERIAL_GUARD, `If Russia wins the battle, France must discard a random card, and Russia gains +2 VP.`)
+			prompt_card(C_THE_IMPERIAL_GUARD, `If Russia wins the battle, France must discard a random card, and Russia gains +2 VP.`)
 		button_confirm()
 	},
 	confirm() {
