@@ -202,6 +202,8 @@ const last_troops = [
 	[last_ru_cossack, last_fr_guard],
 ]
 
+var used_half_strength = [0, 0]
+
 const INFANTRY = 0
 const CAVALRY = 1
 const SPECIAL = 2
@@ -356,6 +358,8 @@ const LAST_AREA = 156
 const FIRST_CONNECTION = 1
 const LAST_CONNECTION = 261
 
+const NO_MOVE = -1
+
 /* MISC FUNCTIONS */
 function process_area_name(name) {
 	name = name.replace(/(Grand Duchy of Warsaw|Prussia) (North|South)/, "$1")
@@ -389,8 +393,8 @@ function on_init() {
 		define_space("area", area, layout[get_area_name(area)], areas[area].type)
 			.tooltip(`${process_area_name(get_area_name(area))} (${areas[area].zone})`)
 		
-		define_stack("area_stack", area, layout[get_area_name(area)], -20, -20, 0, -58, 0, 36, 1, 4, 0.5, 0.5)
-		define_stack("orders_stack", area, translate_right(layout[get_area_name(area)], 52), 0, -60, 0, -12)
+		define_stack("area_stack", area, layout[get_area_name(area)], -20, -20, 0, -58, 0, 36, 1, 4)
+		define_stack("orders_stack", area, translate_right(layout[get_area_name(area)], 52), 0, -100, 0, -125)
 	}
 
 	for (let connection = FIRST_CONNECTION; connection <= LAST_CONNECTION; ++connection) {
@@ -398,11 +402,11 @@ function on_init() {
 		define_stack("connection_stack", connection, layout[`Connection${connection}`], -20, -20, 0, -58, 0, 36, 1, 4, 0.5, 0.5)
 	}
 
-	define_layout("ru_pool_depots", 0, layout["Russia Pool Depots"], "square")
-	define_layout("fr_pool_depots", 0, layout["France Pool Depots"], "square")
-	define_layout("ru_pool_leaders", 0, layout["Russia Pool Leaders"], "square")
-	define_layout("fr_pool_leaders", 0, layout["France Pool Leaders"], "square")
-	define_stack("fr_casualties", 0, layout["France Casualties"], -20, -20, 0, -58, 0, 36, 1, 4, 0.5, 0.5)
+	define_layout("ru_pool_depots", 0, layout["Russia Pool Depots"])
+	define_layout("fr_pool_depots", 0, layout["France Pool Depots"])
+	define_layout("ru_pool_leaders", 0, layout["Russia Pool Leaders"])
+	define_layout("fr_pool_leaders", 0, layout["France Pool Leaders"])
+	define_layout("fr_casualties", 0, layout["France Casualties"])
 
 	/* ORDERS */
 	for (let id = first_ru_order; id <= last_fr_order; ++id) {
@@ -434,21 +438,20 @@ function on_init() {
 	}
 
 	/* TROOPS */
-	//Modified define_piece_list() adding a number keyword (to update values on counters)
+	//Modified define_piece_list()
 	function define_troop_list(action, a, b, keywords) {
 		for (var i = a; i <= b; ++i) {
 			let troop = define_piece(action, i, keywords)
-				.keyword(`n${i}`)
 				.stackable()
 			define_thing("troop-text", i)
 				.static_child(troop)
 		}
 	}
 
-	define_troop_list("infantry", first_ru_inf, first_fr_inf - 1, "ru")
-	define_troop_list("infantry", first_fr_inf, first_fr_pr_inf - 1, "fr")
-	define_troop_list("infantry", first_fr_pr_inf, first_fr_au_inf - 1, "pr")
-	define_troop_list("infantry", first_fr_au_inf, 160, "au")
+	define_troop_list("infantry", first_ru_inf, last_ru_inf, "ru")
+	define_troop_list("infantry", first_fr_inf, last_fr_inf, "fr")
+	define_troop_list("infantry", first_fr_pr_inf, last_fr_pr_inf, "pr")
+	define_troop_list("infantry", first_fr_au_inf, last_fr_au_inf, "au")
 
 	define_troop_list("cavalry", first_ru_cav, last_ru_cav, "ru")
 	define_troop_list("cavalry", first_fr_cav, last_fr_cav, "fr")
@@ -465,8 +468,8 @@ function on_init() {
 	define_marker_list("depot", 14, 20, "fr")
 	define_marker_list("attrition_checked", 0, 80)
 
-	define_marker_list("half_strength_ru", 0, 15)
-	define_marker_list("half_strength_fr", 0, 15)
+	define_marker_list("half_strength_ru", 0, 150)
+	define_marker_list("half_strength_fr", 0, 150)
 
 	/* TRACKS */
 	define_layout_track_v("track-vp", 0, 20, layout["VP Track"])
@@ -493,6 +496,8 @@ function on_update() {
 
 	//Reset counters
 	reset_used()
+	used_half_strength[RUSSIA] = 0
+	used_half_strength[FRANCE] = 0
 	num_devastated = 0
 
 	update_tracks()
@@ -571,6 +576,10 @@ function on_update() {
 	action_button("discard_and_redraw", "Discard & Redraw")
 	action_button("combine", "Combine")
 	action_button("add_1_to_attrition_distance")
+
+	action_button_with_argument("move_type", -1, "SPs that have not moved")
+	action_button_with_argument("move_type", 0, "Forced March SPs")
+	action_button_with_argument("move_type", 1, "March SPs")
 
 	action_button("place_order", "Place Order")
 	action_button("change_order", "Change Order")
@@ -684,6 +693,10 @@ function get_defender_data(area) {
 	return get_battle_entry(area, null)?.defender ?? null
 }
 
+function get_player_battle_data(who, area) {
+	return is_battle_attacker(who, area) ? get_attacker_data(area) : get_defender_data(area)
+}
+
 function is_battle_attacker(who, area) {
 	return get_battle_attacker(area) === who
 }
@@ -720,32 +733,55 @@ function get_seniormost_leader_from_list(who, list) {
 	return V.seniority[who].find(leader => list.includes(leader))
 }
 
+function get_seniormost_leader_on_connection(who, from, to)  {
+	let leaders = []
+	for (let entry of get_player_battle_data(who, to).forces) {
+		if (entry.from === from)
+			entry.leaders.forEach(leader => set_add(leaders, leader))
+	}
+	return leaders.length > 0 ? get_seniormost_leader_from_list(who, leaders) : -1
+}
+
 function update_leaders() {
 	for (let leader = 0; leader < V.leaders.length; ++leader) {
 		let location = get_leader_location(leader)
 		switch(location) {
 		case OUT_OF_PLAY:
-			populate((get_leader_faction(leader) === RUSSIA) ? "fr_pool_leaders" : "ru_pool_leaders", 0, "leader", leader); break
+			populate((get_leader_faction(leader) === RUSSIA) ? "fr_pool_leaders" : "ru_pool_leaders", 0, "leader", leader)
+			break
 		case POOL:
-			populate((get_leader_faction(leader) === RUSSIA) ? "ru_pool_leaders" : "fr_pool_leaders", 0, "leader", leader); break
+			populate((get_leader_faction(leader) === RUSSIA) ? "ru_pool_leaders" : "fr_pool_leaders", 0, "leader", leader)
+			break
 		case FRENCH_CASUALTIES:
-			populate("fr_casualties", 0, "leader", leader); break
-		default:
-			if (!has_battle(location) || is_battle_defender(get_leader_faction(leader), location)) {
+			populate("fr_casualties", 0, "leader", leader)
+			break
+		default:			
+			if (has_battle(location)) {
+				for (let force of get_player_battle_data(get_leader_faction(leader), location).forces) {
+					if (set_has(force.leaders, leader)) {
+						if (force.from === location) {
+							if (get_seniormost_leader_on_connection(get_leader_faction(leader), location, location) === leader) {
+								populate("area_stack", get_leader_location(leader), "leader", leader)
+								populate("leaders", get_leader_faction(leader), "leader_board", leader)
+							} else {
+								populate("subordinate_leaders", get_seniormost_leader_on_connection(get_leader_faction(leader), location, force.from), "leader", leader)
+							}
+						} else {
+							if (get_seniormost_leader_on_connection(get_leader_faction(leader), force.from, location) === leader) {
+								populate("connection_stack", find_connection(location, force.from), "leader", leader)
+								populate("leaders", get_leader_faction(leader), "leader_board", leader)
+							} else {
+								populate("subordinate_leaders", get_seniormost_leader_on_connection(get_leader_faction(leader), location, force.from), "leader", leader)
+							}
+						}
+					}
+				}
+			} else {
 				if (is_seniormost_leader(leader, get_leader_location(leader))) {
 					populate("area_stack", get_leader_location(leader), "leader", leader)
 					populate("leaders", get_leader_faction(leader), "leader_board", leader)
 				} else 
 					populate("subordinate_leaders", get_seniormost_leader(get_leader_faction(leader), get_leader_location(leader)), "leader", leader)
-			} else {
-				for (let entry of get_attacker_data(location).forces) {
-					if (set_has(entry.leaders, leader))
-						if (get_seniormost_leader_from_list(get_leader_faction(leader), get_leaders_on_connection(get_leader_faction(leader), location, entry.from)) === leader) {
-							populate("connection_stack", find_connection(location, entry.from), "leader", leader)
-							populate("leaders", get_leader_faction(leader), "leader_board", leader)
-						} else
-							populate("subordinate_leaders", get_seniormost_leader_from_list(get_leader_faction(leader), entry.leaders), "leader", leader)
-				}
 			}
 		}
 	}
@@ -756,84 +792,145 @@ function has_bridge(from, to) {
 }
 
 function update_troops() {
-	map_for_each(G.troops, (area, entries) => {
-		let half_strength_connections = []
-		let half_strength_areas = []
+	// V.troops is a plain array map keyed by area and each value contains a set of bitpacked troop entries
+	map_for_each(V.troops, (area, entries) => {
 		for (let entry of entries) {
-			//Unraveling bitmasks
-			let who = decode_troop_entry_who(entry)
+			// Unravel bitmasks
+			let player = decode_troop_entry_who(entry)
 			let type = decode_troop_entry_type(entry)
 			let num = decode_troop_entry_num(entry)
 
-			if (has_battle(area) && is_battle_attacker(who, area)) {
-				for (let entry of get_attacker_data(area).forces) {
-					let connection = find_connection(entry.from, area)
-					if (!set_has(half_strength_connections, connection) && entry.move_type === 0)
-						populate_generic("connection_stack", connection, `half_strength_${get_abbreviation(who)}`, 1)
-					if (!set_has(half_strength_connections, connection) && has_bridge(entry.from, area))
-						populate_generic("connection_stack", connection, `half_strength_${get_abbreviation(who)}`, 1)
-					set_add(half_strength_connections, connection)
-				}
-			} else {
-				if (map_has(V.moved, area) && map_get(V.moved, area).some(entry => entry.faction === who && entry.move_type === 0) && !set_has(half_strength_areas, area)) {
-					populate_generic("area_stack", area, `half_strength_${get_abbreviation(who)}`, 1)
-					set_add(half_strength_areas, area)
-				}
-			}
-			
+			// Map to lookup what number to populate on each troop marker
+			let troop_nums = []
 
-			//Updating the marker to its 'fresh' or 'exhausted' side
-			if (is_fresh(type)) {
-				update_keyword(get_troop_name(type), get_used(who, type), "fresh")
-			} else {
-				update_keyword(get_troop_name(type), get_used(who, type), "exhausted")
-			}
+			// Population logic
+			// To make battle calculations easier on the server, SPs participating in battle are all 'within' the area where the battle is occuring.
+			// However:
+			// Some SPs need to be populated on the connections corresponding to where they entered from.
+			// All attacking SPs are populated on connections.
+			// Defending SPs which were in the area before the battle started are populated within the area.
+			// Defending SPs which entered after the battle started are populated on the connection from which they entered the area.
 
-			
-			if (has_battle(area) && is_battle_attacker(who, area)) {
-				let connection_split = [] //In order to correctly update the number of troops in case there are troops of the same type across multiple connections
+			// Battle population logic
+			if (has_battle(area)) {
+				// All battle entries use V.battles as basis to populate them onto the right places.
+				// Attacker: All SPs are populated on connections.				
 
-				for (let entry of get_attacker_data(area).forces) {
-					if (entry.troops[type] > 0) {
-						if (is_fresh(type)) {
-							update_keyword(get_troop_name(type), get_used(who, type), "fresh")
-						} else {
-							update_keyword(get_troop_name(type), get_used(who, type), "exhausted")
+				for (let force of get_player_battle_data(player, area).forces) {
+					if (force.troops[type] > 0) 
+					{
+						// Update the exhaustion status of the next unused troop piece of the current type
+						update_keyword(get_troop_name(type), get_used(player, type), is_fresh(type) ? "fresh" : "exhausted")
+						
+						// Defending forces who were in the area before the battle started
+						if (force.from === area) {
+							if (get_seniormost_leader_on_connection(player, area, area) > -1) {
+								populate( 
+									`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader_on_connection(player, force.from, area),
+									get_troop_name(type), get_used(player, type)
+								)
+							}
+							else {
+								populate(
+									`area_stack`, area,
+									get_troop_name(type), get_used(player, type)
+								)
+							}
+						} 
+						else {
+							// SPs with a leader on their connection go to his mat
+							if (get_seniormost_leader_on_connection(player, force.from, area) > -1) {
+								populate(
+									`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader_on_connection(player, force.from, area),
+									get_troop_name(type), get_used(player, type)
+								)
+							} 
+							// Otherwise they are populated on the map
+							else {
+								populate(
+									`connection_stack`, find_connection(force.from, area),
+									get_troop_name(type), get_used(player, type)
+								)
+							}
 						}
 
-						let connection = find_connection(area, entry.from)						
+						//if (force.move_type === FORCED_MARCH)
+							//populate(get_troop_name(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
+						
+						if (!map_has(troop_nums, get_used(player, type)))
+							map_set(troop_nums, get_used(player, type), force.troops[type])
 
-						if (entry.leaders.length === 0) {
-							populate("connection_stack", connection, get_troop_name(type), get_used(who, type))
-						} else {
-							populate(`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader_from_list(who, entry.leaders), get_troop_name(type), get_used(who, type))
-						}
-						if (!map_has(connection_split, connection)) {
-							map_set(connection_split, connection, {id: get_used(who, type), amt: entry.troops[type]})
-						} else {
-							map_get(connection_split, connection, null).amt = map_get(connection_split, connection, null).amt + entry.troops[type]
-						}
-						incr_used(who, type)
+						incr_used(player, type)
 					}
 				}
-				map_for_each(connection_split, (connection, entry) => {
-					update_text("troop-text", entry.id, entry.amt)
-				})
-				continue
-			} 
-			//Populating the marker (without the number of troops)
-			else if (has_friendly_leader(who, area) && ((is_cavalry(type) || is_cossack(type)) || (get_seniormost_leader(who, area) !== PLATOV))) { //If there's a friendly leader in the area, put the troops on his mat
-				populate(`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader(who, area), get_troop_name(type), get_used(who, type))
-			} 
-			else if (area === FRENCH_CASUALTIES) {
-				populate("fr_casualties", 0, get_troop_name(type), get_used(who, type))
-			} 
-			else {
-				populate("area_stack", area, get_troop_name(type), get_used(who, type))
 			}
+			else {
+				let num_moved = 0
 
-			update_text("troop-text", get_used(who, type), num)
-			incr_used(who, type)
+				if (map_has(V.moved, area) && map_get(V.moved, area, null).some(force => force.move_type === FORCED_MARCH)) {
+					for (let force of map_get(V.moved, area, null)) {
+						if (force.troops[type] > 0 && force.move_type === FORCED_MARCH) {
+							update_keyword(get_troop_name(type), get_used(player, type), is_fresh(type) ? "fresh" : "exhausted")
+
+							if (has_friendly_leader(player, area)) {
+								populate(
+									`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader(player, area),
+									get_troop_name(type), get_used(player, type)
+								)
+							} else {
+								populate(
+									"area_stack", area, 
+									get_troop_name(type), get_used(player, type)
+								)
+							}
+
+							num_moved += force.troops[type]
+							//populate(get_troop_name(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
+
+							if (!map_has(troop_nums, get_used(player, type)))
+								map_set(troop_nums, get_used(player, type), force.troops[type])
+
+							incr_used(player, type)
+						}
+					}
+				}
+
+				// Default population logic
+				// If there is a friendly leader in the area, put SPs there on his mat
+				if (num > num_moved) {
+					update_keyword(get_troop_name(type), get_used(player, type), is_fresh(type) ? "fresh" : "exhausted")
+
+					if (has_friendly_leader(player, area)) {
+						populate(
+							`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader(player, area),
+							get_troop_name(type), get_used(player, type)
+						)
+					} else {
+						if (area === FRENCH_CASUALTIES) {
+							populate(
+								"fr_casualties", 0, 
+								get_troop_name(type), get_used(player, type)
+							)
+						} else {
+							populate(
+								"area_stack", area, 
+								get_troop_name(type), get_used(player, type)
+							)
+						}
+					}
+
+					if (!map_has(troop_nums, get_used(player, type)))
+						map_set(troop_nums, get_used(player, type), num - num_moved)
+					incr_used(player, type)
+				}
+			}
+			if (area === 41)
+				console.log(troop_nums)
+			map_for_each(troop_nums, (id, count) => {
+				if (area === 41)
+					console.log(`Updated ${id} ${count}`)
+				update_text("troop-text", id, count)
+			})
 		}
 	})
 }

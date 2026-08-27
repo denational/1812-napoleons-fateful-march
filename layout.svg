@@ -23,8 +23,8 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="1.525407"
-     inkscape:cx="377.60414"
-     inkscape:cy="509.37224"
+     inkscape:cx="1636.6124"
+     inkscape:cy="1925.3878"
      inkscape:window-width="1920"
      inkscape:window-height="1010"
      inkscape:window-x="-6"
@@ -3698,12 +3698,12 @@
      y="135.6324"
      inkscape:label="Russia Pool Depots" />
   <rect
-     style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.597"
+     style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.510908"
      id="rect3"
-     width="275.99191"
-     height="131.76811"
-     x="1579.2506"
-     y="1829.02"
+     width="201.9994"
+     height="131.8542"
+     x="1615.9191"
+     y="1828.9769"
      inkscape:label="France Casualties" />
   <rect
      style="fill:#000000;fill-opacity:0.29085;stroke:#ffffff;stroke-width:0.597"
@@ -3770,19 +3770,19 @@
      y="1656.9348"
      inkscape:label="NOV" />
   <rect
-     style="fill:#1579c5;stroke:#ffffff;stroke-width:0.597"
+     style="fill:#1579c5;stroke:#ffffff;stroke-width:0.567126"
      id="rect12"
-     width="244.756"
-     height="76.949776"
-     x="50.527264"
-     y="1882.4882"
+     width="244.78587"
+     height="69.432877"
+     x="51.167889"
+     y="1890.34"
      inkscape:label="France Pool Leaders" />
   <rect
-     style="fill:#1579c5;stroke:#ffffff;stroke-width:0.597"
+     style="fill:#1579c5;stroke:#ffffff;stroke-width:0.567126"
      id="rect12-9"
-     width="244.756"
-     height="76.949776"
-     x="53.281498"
-     y="58.60841"
+     width="244.78587"
+     height="69.432877"
+     x="53.26656"
+     y="58.593472"
      inkscape:label="Russia Pool Leaders" />
 </svg>

@@ -418,7 +418,7 @@ const layout = {
 	"Unnamed H4": [2229,1076,22,22],
 	"France Pool Depots": [50,1694,245,188],
 	"Russia Pool Depots": [53,136,245,188],
-	"France Casualties": [1579,1829,276,132],
+	"France Casualties": [1616,1829,202,132],
 	"Initiative Track": [1984,1729,51,220],
 	"VP Track": [2346,818,55,1144],
 	"June 5": [1986,1312,49,58],
@@ -427,8 +427,8 @@ const layout = {
 	"SEPT": [1984,1518,302,59],
 	"OCT": [1984,1587,303,58],
 	"NOV": [1984,1657,302,60],
-	"France Pool Leaders": [51,1882,245,77],
-	"Russia Pool Leaders": [53,59,245,77],
+	"France Pool Leaders": [51,1890,245,69],
+	"Russia Pool Leaders": [53,59,245,69],
 }
 
 if (typeof module !== "undefined") module.exports = layout
