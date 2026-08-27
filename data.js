@@ -3041,7 +3041,7 @@ const data = {
 			"name": "Ryazan",
 			"type": "off_map",
 			"fortress": false,
-			"nation": null,
+			"nation": 0,
 			"supply": true,
 			"depot": false,
 			"vp": 0,

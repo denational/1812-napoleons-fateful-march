@@ -2363,18 +2363,19 @@ P.select_new_cards = {
 	},
 	confirm() {
 		set_delete(G.active, R)
-		add_to_hand(R, L.selected_card[R])
-		array_delete_item(get_deck(R), L.selected_card[R])
-		shuffle(get_deck(R))
 
 		if (L.selected_card[R] > -1) {
+			add_to_hand(R, L.selected_card[R])
+			array_delete_item(get_deck(R), L.selected_card[R])
 			log_only(R, `Selected`)
 			log_only(R, `>${get_card_log_alias(L.selected_card[R])}`)
 		} else {
 			log_only(R, `No cards selected.`)
 		}
 
+		shuffle(get_deck(R))
 		log(`${ROLES[R]} deck reshuffled.`)
+
 		if (G.active.length === 0) {
 			let num_cards_to_draw = []
 			for (let who = RUSSIA; who <= FRANCE; ++who)
@@ -2444,14 +2445,16 @@ P.end_turn = function() {
 		increase_vp(key_controller, 1)
 	}
 
-	let events_to_clear = []
-	map_for_each(G.persistent_events, (evt, info) => {
-		if (info.remove === G.turn)
-			set_add(events_to_clear, evt)
-	})
-	events_to_clear.forEach(evt => map_delete(G.persistent_events, evt))
+	if (Math.abs(G.vp) < 20) {
+		let events_to_clear = []
+		map_for_each(G.persistent_events, (evt, info) => {
+			if (info.remove === G.turn)
+				set_add(events_to_clear, evt)
+		})
+		events_to_clear.forEach(evt => map_delete(G.persistent_events, evt))
 
-	end()
+		end()
+	}
 }
 
 //=== 1. DRAW CARD TO HAND ===
@@ -4960,13 +4963,32 @@ P.post_move_exhaustion = {
 	},
 	troop(type) {
 		push_undo()
-		exhaust_troop(G.active, G.move.path[G.move.path.length - 1], type)
+		let destination = G.move.path[G.move.path.length - 1]
+		exhaust_troop(G.active, destination, type)
+		// Update moved registry
+		let force = map_get(G.moved, destination, null).find((f) => {
+			return f.from === G.move.path[G.move.path.length - 2] && f.move_type === G.move.type && f.troops[type] > 0
+		})
+		force.troops[type]--
+		force.troops[type + 1]++
+
+		// Update battle registry
+		if (has_battle(destination)) {
+			let bforce = get_player_battle_data(G.active, destination).forces.find((f) => {
+				return f.from === G.move.path[G.move.path.length - 2] && f.move_type === G.move.type && f.troops[type] > 0
+			})
+			bforce.troops[type]--
+			bforce.troops[type + 1]++
+		}
+
 		log()
 		log(`${get_card_log_alias(L.current_event)}`)
 		log(`>Exhausted`)
 		log_only(G.active, `<1 ${get_troop_type_name(type)}`)
 		log_only(enemy(G.active), `<1 fresh SP`)
-		if (L.current_event === C_FAST_MARCHING_1 || L.current_event === C_FAST_MARCHING_2) map_delete(G.persistent_events, L.current_event)
+
+		if (L.current_event === C_FAST_MARCHING_1 || L.current_event === C_FAST_MARCHING_2) 
+			map_delete(G.persistent_events, L.current_event)
 		L.current_event = L.events.shift() ?? -1
 	},
 	confirm() {
@@ -5120,7 +5142,9 @@ P.execute_evade = script(`
 	set L.evader G.active
 	call select_evade_destination { area: L.area }
 	call select_evade_force { area: L.area, destination: L.$ }
-	call evade { evader: L.evader, area: L.area }
+	if (has_troop(L.evader, L.area)) {
+		call evade { evader: L.evader, area: L.area }
+	}
 	call finish_evade { evader: L.evader, area: L.area }
 `)
 
@@ -5191,14 +5215,15 @@ P.select_evade_force = {
 			prompt(`Evade: You may select SPs from specific connections, or select all SPs.`)
 
 			map_keys(L.sps).forEach((from) => {
-				console.log(from)
 				if (from === L.area)
 					action_area(L.area)
 				else
 					action_connection(from, L.area)
 			})
 
-			if (has_friendly_leader(G.active, L.area) || count_num_sps(G.active, L.area) <= 4)
+			if ((has_friendly_leader(G.active, L.area) || count_num_sps(G.active, L.area) <= 4) 
+				&& (G.move.leaders.length < L.leaders.length || L.num_sps_selected < max_sps_selectable)
+			)
 				button("select_all")
 
 			button_confirm(L.num_sps_selected > 0)
@@ -5237,7 +5262,8 @@ P.select_evade_force = {
 			if (!map_has(G.move.sps, area))
 				map_set(G.move.sps, area, [])
 			map_keys(map_get(L.sps, L.selected_from, [])).forEach((move_type) => {
-				map_set(map_get(G.move.sps, area, null), move_type, Array(NUM_TROOP_TYPES).fill(0))
+				if (!map_has(map_get(G.move.sps, L.selected_from, null), move_type))
+					map_set(map_get(G.move.sps, area, null), move_type, Array(NUM_TROOP_TYPES).fill(0))
 			})
 			L.selected_move_type = -2
 		}
@@ -5247,7 +5273,8 @@ P.select_evade_force = {
 		if (!map_has(G.move.sps, L.selected_from))
 			map_set(G.move.sps, L.selected_from, [])
 		map_keys(map_get(L.sps, L.selected_from, [])).forEach((move_type) => {
-			map_set(map_get(G.move.sps, L.selected_from, null), move_type, Array(NUM_TROOP_TYPES).fill(0))
+			if (!map_has(map_get(G.move.sps, L.selected_from, null), move_type))
+				map_set(map_get(G.move.sps, L.selected_from, null), move_type, Array(NUM_TROOP_TYPES).fill(0))
 		})
 		L.selected_move_type = -2
 	},
@@ -5280,7 +5307,11 @@ P.select_evade_force = {
 	select_all() {
 		push_undo()
 		G.move.leaders = L.leaders.slice()
-		G.move.sps = L.sps.slice()
+		G.move.sps = []
+		map_for_each(L.sps, (from, forces) => {
+			G.move.sps.push(from)
+			G.move.sps.push(forces.slice())
+		})
 		L.num_sps_selected = count_num_sps(G.active, L.area)
 	},
 	confirm() {
@@ -5387,12 +5418,18 @@ P.evade_pursuit_exhaustion = {
 		L.has_assigned_exhaustion = false
 	},
 	prompt() {
+		console.log(G.move.sps)
 		if (!has_fresh_sp(G.active, L.area) && has_fresh_sp(enemy(G.active), L.area)) {
 			prompt(`No more fresh SPs at S${L.area}.`)
 			button_next()
 		} else if (!L.has_assigned_exhaustion) {
-			prompt(`Lost pursuit: Assign one exhaustion to any evading SP.`)
-			get_evading_sp_types().filter(type => is_troop_type_fresh(type)).forEach(action_troop)
+			if (L.evader === RUSSIA && is_event_active(C_WELL_DISCIPLINED_RETREAT)) {
+				prompt_card(C_WELL_DISCIPLINED_RETREAT, "No exhaustion when executing Evade orders.")
+				button_confirm()
+			} else {
+				prompt(`Lost pursuit: Assign one exhaustion to any evading SP.`)
+				get_evading_sp_types().filter(type => is_troop_type_fresh(type)).forEach(action_troop)
+			}
 		} else {
 			prompt(`Assign pursuit losses: All done.`)
 			button_done()
@@ -5402,6 +5439,18 @@ P.evade_pursuit_exhaustion = {
 		push_undo()
 		battle_exhaust_troop(L.evader, L.area, type)
 		L.has_assigned_exhaustion = true
+
+		L.count = 1
+		map_for_each(G.move.sps, (from, forces) => {
+			map_for_each(forces, (move_type, sps) => {
+				if (sps[type] > 0) {
+					if (L.count-- > 0) {
+						--sps[type]
+						++sps[type + 1]
+					}
+				}
+			})
+		})
 	},
 	next() {
 		push_undo()
@@ -5410,6 +5459,10 @@ P.evade_pursuit_exhaustion = {
 	done() {
 		push_undo()
 		end()
+	},
+	confirm() {
+		push_undo()
+		L.has_assigned_exhaustion = true
 	}
 }
 
@@ -5492,6 +5545,11 @@ P.evade = function() {
 
 	if (battle_data.forces.every(force => force.troops.every(type => type === 0)))
 		map_delete(G.battles, L.area)
+
+	if (is_event_active(C_HOLY_MOTHER_RUSSIA_FR) && map_get(G.persistent_events, C_HOLY_MOTHER_RUSSIA_FR, null).area === L.area) {
+		log(`${get_card_log_alias(C_HOLY_MOTHER_RUSSIA_FR)}`)
+		increase_vp(RUSSIA)
+	}
 
 	log()
 	log(`Evaded to S${G.move.destination}.`)
@@ -7329,6 +7387,7 @@ P.end_battle = script(`
 		if (G.battles.length > 0) { 
 			G.active = get_who_has_initiative() 
 		}
+		map_clear(G.moved)
 	}	
 `)
 
@@ -9930,6 +9989,53 @@ P.exhausting_march = {
 			log()
 			end()
 		}
+	}
+}
+
+// RU #27: Unexpected Retreat
+P.unexpected_retreat = {
+	prompt() {
+		prompt(`Confirm play of ${get_card_log_alias(C_UNEXPECTED_RETREAT)}? (cannot be undone).`)
+		button_confirm()
+	},
+	confirm() {
+		G.active = FRANCE
+		goto("unexpected_retreat_evade")
+	}
+}
+
+P.unexpected_retreat_evade = {
+	_begin() {
+		L.areas = []
+		for (let area of map_keys(G.battles))
+			if (has_austrian_sp(area) && has_russian_sp(area))
+				set_add(L.areas, area)
+		L.did_evade = false
+	},
+	prompt() {
+		if (L.areas.length === 0) {
+			prompt_card(C_UNEXPECTED_RETREAT, `All done.`)
+			button_done()
+		} else {
+			prompt_card(C_UNEXPECTED_RETREAT, `Select next area from which Austrian SPs should evade. (${join_array_with_or(L.areas.map(area => `S${area}`))})`)
+			L.areas.forEach(action_area)
+		}
+	},
+	area(area) {
+		push_undo()
+		if (!L.did_evade) {
+			L.did_evade = true
+			log_box_end()
+		}
+		set_delete(L.areas, area)
+		log_h4(`S${area} – ${get_card_log_alias(C_UNEXPECTED_RETREAT)}`, G.active)
+		call("execute_evade", { area, unexpected_retreat: true })
+	},
+	done() {
+		if (!L.did_evade)
+			log(`No battles with Au. SPs.`)
+		G.active = RUSSIA
+		end()
 	}
 }
 

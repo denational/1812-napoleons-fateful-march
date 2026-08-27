@@ -444,7 +444,6 @@ function on_init() {
 			let troop = define_piece(action, i, keywords)
 				.stackable()
 			define_thing("troop-text", i)
-				.static_child(troop)
 		}
 	}
 
@@ -829,12 +828,14 @@ function update_troops() {
 									`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader_on_connection(player, force.from, area),
 									get_troop_name(type), get_used(player, type)
 								)
+								populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
 							}
 							else {
 								populate(
 									`area_stack`, area,
 									get_troop_name(type), get_used(player, type)
 								)
+								populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
 							}
 						} 
 						else {
@@ -844,6 +845,7 @@ function update_troops() {
 									`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader_on_connection(player, force.from, area),
 									get_troop_name(type), get_used(player, type)
 								)
+								populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
 							} 
 							// Otherwise they are populated on the map
 							else {
@@ -851,11 +853,12 @@ function update_troops() {
 									`connection_stack`, find_connection(force.from, area),
 									get_troop_name(type), get_used(player, type)
 								)
+								populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
 							}
 						}
 
-						//if (force.move_type === FORCED_MARCH)
-							//populate(get_troop_name(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
+						if (force.move_type === FORCED_MARCH)
+							populate(get_troop_name(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
 						
 						if (!map_has(troop_nums, get_used(player, type)))
 							map_set(troop_nums, get_used(player, type), force.troops[type])
@@ -877,15 +880,17 @@ function update_troops() {
 									`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader(player, area),
 									get_troop_name(type), get_used(player, type)
 								)
+								populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
 							} else {
 								populate(
 									"area_stack", area, 
 									get_troop_name(type), get_used(player, type)
 								)
+								populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
 							}
 
 							num_moved += force.troops[type]
-							//populate(get_troop_name(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
+							populate(get_troop_name(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
 
 							if (!map_has(troop_nums, get_used(player, type)))
 								map_set(troop_nums, get_used(player, type), force.troops[type])
@@ -905,17 +910,14 @@ function update_troops() {
 							`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader(player, area),
 							get_troop_name(type), get_used(player, type)
 						)
+						populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
 					} else {
 						if (area === FRENCH_CASUALTIES) {
-							populate(
-								"fr_casualties", 0, 
-								get_troop_name(type), get_used(player, type)
-							)
+							populate("fr_casualties", 0, get_troop_name(type), get_used(player, type))
+							populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
 						} else {
-							populate(
-								"area_stack", area, 
-								get_troop_name(type), get_used(player, type)
-							)
+							populate("area_stack", area, get_troop_name(type), get_used(player, type))
+							populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
 						}
 					}
 
@@ -927,8 +929,6 @@ function update_troops() {
 			if (area === 41)
 				console.log(troop_nums)
 			map_for_each(troop_nums, (id, count) => {
-				if (area === 41)
-					console.log(`Updated ${id} ${count}`)
 				update_text("troop-text", id, count)
 			})
 		}

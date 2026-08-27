@@ -151,7 +151,7 @@ id,name,type,fortress,nation,supply,depot,vp,zone
 150,Moscow,moscow,,,,1,5,H2
 151,Unnamed H2,area,,,1,,,H2
 152,Serpukhov,area,,,,,,H2
-153,Ryazan,off_map,,,1,,,H3
+153,Ryazan,off_map,,russia,1,,,H3
 154,Tula,area,,,,,,H3
 155,Unnamed H3,area,,,,,,H3
 156,Unnamed H4,area,,,,,,H4
