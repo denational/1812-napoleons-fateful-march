@@ -1275,15 +1275,28 @@ function move_formation(leaders, troops, from, to) {
 }
 
 function mark_already_moved(who, path, move_type, leaders, troops) {
+	let from = path[path.length - 2]
 	let destination = path[path.length - 1]
 
-	if (!map_has(G.moved, destination)) map_set(G.moved, destination, [])
+	if (!map_has(G.moved, destination))
+		map_set(G.moved, destination, [])
+	
+	if (map_get(G.moved, destination).some(force => force.from === from && force.move_type === move_type)) {
+		let force = map_get(G.moved, destination).find(f => f.from === from && f.move_type === move_type)
+
+		for (let leader of leaders) 
+			set_add(force.leaders, leader)
+		for (let type = 0; type < troops.length; ++type) 
+			force.troops[type] += troops[type]
+
+		return
+	}
 	
 	let entry = 
 	{
 		faction: who,
-		from: path[path.length - 2],
-		move_type: move_type,
+		from,
+		move_type,
 		river_crossing: has_bridge(path[path.length - 2], destination) ,
 		leaders: [],
 		troops: Array(NUM_TROOP_TYPES).fill(0)
@@ -1513,6 +1526,7 @@ function setup_june() {
 	set_troop(RUSSIA, S_TOROPETS, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_POLOTSK, FRESH_INFANTRY, 1)
 	set_troop(RUSSIA, S_VITEBSK, FRESH_INFANTRY, 1)
+	add_depot(RUSSIA, S_VITEBSK)
 	add_depot(RUSSIA, S_SMOLENSK)
 	set_troop(RUSSIA, S_BORISOV, FRESH_INFANTRY, 1)
 	set_troop(RUSSIA, S_MOGILEV, FRESH_INFANTRY, 1)
@@ -2489,6 +2503,12 @@ P.end_turn = function() {
 */
 
 function draw_a_card(player) {
+	if (get_deck(player).length === 0) {
+		G.deck[player] = get_discard(player).slice()
+		get_discard(player).length = 0
+		shuffle(get_deck(player))
+		log(`Reshuffled ${ROLES[player]} deck.`)
+	}
 	L.drawn_card[player] = draw_card(player)
 	L.state[player] = "review_drawn_card"
 }
@@ -4103,7 +4123,7 @@ function has_depot_within_four_road_connections(who, area) {
 		if (map_get(distance, current) > 4)
 			return false
 
-		if (has_friendly_depot(who, current))
+		if (set_has(get_supply_sources_and_depots(who), current))
 			return true
 
 		for (let adj of get_adjacent_areas_by_road(current)) {
@@ -4134,7 +4154,9 @@ function filter_orders(who, type) {
 		return
 	case EVADE:
 		filter_orders_of_type(who, type, (order) => {
-			return has_friendly_troop(G.active, get_order_location(order)) && has_battle(get_order_location(order))
+			return has_friendly_troop(G.active, get_order_location(order)) 
+				&& has_battle(get_order_location(order)) 
+				&& !is_event_active(C_UNSUCCESSFUL_DISENGAGEMENT) || (is_event_active(C_UNSUCCESSFUL_DISENGAGEMENT) && !set_has(map_get(G.persistent_events, C_UNSUCCESSFUL_DISENGAGEMENT).cancelled_orders, order))
 		})
 		return
 	case RALLY:
@@ -4464,11 +4486,8 @@ P.select_force = {
 			if (G.move.leaders.length === 1 && set_has(G.move.leaders, L_PLATOV)) 
 				V.prompt += ` L${L_PLATOV} may only command Cavalry and Cossack SPs.`
 
-			if (L.movable_leaders.length > G.move.leaders.length) {
-				for (let leader of L.movable_leaders)
-					if (!set_has(G.move.leaders, leader))
-						button_leader(leader)
-			}
+			for (let leader of L.movable_leaders)
+				button_leader(leader)
 
 			for (let type = 0; type < G.move.sps.length; ++type) {
 				// Platov leader ability: He may only command Cavalry and Cossack SPs
@@ -4496,10 +4515,8 @@ P.select_force = {
 		else {
 			prompt(`Select up to 4 SPs (at least 1) to move from S${L.area}.`)
 
-			for (let leader of L.movable_leaders) {
-				if (!set_has(G.move.leaders, leader))
-					button_leader(leader)
-			}
+			for (let leader of L.movable_leaders)
+				button_leader(leader)
 
 			for (let type = 0; type < G.move.sps.length; ++type) {
 				if (L.movable_sps[type] > 0
@@ -4808,6 +4825,7 @@ P.move = {
 		if (!has_battle(L.current_area) && !map_has(G.moved, L.current_area)) {
 			add_attacker_to_battle(G.active, previous_area, L.current_area, G.move.type, G.move.leaders.slice(), G.move.sps.slice())
 			add_defender_to_battle(enemy(G.active), L.current_area, L.current_area, -1, get_leaders_at_area(enemy(G.active), L.current_area), get_troop_list_by_type(enemy(G.active), L.current_area))
+
 		} else if (!has_battle(L.current_area) && map_has(G.moved, L.current_area)) {
 			add_attacker_to_battle(G.active, previous_area, L.current_area, G.move.type, G.move.leaders.slice(), G.move.sps.slice())
 			
@@ -4816,7 +4834,8 @@ P.move = {
 			for (let entry of map_get(G.moved, L.current_area, null)) {
 				if (entry.faction === enemy(G.active)) {
 					add_defender_to_battle(enemy(G.active), L.current_area, L.current_area, entry.move_type, entry.leaders, entry.troops)
-					for (let leader of leaders) set_delete(leaders, leader)
+					for (let leader of entry.leaders) 
+						set_delete(leaders, leader)
 					for (let type = 0; type < troops.length; ++type)
 						troops[type] -= entry.troops[type]
 				}
@@ -5100,7 +5119,7 @@ P.do_cavalry_patrols = {
 	RUSSIA
 		#1 	Well-Disciplined Retreat 	Apply effect		- no exhaustion with Evade orders
 		#27	Unexpected Retreat 			Before				- All Austrian SPs conduct an immediate 'Evade' in areas with Russian SPs. Schwarzenberg may accompany them.
-		#29	Cavalry Screening 			Before				- Place up to 2 'Evade' orders in areas with RU Cavalry/Cossack
+		#29	Cavalry Screening 			Before				- Place up to 2 Evade orders in areas with RU Cavalry/Cossack
 
 	FRANCE
 		#4 Holy Mother Russia 			During				- FR +1 VP for each RU army that evades from the selected city
@@ -5109,7 +5128,6 @@ P.do_cavalry_patrols = {
 
 */
 
-//TODO: Unexpected Retreat
 P.may_play_evade_events = {
 	_begin() {
 		L.events = [C_UNEXPECTED_RETREAT, C_CAVALRY_SCREENING].filter(card => hand_has(RUSSIA, card))
@@ -5140,12 +5158,24 @@ P.may_play_evade_events = {
 
 P.execute_evade = script(`
 	set L.evader G.active
-	call select_evade_destination { area: L.area }
-	call select_evade_force { area: L.area, destination: L.$ }
-	if (has_troop(L.evader, L.area)) {
-		call evade { evader: L.evader, area: L.area }
+	if (L.evader === RUSSIA && can_play_event(C_UNSUCCESSFUL_DISENGAGEMENT)) {
+		set G.active FRANCE
+		call may_play_unsuccessful_disengagement { area: L.area }
+		set G.active RUSSIA
 	}
-	call finish_evade { evader: L.evader, area: L.area }
+	if (L.evader === FRANCE && can_play_event(C_TOUGH_REARGUARD) && hand_has(FRANCE, C_TOUGH_REARGUARD)) {
+		call may_play_tough_rearguard
+	}
+	if (L.unsuccessful_disengagement) {
+		goto end_order { type: EVADE }
+	} else {
+		call select_evade_destination { area: L.area }
+		call select_evade_force { area: L.area, destination: L.$ }
+		if (has_friendly_troop(L.evader, L.area)) {
+			call evade { evader: L.evader, area: L.area }
+		}
+		call finish_evade { evader: L.evader, area: L.area }
+	}
 `)
 
 P.select_evade_destination = {
@@ -5171,7 +5201,17 @@ function get_evade_sps(who, area) {
 		if (!map_has(evade_sps, force.from))
 			map_set(evade_sps, force.from, [])
 
-		map_set(map_get(evade_sps, force.from, null), force.move_type, force.troops.slice())
+		let troops = Array(NUM_TROOP_TYPES).fill(0)
+		for (let type = 0; type < force.troops.length; ++type) {
+			if (is_event_active(C_UNEXPECTED_RETREAT) && !(type === FRESH_AUSTRIAN_INFANTRY || type === EXHAUSTED_AUSTRIAN_INFANTRY)) {
+				continue
+			} else {
+				if (force.troops[type] > 0)
+					troops[type] += force.troops[type]
+			}
+		}
+
+		map_set(map_get(evade_sps, force.from, null), force.move_type, troops)
 	})
 
 	return evade_sps
@@ -5183,7 +5223,10 @@ function get_evade_sps(who, area) {
 P.select_evade_force = {
 	_begin() {
 		// Leaders & troops eligible for evade
-		L.leaders = get_leaders_at_area(G.active, L.area)
+		if (is_event_active(C_UNEXPECTED_RETREAT))
+			L.leaders = get_leader_location(L_SCHWARZENBERG) === L.area ? [L_SCHWARZENBERG] : []
+		else
+			L.leaders = get_leaders_at_area(G.active, L.area)
 		L.sps = get_evade_sps(G.active, L.area)
 
 		// Running count of total number of SPs selected
@@ -5312,7 +5355,10 @@ P.select_evade_force = {
 			G.move.sps.push(from)
 			G.move.sps.push(forces.slice())
 		})
-		L.num_sps_selected = count_num_sps(G.active, L.area)
+		if (is_event_active(C_UNEXPECTED_RETREAT))
+			L.num_sps_selected = count_num_sps_of_type(FRANCE, FRESH_AUSTRIAN_INFANTRY, L.area) + count_num_sps_of_type(FRANCE, EXHAUSTED_AUSTRIAN_INFANTRY, L.area)
+		else
+			L.num_sps_selected = count_num_sps(FRANCE, L.area)
 	},
 	confirm() {
 		push_undo()
@@ -5329,16 +5375,21 @@ P.select_evade_force = {
 		} else {
 			for (let type = 0; type < sp_count.length; ++type) {
 				if (sp_count[type] > 0) {
-					log("<" + sp_count[type] + " " + get_troop_type_name(type))
+					log(">" + sp_count[type] + " " + get_troop_type_name(type))
 				}
 			}
 		}
 		log()
 
-		if (L.num_sps_selected === count_num_sps(G.active, L.area))
+		if (is_event_active(C_TOUGH_REARGUARD)) {
+			G.active = RUSSIA
+			log(`${get_card_log_alias(C_TOUGH_REARGUARD)}`)
+			goto("apply_tough_rearguard", { area: L.area })
+		} else if (L.num_sps_selected === count_num_sps(G.active, L.area)) {
 			goto("evade_pursuit", { evader: G.active, area: L.area })
-		else
+		} else {
 			end()
+		}
 	}
 }
 
@@ -5375,9 +5426,11 @@ P.evade_pursuit = {
 
 				if (L.pursuit_cavalry[L.evader] <= L.pursuit_cavalry[enemy(L.evader)]) {
 					log(`${ROLES[L.evader]} must exhaust 1 SP.`)
+					log()
 					goto("evade_pursuit_exhaustion", { evader: L.evader, area: L.area })
 				} else {
 					log(`Pursuit inconclusive!`)
+					log()
 					end()
 				}
 			}
@@ -5418,7 +5471,6 @@ P.evade_pursuit_exhaustion = {
 		L.has_assigned_exhaustion = false
 	},
 	prompt() {
-		console.log(G.move.sps)
 		if (!has_fresh_sp(G.active, L.area) && has_fresh_sp(enemy(G.active), L.area)) {
 			prompt(`No more fresh SPs at S${L.area}.`)
 			button_next()
@@ -5462,6 +5514,8 @@ P.evade_pursuit_exhaustion = {
 	},
 	confirm() {
 		push_undo()
+		log(`${get_card_log_alias(C_WELL_DISCIPLINED_RETREAT)}`)
+		logi(`No exhaustion.`)
 		L.has_assigned_exhaustion = true
 	}
 }
@@ -5584,7 +5638,10 @@ P.finish_evade = {
 	},
 	pass() {
 		log()
-		end()
+		if (is_event_active(C_UNEXPECTED_RETREAT))
+			end()
+		else
+			goto("end_order", { type: EVADE })
 	}
 }
 
@@ -5606,12 +5663,12 @@ function find_retreat_destinations(who, area, among = get_all_adjacent_areas(are
 		for (let neighbor of among) {
 			let distance = find_path_distance(neighbor, depot)
 
-			if (distance < 999) {
-				if (!map_has(distances, distance)) map_set(distances, distance, [])
-				set_add(map_get(distances,  distance, null), neighbor)
-			}
+			if (!map_has(distances, distance)) 
+				map_set(distances, distance, [])
+			set_add(map_get(distances,  distance, null), neighbor)
 		}
 
+		// distances[0] since the map is sorted on the distance to the nearest depot (so distances[0] would have the destinations closest to a depot)
 		if (distances.length > 0 && (distances[0] <= best_distance)) {
 			if (distances.length > 0) {
 				if (distances[0] < best_distance) {
@@ -5825,20 +5882,41 @@ function is_battle_defender(who, area) {
 }
 
 function add_attacker_to_battle(who, from, area, move_type, leaders, troops) {
+	if (who === FRANCE && is_event_active(C_FREEZING_WEATHER)) {
+		log()
+		log(`${get_card_log_alias(C_FREEZING_WEATHER)}`)
+		logi(`All French forces fight as if under Forced March orders.`)
+		move_type = FORCED_MARCH
+	}
+
 	if (!has_battle(area)) init_battle_entry(area)
 
 	let battle = get_battle_entry(area, null)
 
-	battle.attacker.who = who
+	//	Merge entries if there is already another with the same characteristics
+	if (battle.attacker.forces.some(force => force.from === from && force.move_type === move_type)) {
+		let force = battle.attacker.forces.find(f => f.from === from && f.move_type === move_type)
 
-	//Cannot merge entries with same 'from' since one might Forced March and the other might March
-	battle.attacker.forces.push({
-		from: from,
-		move_type: move_type,
-		river_crossing: has_bridge(from, area),
-		leaders: leaders,
-		troops: troops,
-	})
+		for (let leader of leaders)
+			set_add(force.leaders, leader)
+
+		for (let type = 0; type < force.troops.length; ++type)
+			if (troops[type] > 0)
+				force.troops[type] += troops[type]
+	} 
+
+	else {
+		battle.attacker.who = who
+
+		battle.attacker.forces.push({
+			from: from,
+			move_type: move_type,
+			river_crossing: has_bridge(from, area),
+			leaders: leaders,
+			troops: troops,
+		})
+	}
+	
 }
 
 function get_attacker_data(area) {
@@ -5846,21 +5924,41 @@ function get_attacker_data(area) {
 }
 
 function add_defender_to_battle(who, from, area, move_type, leaders, troops) {
+	if (who === FRANCE && is_event_active(C_FREEZING_WEATHER)) {
+		log()
+		log(`${get_card_log_alias(C_FREEZING_WEATHER)}`)
+		logi(`All French forces fight as if under Forced March orders.`)
+		move_type = FORCED_MARCH
+	}
+
 	if (!has_battle(area)) init_battle_entry(area)
 
 	let battle = get_battle_entry(area, null)
 
-	battle.defender.who = who
+	if (battle.defender.forces.some(force => force.from === from && force.move_type === move_type)) {
+		let force = battle.defender.forces.find(f => f.from === from && f.move_type === move_type)
 
-	battle.defender.forces.push({
-		from: from,
-		move_type: move_type,
-		river_crossing: false,
-		leaders: leaders,
-		troops: troops,
-	})
+		for (let leader of leaders)
+			set_add(force.leaders, leader)
 
-	battle.defender.defend_order = false
+		for (let type = 0; type < force.troops.length; ++type)
+			if (troops[type] > 0)
+				force.troops[type] += troops[type]
+	} else {
+		battle.defender.who = who
+
+		battle.defender.forces.push({
+			from: from,
+			move_type: move_type,
+			river_crossing: false,
+			leaders: leaders,
+			troops: troops,
+		})
+
+		battle.defender.defend_order = false
+	}
+
+	
 }
 
 function get_connections_used_by_attacker(area) {
@@ -9205,17 +9303,20 @@ P.scorched_earth = {
 		push_undo()
 		shift_initiative(RUSSIA)
 		++L.step
+		log(`Devastated`)
 	},
 	next() {
 		push_undo()
 		if (++L.step > 1) {
 			add_persistent_event(C_SCORCHED_EARTH) //To add the extra order in the Choose Orders step
-			log("Russia received an 'Evade' order.")
+			log(`Received`)
+			logi(`1 Evade order`)
 			end()
 		}
 	},
 	area(area) {
 		push_undo()
+		logi(`S${area}`)
 		increase_devastation(area)
 		set_add(L.selected_areas, area)
 	},
@@ -9591,8 +9692,7 @@ P.flying_columns = {
 	_begin() {
 		card_box_begin(C_FLYING_COLUMNS)
 		L.step = -1
-		L.count = Math.min(2, array_count(get_orders_at_area(RUSSIA, POOL), order => (get_order_type(order) === COSSACK_RAID)))
-		L.selected_order = -1
+		L.count = array_count(get_orders_at_area(G.active, POOL), order => get_order_type(order) === COSSACK_RAID)
 	},
 	inactive: "organize flying columns of cossacks",
 	prompt() {
@@ -9601,18 +9701,13 @@ P.flying_columns = {
 			action_initiative_marker()
 		} else if (L.step === 0) {
 			if (L.count === 0) {
-				prompt_card(C_FLYING_COLUMNS, `No 'Cossack Raid' orders in pool to place.`)
+				prompt_card(C_FLYING_COLUMNS, `No Cossack Raid orders in pool to place.`)
 				button_confirm()
 			} else {
-				if (L.selected_order === -1) {
-					prompt_card(C_FLYING_COLUMNS, `Select ${L.count} 'Cossack Raid' orders to place.`)
-					for (let order of get_orders_at_area(RUSSIA, POOL))
-						if (get_order_type(order) === COSSACK_RAID) action_order(order)
-				} else {
-					prompt(`Select a location to place 'Cossack Raid'.`)
-					for (let area = FIRST_AREA; area <= LAST_AREA; ++area) 
-						if (has_cossack_sp(area)) action_area(area) 
-				}
+				prompt(`Select up to ${L.count} locations to place Cossack Raid.`)
+				for (let area = FIRST_AREA; area <= LAST_AREA; ++area) 
+					if (has_cossack_sp(area)) 
+						action_area(area) 
 			}
 		} else {
 			prompt_card(C_FLYING_COLUMNS, "All done.")
@@ -9623,23 +9718,21 @@ P.flying_columns = {
 		push_undo()
 		shift_initiative(RUSSIA)
 		++L.step
+		log("Placed")
 	},
 	confirm() {
 		push_undo()
 		++L.step
-	},
-	order(order) {
-		push_undo()
-		L.selected_order = order
+		logi("Nothing")
 	},
 	area(area) {
 		push_undo()
-		place_order(L.selected_order, area)
-		log("Placed 'Cossack Raid'")
+		add_order_of_type_from_pool(G.active, COSSACK_RAID, area)
 		logi(`S${area}`)
+		log(`<Cossack Raid`)
 
-		L.selected_order = -1
-		if (--L.count === 0) ++L.step
+		if (--L.count === 0) 
+			++L.step
 	},
 	done() {
 		push_undo()
@@ -9999,6 +10092,8 @@ P.unexpected_retreat = {
 		button_confirm()
 	},
 	confirm() {
+		log(`All Au. SPs immediately Evade from battle.`)
+		add_persistent_event(C_UNEXPECTED_RETREAT)
 		G.active = FRANCE
 		goto("unexpected_retreat_evade")
 	}
@@ -10028,13 +10123,17 @@ P.unexpected_retreat_evade = {
 			log_box_end()
 		}
 		set_delete(L.areas, area)
-		log_h4(`S${area} – ${get_card_log_alias(C_UNEXPECTED_RETREAT)}`, G.active)
+		log_h4(`S${area}`, G.active)
+		log()
+		log(`${get_card_log_alias(C_UNEXPECTED_RETREAT)}`)
 		call("execute_evade", { area, unexpected_retreat: true })
 	},
 	done() {
 		if (!L.did_evade)
 			log(`No battles with Au. SPs.`)
 		G.active = RUSSIA
+		if (is_event_active(C_UNEXPECTED_RETREAT))
+			map_delete(G.persistent_events, C_UNEXPECTED_RETREAT)
 		end()
 	}
 }
@@ -10797,6 +10896,52 @@ P.polish_support = {
 	},
 }
 
+// FR #7 Unsuccessful Disengagement
+P.may_play_unsuccessful_disengagement = {
+	prompt() {
+		if (set_has(get_hand(FRANCE), C_UNSUCCESSFUL_DISENGAGEMENT)) {
+			prompt(`You may play ${get_card_log_alias(C_UNSUCCESSFUL_DISENGAGEMENT)} to cancel all Evade orders at S${L.area}.`)
+			action_card(C_UNSUCCESSFUL_DISENGAGEMENT)
+		} else {
+			prompt(`You do not have ${get_card_log_alias(C_UNSUCCESSFUL_DISENGAGEMENT)} in hand.`)
+		}
+		button_pass()
+	},
+	card(card) {
+		push_undo()
+		goto("unsuccessful_disengagement", { area: L.area })
+	},
+	pass() {
+		L.L.unsuccessful_disengagement = false
+		end()
+	}
+}
+
+P.unsuccessful_disengagement = {
+	_begin() {
+		card_box_begin(C_UNSUCCESSFUL_DISENGAGEMENT)
+	},
+	prompt() {
+		prompt_card(C_UNSUCCESSFUL_DISENGAGEMENT, `Confirm cancelling all Evade orders at S${L.area}?`)
+		button_confirm()
+	},
+	confirm() {
+		log(`Cancelled all Evade orders at S${L.area}.`)
+
+		let cancelled_orders = []
+		for (let order of get_orders_at_area(enemy(G.active), L.area))
+			if (get_order_type(order) === EVADE)
+				set_add(cancelled_orders, order)
+
+		add_persistent_event(C_UNSUCCESSFUL_DISENGAGEMENT, { area: L.area, cancelled_orders })
+		L.L.unsuccessful_disengagement = true
+		
+		card_box_end()
+		discard_or_remove_card(C_UNSUCCESSFUL_DISENGAGEMENT)
+		end()
+	}
+}
+
 // FR #8: Infighting & Intrigue
 P.infighting_and_intrigue = {
 	_begin() {
@@ -11139,7 +11284,9 @@ P.poor_communications = {
 		let orders_at_area = get_orders_at_area(FRANCE, area)
 		let order_to_remove = random(orders_at_area.length)
 		remove_order(orders_at_area[order_to_remove])
-		log(`Removed order from S${area}.`)
+		log(`Removed from S${area}`)
+		log_only(RUSSIA, `>1 random order`)
+		log_only(FRANCE, `>1 ${get_order_name(orders_at_area[order_to_remove])}`)
 	},
 	next() {
 		card_box_end()
@@ -11653,6 +11800,82 @@ P.inferior_musketry = {
 	}	
 }
 
+// FR #48 Tough Rearguard
+P.may_play_tough_rearguard = {
+	prompt() {
+		prompt(`You may play ${get_card_log_alias(C_TOUGH_REARGUARD)}.`)
+		action_card(C_TOUGH_REARGUARD)
+		button_pass()
+	},
+	card(card) {
+		push_undo()
+		goto("event", { card })
+	},
+	pass() {
+		push_undo()
+		end()
+	}
+}
+
+P.tough_rearguard = {
+	_begin() { L.step = -1 },
+	prompt() {
+		if (L.step === -1) {
+			prompt_card(C_TOUGH_REARGUARD, `Forces using this Evade order suffer no exhaustion.`)
+			button_confirm()
+		} else {
+			prompt_card(C_TOUGH_REARGUARD, `Inflict one exhaustion on Russia when evading.`)
+			button_confirm()
+		}
+	},
+	confirm() {
+		push_undo()
+		if (L.step === -1) {
+			++L.step
+			log(`Forces using this Evade order suffer no exhaustion.`)
+		} else {
+			log(`1 exhaustion is inflicted on Russia.`)
+			add_persistent_event(C_TOUGH_REARGUARD)
+			end()
+		}
+	}
+}
+
+P.apply_tough_rearguard = {
+	_begin() { L.has_exhausted_sp = false },
+	prompt() {
+		if (!L.has_exhausted_sp) {
+			if (has_fresh_sp(G.active, L.area)) {
+				prompt_card(C_TOUGH_REARGUARD, `Exhaust an SP at S${L.area}.`)
+				get_all_fresh_sp_types(G.active, L.area).forEach(action_troop)
+			} else {
+				prompt_card(C_TOUGH_REARGUARD, `No fresh SPs to exhaust.`)
+				button_confirm()
+			}
+		} else {
+			prompt_card(C_TOUGH_REARGUARD, `All done.`)
+			button_done()
+		}
+	},
+	troop(type) {
+		push_undo()
+		exhaust_troop(G.active, L.area, type)
+		logi("Exhausted")
+		log_only(RUSSIA, `<1 Russian ${get_troop_type_name(type)}`)
+		log_only(FRANCE, `<1 Russian SP`)
+		L.has_exhausted_sp = true
+	},
+	confirm() {
+		push_undo()
+		L.has_exhausted_sp = true
+	},
+	done() {
+		push_undo()
+		map_delete(G.persistent_events, C_TOUGH_REARGUARD)
+		end()
+	}
+}
+
 // FR #50: Courage of Desperation
 E.courage_of_desperation = function() { return get_who_has_initiative() === RUSSIA }
 
@@ -11784,6 +12007,11 @@ function map_keys(map) {
 
 function roll_d6() {
 	return random(6) + 1
+}
+
+// DEBUG: For quickly printing deeply nested objects (G.moved, G.battles)
+function print(msg) {
+	console.log(JSON.stringify(msg, null, 2))
 }
 
 //=== PROMPT HELPERS ===

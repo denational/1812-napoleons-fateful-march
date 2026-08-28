@@ -514,9 +514,13 @@ function on_update() {
 		for (let c of V.played_cards[R])
 			populate("played", 0, "card", c)
 
-
 	for (let leader = 0; leader <= 13; ++leader) {
 		action_button_with_argument(`leader_button`, leader, leaders[leader].log_name)
+		if (V.move && V.move.leaders) {
+			let btn = document.getElementById("leader_button_" + leader + "_button")
+			if (btn)
+				btn.classList.toggle("button_selected", set_has(V.move.leaders, leader))
+		}
 	}
 
 	if (V.attrition_checked) {
@@ -578,7 +582,7 @@ function on_update() {
 
 	action_button_with_argument("move_type", -1, "SPs that have not moved")
 	action_button_with_argument("move_type", 0, "Forced March SPs")
-	action_button_with_argument("move_type", 1, "March SPs")
+	action_button_with_argument("move_type", 2, "March SPs")
 
 	action_button("place_order", "Place Order")
 	action_button("change_order", "Change Order")
@@ -763,14 +767,14 @@ function update_leaders() {
 								populate("area_stack", get_leader_location(leader), "leader", leader)
 								populate("leaders", get_leader_faction(leader), "leader_board", leader)
 							} else {
-								populate("subordinate_leaders", get_seniormost_leader_on_connection(get_leader_faction(leader), location, force.from), "leader", leader)
+								populate("subordinate_leaders", get_seniormost_leader_on_connection(get_leader_faction(leader), force.from, location), "leader", leader)
 							}
 						} else {
 							if (get_seniormost_leader_on_connection(get_leader_faction(leader), force.from, location) === leader) {
 								populate("connection_stack", find_connection(location, force.from), "leader", leader)
 								populate("leaders", get_leader_faction(leader), "leader_board", leader)
 							} else {
-								populate("subordinate_leaders", get_seniormost_leader_on_connection(get_leader_faction(leader), location, force.from), "leader", leader)
+								populate("subordinate_leaders", get_seniormost_leader_on_connection(get_leader_faction(leader), force.from, location), "leader", leader)
 							}
 						}
 					}
@@ -859,6 +863,9 @@ function update_troops() {
 
 						if (force.move_type === FORCED_MARCH)
 							populate(get_troop_name(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
+
+						if (is_battle_attacker(player, area) && has_bridge(force.from, area))
+							populate(get_troop_name(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
 						
 						if (!map_has(troop_nums, get_used(player, type)))
 							map_set(troop_nums, get_used(player, type), force.troops[type])
@@ -872,7 +879,7 @@ function update_troops() {
 
 				if (map_has(V.moved, area) && map_get(V.moved, area, null).some(force => force.move_type === FORCED_MARCH)) {
 					for (let force of map_get(V.moved, area, null)) {
-						if (force.troops[type] > 0 && force.move_type === FORCED_MARCH) {
+						if (force.faction === player && force.troops[type] > 0 && force.move_type === FORCED_MARCH) {
 							update_keyword(get_troop_name(type), get_used(player, type), is_fresh(type) ? "fresh" : "exhausted")
 
 							if (has_friendly_leader(player, area)) {
@@ -926,8 +933,6 @@ function update_troops() {
 					incr_used(player, type)
 				}
 			}
-			if (area === 41)
-				console.log(troop_nums)
 			map_for_each(troop_nums, (id, count) => {
 				update_text("troop-text", id, count)
 			})

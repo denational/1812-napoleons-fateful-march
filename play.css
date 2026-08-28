@@ -239,6 +239,10 @@ body.Russia header.your_turn {background-color: var(--russia);}
 
 
 /* LEADERS */
+.button_selected {
+	outline: 2px solid gold;
+}
+
 .piece.leader {
     width: 67px;
     height: 67px;
