@@ -4984,6 +4984,10 @@ P.post_move_exhaustion = {
 		push_undo()
 		let destination = G.move.path[G.move.path.length - 1]
 		exhaust_troop(G.active, destination, type)
+
+		--G.move.sps[type]
+		++G.move.sps[type + 1]
+
 		// Update moved registry
 		let force = map_get(G.moved, destination, null).find((f) => {
 			return f.from === G.move.path[G.move.path.length - 2] && f.move_type === G.move.type && f.troops[type] > 0
@@ -5013,8 +5017,8 @@ P.post_move_exhaustion = {
 	confirm() {
 		push_undo()
 		log(`${get_card_log_alias(L.current_event)}`)
-		log(`Exhausted`)
-		logi(`Nothing`)
+		logi(`Exhausted`)
+		log(`<Nothing`)
 		L.current_event = L.events.shift() ?? -1
 	},
 	done() {
@@ -7340,13 +7344,13 @@ function find_battle_winner(count) {
 function count_pursuit_cavalry(who, area) {
 	let count = 0
 	if (who === RUSSIA) { 
-		count = count_num_cavalry(who, area) + (2 * count_num_cossack(area))
+		count = count_num_sps_of_type(who, FRESH_CAVALRY, area) + (2 * count_num_sps_of_type(who, FRESH_COSSACK, area))
 	} else {
 		// FR #13 Murat's Cavalry: French Cavalry count X2 for pursuit
 		if (G.phase === "resolve_battles" && is_battle_event_currently_active(C_MURATS_CAVALRY))
-			count = 2 * count_num_cavalry(who, area)
+			count = 2 * count_num_sps_of_type(who, FRESH_CAVALRY, area)
 		else
-			count = count_num_cavalry(who, area)
+			count = count_num_sps_of_type(who, FRESH_CAVALRY, area)
 	}
 	return count
 }
@@ -7482,9 +7486,7 @@ P.end_battle = script(`
 			increase_vp(L.winner, get_area_vp(G.current_battle))
 		}
 		map_delete(G.battles, G.current_battle)
-		if (G.battles.length > 0) { 
-			G.active = get_who_has_initiative() 
-		}
+		G.active = get_who_has_initiative() 
 		map_clear(G.moved)
 	}	
 `)
@@ -8118,6 +8120,8 @@ P.apply_cossack_raid = {
 		logi("Eliminated")
 		log_only(RUSSIA, `<1 Exh. SP`)
 		log_only(FRANCE, `<1 ${get_troop_type_name(type)}`)
+		if (!is_friendly_controlled(FRANCE, L.area) && is_vp_area(L.area))
+			decrease_vp(FRANCE, get_area_vp(L.area))
 		++L.step
 	},
 	next() {
@@ -8233,6 +8237,11 @@ P.attrition = script(`
 	call do_attrition	
 	set G.active L.player_with_initiative
 	call do_attrition
+
+	if (can_play_event(C_NAPOLEON_RETURNS_TO_PARIS)) {
+		set G.active FRANCE
+		call may_play_napoleon_returns_to_paris
+	}
 `)
 
 function get_attrition_events(who) {
@@ -8354,7 +8363,7 @@ function log_attrition_info(who, area) {
 	log_only(who, `$${get_abbreviation(who)}S${area}`)
 	log_only(who, `%Result`)
 	let size = calculate_modified_size(who, area)
-	let distance_to_nearest_depot = G.supply[who][area]
+	let distance_to_nearest_depot = get_supply_status(who, area)
 	let weather_effect = get_current_season() === SUMMER ? get_summer_weather_die_result(who, G.weather_roll) : get_winter_weather_die_result(who, G.weather_roll)
 
 	log_only(who, `>Modified Size: ${size}`)
@@ -8376,6 +8385,8 @@ function log_attrition_info(who, area) {
 	if ((who === RUSSIA) && (is_seniormost_leader(L_TORMASOV, area))) log_only(who, `<-2 L${L_TORMASOV}`)
 
 	log_only(who, `>Distance to nearest Depot: ${distance_to_nearest_depot}`)
+	if (is_event_active(C_OVERSTRETCHED_LOGISTICS) && who === FRANCE)
+		log_only(who, `<+1 ${get_card_log_alias(C_OVERSTRETCHED_LOGISTICS)}`)
 
 	log_only(who, `Attrition ${size} &times; ${distance_to_nearest_depot <= MAX_SUPPLY_DISTANCE ? distance_to_nearest_depot : "OOS"}: ${get_attrition_result_name(size, distance_to_nearest_depot)}`)
 
@@ -8443,6 +8454,10 @@ P.do_attrition = {
 
 		L.areas = []
 		for (let area of get_areas_with_sps(G.active)) {
+			// FR #45 Much Needed Victuals: Attrition is not checked in the area it was executed
+			if (is_event_active(C_MUCH_NEEDED_VICTUALS) && get_event_keyword(C_MUCH_NEEDED_VICTUALS, "area") === area)
+				continue
+
 			let modified_size = calculate_modified_size(G.active, area)
 			let distance_to_nearest_depot = get_supply_status(G.active, area)
 
@@ -8745,8 +8760,8 @@ function get_supply_sources_and_depots(who) {
 	return sources
 }
 
-function is_in_supply(who, space) {
-	return G.supply[who][space] <= MAX_SUPPLY_DISTANCE
+function is_in_supply(who, area) {
+	return get_supply_status(who, area) <= MAX_SUPPLY_DISTANCE
 }
 
 function has_enemy_sp(who, space) {
@@ -8754,7 +8769,10 @@ function has_enemy_sp(who, space) {
 }
 
 function get_supply_status(who, area) {
-	return G.supply[who][area]
+	if (who === FRANCE && is_event_active(C_OVERSTRETCHED_LOGISTICS))
+		return G.supply[who][area] + 1
+	else
+		return G.supply[who][area]
 }
 
 /* SUPPLY */
@@ -9751,11 +9769,12 @@ P.overstretched_logistics = {
 			if (has_depot_on_map(FRANCE)) {
 				prompt_card(C_OVERSTRETCHED_LOGISTICS, `Remove a depot marker or add 1 to the distance to the nearest Depot marker when checking for Attrition.`)
 				for (let depot = get_first_depot(FRANCE); depot <= get_last_depot(FRANCE); ++depot)
-					if (is_depot_on_map(depot)) action_depot(depot)
+					if (is_depot_on_map(depot)) 
+						action_depot(depot)
 			} else {
 				prompt_card(C_OVERSTRETCHED_LOGISTICS, `Add 1 to the distance to the nearest Depot marker when checking for Attrition.`)
-				button("add_1_to_attrition_distance")
 			}
+			button("add_1_to_attrition_distance")
 		} else {
 			prompt_card(C_OVERSTRETCHED_LOGISTICS, "All done.")
 			button_done()
@@ -9767,8 +9786,6 @@ P.overstretched_logistics = {
 	},
 	depot(depot) {
 		push_undo()
-		log(`Removed from S${get_depot_location(depot)}`)
-		logi("1 depot marker")
 		remove_depot(depot, get_depot_location(depot))
 		L.has_france_confirmed = true
 	},
@@ -9935,7 +9952,7 @@ function has_friendly_depot(who, area) {
 
 function is_area_in_supply(who, area) {
 	update_supply()
-	return G.supply[who][area] <= MAX_SUPPLY_DISTANCE
+	return get_supply_status(who, area) <= MAX_SUPPLY_DISTANCE
 }
 
 // RU #24: New Posting
@@ -10241,7 +10258,20 @@ P.execute_devastated_landscape = {
 	confirm() {
 		set_delete(G.active, R)
 		if (G.active.length === 0) {
+			log(`Removed Forage orders`)
+			for (let who = RUSSIA; who <= FRANCE; ++who) {
+				logi(`${ROLES[who]}`)
+				if (L.removed_orders[who].length === 0) {
+					log("<Nothing")
+				} else {
+					for (let entry of L.removed_orders[who]) {
+						log(`<S${entry.area}`)
+					}
+				}	
+			}
+			log(`The effect of Devastation markers is doubled this turn.`)
 			add_persistent_event(C_DEVASTATED_LANDSCAPE)
+			G.active = RUSSIA
 			end()
 		}
 	}
@@ -10504,7 +10534,8 @@ P.exhausted_horses = { //TODO
 // RU #44 Disease & Starvation
 P.disease_and_starvation = {
 	_begin() {
-		L.num_enemy_sps_eliminated = 0
+		log("Eliminated")
+		L.num_sps_to_eliminate = 4
 
 		L.areas = []
 		for (let area = FIRST_AREA; area <= LAST_AREA; ++area)
@@ -10512,9 +10543,9 @@ P.disease_and_starvation = {
 				set_add(L.areas, area)
 	},
 	prompt() {
-		if (L.num_enemy_sps_eliminated < 4) {
+		if (L.num_sps_to_eliminate > 0) {
 			if (L.areas.length > 0) {
-				prompt_card(C_DISEASE_AND_STARVATION, `Select an area with a Devastation level of 2 or more to eliminate up to ${4 - L.num_enemy_sps_eliminated} SPs.`)
+				prompt_card(C_DISEASE_AND_STARVATION, `Select an area with a Devastation level of 2 or more to eliminate up to ${L.num_sps_to_eliminate} SPs.`)
 				if (L.areas.length <= 5) V.prompt += ` ${join_array_with_or(L.areas.map(area => `S${area}`))}`
 
 				for (let area of L.areas) 
@@ -10528,6 +10559,67 @@ P.disease_and_starvation = {
 			button_done()
 		}
 	},
+	area(area) {
+		clear_undo()
+		set_delete(L.areas, area)
+		if (L.num_sps_to_eliminate < count_num_exhausted_sps(FRANCE, area)) {
+			G.active = FRANCE
+			call("disease_and_starvation_select_losses", { area, count: L.num_sps_to_eliminate })
+		} else {
+			logi(`S${area}`)
+			log_only(RUSSIA, `<${count_num_exhausted_sps(FRANCE, area)} Exh. SPs`)
+			get_all_exhausted_sp_types(FRANCE, area).forEach((type) => {
+				log_only(FRANCE, `<${count_num_sps_of_type(FRANCE, type, area)} ${get_troop_type_name(type)}`)
+				L.num_sps_to_eliminate -= count_num_sps_of_type(FRANCE, type, area)
+				eliminate_troop(FRANCE, area, type, count_num_sps_of_type(FRANCE, type, area))
+			})
+		}
+	},
+	_resume() {
+		G.active = RUSSIA
+		log_only(RUSSIA, `<${L.num_sps_to_eliminate} Exh. SPs`)
+		L.num_sps_to_eliminate = 0
+	},
+	done() {
+		if (L.num_sps_to_eliminate === 4)
+			logi("Nothing")
+		end()
+	}
+}
+
+P.disease_and_starvation_select_losses = {
+	// L.area
+	// L.count
+	_begin() {
+		L.eliminated = []
+	},
+	prompt() {
+		if (L.count > 0) {
+			prompt_card(C_DISEASE_AND_STARVATION, `Eliminate ${L.count} exhausted SPs at S${L.area}.`)
+			get_all_exhausted_sp_types(G.active, L.area).forEach(action_troop)
+		} else {
+			prompt_card(C_DISEASE_AND_STARVATION, "All done.")
+			button_confirm()
+		}
+	},
+	troop(type) {
+		push_undo()
+		eliminate_troop(G.active, L.area, type)
+		if (!map_has(L.eliminated, type))
+			map_set(L.eliminated, type, 1)
+		else
+			map_increment(L.eliminated, type)
+
+		if (--L.count === 0) {
+			logi(`S${L.area}`)
+			map_for_each(L.eliminated, (troop_type, num) => {
+				log_only(FRANCE, `<${num} ${get_troop_type_name(troop_type)}`)
+			})
+		}
+	},
+	confirm() {
+		end()
+	}
 }
 
 // RU #47: Treacherous Allies
@@ -10695,6 +10787,94 @@ P.disorderly_march = {
 		end()
 	}
 }
+
+// RU #49: Cossack Patrols
+P.cossack_patrols = {
+	_begin() {
+		L.has_russia_confirmed = false
+	},
+	prompt() {
+		if (!L.has_russia_confirmed)
+			prompt(`Confirm play of ${get_card_log_alias(C_COSSACK_PATROLS)}?`)
+		else
+			prompt_card(C_COSSACK_PATROLS, "All done.")
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		if (!L.has_russia_confirmed) {
+			L.has_russia_confirmed = true
+			G.active = FRANCE
+			goto("do_cossack_patrols")
+		} else {
+			end()
+		}
+	}
+}
+
+P.do_cossack_patrols = {
+	_begin() {
+		log("Eliminated")
+		L.areas = []
+		get_areas_with_sps(RUSSIA).filter(area => has_cossack_sp(area)).forEach((area) => {
+			for (let neighbor of get_all_adjacent_areas(area))
+				if (has_exhausted_sp(FRANCE, neighbor) || has_order_of_type(FRANCE, FORAGE, neighbor))
+					set_add(L.areas, neighbor)
+		})
+		if (L.areas.length === 0) logi("Nothing")
+
+		L.selected_area = -1
+		L.has_eliminated_sp = false
+	},
+	prompt() {
+		if (L.areas.length > 0) {
+			if (L.selected_area === -1) {
+				prompt_card(C_COSSACK_PATROLS, `Select the next area to resolve the event.`)
+				if (L.areas.length <= 5) add_to_prompt(` ${join_array_with_or(L.areas.map(area => `S${area}`))}`)
+
+				L.areas.forEach(action_area)
+			} else if (!L.has_eliminated_sp && has_exhausted_sp(G.active, L.selected_area)) {
+				prompt_card(C_COSSACK_PATROLS, `Eliminate 1 Exhausted SP at S${L.selected_area}.`)
+				get_all_exhausted_sp_types(G.active, L.selected_area).forEach(action_troop)
+			} else {
+				prompt_card(C_COSSACK_PATROLS, `Remove Forage orders from S${L.selected_area}.`)
+				get_orders_at_area(G.active, L.selected_area).filter(order => get_order_type(order) === FORAGE).forEach(action_order)
+			}
+		} else {
+			prompt_card(C_COSSACK_PATROLS, "All done.")
+			button_confirm()
+		}
+	},
+	area(area) {
+		push_undo()
+		L.selected_area = area
+		log(`>S${area}`)
+	},
+	troop(type) {
+		push_undo()
+		eliminate_troop(G.active, L.selected_area, type)
+		log_only(RUSSIA, `<1 Exh. SP`)
+		log_only(FRANCE, `<1 ${get_troop_type_name(type)}`)
+		if (!has_order_of_type(G.active, FORAGE, L.selected_area)) {
+			set_delete(L.areas, L.selected_area)
+			L.selected_area = -1
+		} else {
+			L.has_eliminated_sp = true
+		}
+	},
+	order(order) {
+		push_undo()
+		remove_order(order)
+		log(`<1 Forage`)
+		L.has_eliminated_sp = false
+		set_delete(L.areas, L.selected_area)
+		L.selected_area = -1
+	},
+	confirm() {
+		end()
+	}
+}
+
 
 // RU #50: Crumbling Cohesion
 E.crumbling_cohesion = function() { return is_battle_attacker(RUSSIA, G.current_battle) }
@@ -11780,6 +11960,57 @@ P.inferior_gunpowder = {
 	}
 }
 
+// FR #45: Much Needed Victuals
+P.much_needed_victuals = {
+	_begin() {
+		L.selected_area = -1
+		L.num_sps_rallied = 0
+	},
+	prompt() {
+		if (L.selected_area === -1) {
+			if (has_depot_on_map(FRANCE)) {
+				prompt_card(C_MUCH_NEEDED_VICTUALS, `Remove a depot from map.`)
+				if (count_num_french_depots_on_map() <= 5) add_to_prompt(` ${join_array_with_or(get_areas_with_depots(FRANCE).map(area => `S${area}`))}`)
+
+				for (let depot = get_first_depot(FRANCE); depot <= get_last_depot(FRANCE); ++depot)
+					if (is_depot_on_map(depot))
+						action_depot(depot)
+			} else {
+				prompt_card(C_MUCH_NEEDED_VICTUALS, `No depots on map.`)
+				button_pass()
+			}
+		} else if (L.num_sps_rallied < 2 && count_num_exhausted_infantry(FRANCE, L.selected_area) > 0) {
+			prompt(`Rally ${2 - L.num_sps_rallied} exhausted Infantry at S${L.selected_area}.`)
+			get_all_exhausted_sp_types(FRANCE, L.selected_area).filter(is_infantry).forEach(action_troop)
+		} else {
+			prompt_card(C_MUCH_NEEDED_VICTUALS, `Attrition will not be checked at S${L.selected_area}`)
+			button_confirm()
+		}
+	},
+	depot(depot) {
+		push_undo()
+		L.selected_area = get_depot_location(depot)
+		remove_depot(depot, get_depot_location(depot))
+		log("Rallied")
+	},
+	pass() {
+		push_undo()
+		end()
+	},
+	troop(type) {
+		push_undo()
+		rally_troop(FRANCE, L.selected_area, type)
+		logi(`1 ${get_troop_type_name(type)}`)
+		++L.num_sps_rallied
+	},
+	confirm() {
+		push_undo()
+		add_persistent_event(C_MUCH_NEEDED_VICTUALS, { area: L.selected_area })
+		log(`No Attrition at S${L.selected_area}.`)
+		end()
+	}
+}
+
 // FR #47: Inferior Musketry
 E.inferior_musketry = function() { return is_battle_defender(FRANCE, G.current_battle) }
 
@@ -11795,7 +12026,52 @@ P.inferior_musketry = {
 	}	
 }
 
-// FR #48 Tough Rearguard
+// FR #48 Napoléon Returns to Paris
+E.napoleon_returns_to_paris = function() { return is_leader_on_map(L_NAPOLEON) }
+
+P.may_play_napoleon_returns_to_paris = {
+	prompt() {
+		if (hand_has(G.active, C_NAPOLEON_RETURNS_TO_PARIS)) {
+			prompt(`You may play ${get_card_log_alias(C_NAPOLEON_RETURNS_TO_PARIS)}.`)
+			action_card(C_NAPOLEON_RETURNS_TO_PARIS)
+		} else {
+			prompt(`You do not have ${get_card_log_alias(C_NAPOLEON_RETURNS_TO_PARIS)}.`)
+		}
+		button_pass()
+	},
+	card(card) {
+		push_undo()
+		goto("event", { card })
+	},
+	pass() {
+		push_undo()
+		end()
+	}
+}
+
+P.napoleon_returns_to_paris = {
+	prompt() {
+		if (is_leader_on_map(L_NAPOLEON)) {
+			prompt_card(C_NAPOLEON_RETURNS_TO_PARIS, `Remove L${L_NAPOLEON} from S${get_leader_location(L_NAPOLEON)} at no cost.`)
+			action_leader(L_NAPOLEON)
+		} else {
+			prompt_card(C_NAPOLEON_RETURNS_TO_PARIS, `All done.`)
+			button_confirm()
+		}
+	},
+	leader(_) {
+		push_undo()
+		log(`Removed from S${get_leader_location(L_NAPOLEON)}`)
+		move_leader(L_NAPOLEON, POOL)
+		logi(`L${L_NAPOLEON}`)
+	},
+	confirm() {
+		push_undo()
+		end()
+	}
+}
+
+// FR #49 Tough Rearguard
 P.may_play_tough_rearguard = {
 	prompt() {
 		prompt(`You may play ${get_card_log_alias(C_TOUGH_REARGUARD)}.`)

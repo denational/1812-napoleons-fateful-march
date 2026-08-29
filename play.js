@@ -578,7 +578,7 @@ function on_update() {
 	action_button("shuffle", "Shuffle Deck")
 	action_button("discard_and_redraw", "Discard & Redraw")
 	action_button("combine", "Combine")
-	action_button("add_1_to_attrition_distance")
+	action_button("add_1_to_attrition_distance", "Add 1 to Attrition Distance")
 
 	action_button_with_argument("move_type", -1, "SPs that have not moved")
 	action_button_with_argument("move_type", 0, "Forced March SPs")
@@ -1079,14 +1079,31 @@ function on_prompt(text) {
 
 scroll_with_middle_mouse("main")
 
-// === Framework map & set functions
-
+// === UTILITY FUNCTIONS ===
+// Array utility functions
 function array_insert(array, index, item) {
 	for (var i = array.length; i > index; --i)
 		array[i] = array[i - 1]
 	array[index] = item
 }
 
+function array_delete_pair(array, index) {
+	var i, n = array.length
+	for (i = index + 2; i < n; ++i)
+		array[i - 2] = array[i]
+	array.length = n - 2
+}
+
+function array_insert_pair(array, index, key, value) {
+	for (var i = array.length; i > index; i -= 2) {
+		array[i] = array[i-2]
+		array[i+1] = array[i-1]
+	}
+	array[index] = key
+	array[index+1] = value
+}
+
+// Sets as plain sorted arrays
 function set_add(set, item) {
 	var a = 0
 	var b = set.length - 1
@@ -1126,21 +1143,6 @@ function set_has(set, item) {
 
 // Map as plain sorted array of key/value pairs
 
-function array_delete_pair(array, index) {
-	var i, n = array.length
-	for (i = index + 2; i < n; ++i)
-		array[i - 2] = array[i]
-	array.length = n - 2
-}
-
-function array_insert_pair(array, index, key, value) {
-	for (var i = array.length; i > index; i -= 2) {
-		array[i] = array[i-2]
-		array[i+1] = array[i-1]
-	}
-	array[index] = key
-	array[index+1] = value
-}
 
 function map_has(map, key) {
 	var a = 0
