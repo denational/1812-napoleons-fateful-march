@@ -3662,126 +3662,58 @@ P.do_place_orders = {
 //=== COMMON ORDER EXECUTION STATES ===
 P.determine_who_goes_first = {
 	_begin() {
-		//L.order_type
+		// L.type
 		log_h3("First Player")
 		log()
 
-		//These events are mutually exclusive since Evasive Maneuvers is summer-only and Energetic Leadership is winter-only
-		if ((L.order_type === FORCED_MARCH) && can_play_event(C_EVASIVE_MANEUVERS)) {
-			L.state = C_EVASIVE_MANEUVERS
+		L.event = -1
+		L.first_player = -1
+		L.has_confirmed = false
+
+		if (L.type === FORCED_MARCH && can_play_event(C_EVASIVE_MANEUVERS)) {
 			G.active = RUSSIA
+			L.event = C_EVASIVE_MANEUVERS
+			call("may_play_evasive_maneuvers")
 		} else if (can_play_event(C_ENERGETIC_LEADERSHIP)) {
-			L.state = C_ENERGETIC_LEADERSHIP
 			G.active = FRANCE
+			L.event = C_ENERGETIC_LEADERSHIP
+			call("may_play_energetic_leadership", { type: L.type })
 		} else {
-			L.state = -1
 			G.active = get_who_has_initiative()
 		}
-
-		L.has_played_card = false
-		L.step = -1
-		L.first_player = -1
 	},
-	inactive: "choose who goes first",
 	prompt() {
-		switch(L.state) {
-		case C_EVASIVE_MANEUVERS:
-			if (L.played_card) {
-				prompt_card(C_EVASIVE_MANEUVERS, "Russia executes all forced march orders first this turn, but may not end moves in or adjacent to enemy-occupied areas.")
-				button_confirm()
-			} else {
-				if (hand_has(G.active, C_EVASIVE_MANEUVERS)) {
-					prompt(`You may play ${get_card_log_alias(C_EVASIVE_MANEUVERS)}.`)
-					action_card(C_EVASIVE_MANEUVERS)
-					button_pass()
-				} else {
-					prompt(`You do not have ${get_card_log_alias(C_EVASIVE_MANEUVERS)} in hand.`)
-					button_pass()
-				}
-			}
-			return
-		case C_ENERGETIC_LEADERSHIP:
-			if (L.played_card) {
-				if (L.step === -1) {
-					prompt_card(C_ENERGETIC_LEADERSHIP, `France executes ${get_order_type_name(L.order_type)} orders first this turn.`)
-					button_next()
-				} else {
-					prompt_card(C_ENERGETIC_LEADERSHIP, "All done.")
-					button_confirm()
-				}
-			} else {
-				if (hand_has(G.active, C_ENERGETIC_LEADERSHIP)) {
-					prompt(`You may play ${get_card_log_alias(C_ENERGETIC_LEADERSHIP)}.`)
-					action_card(C_ENERGETIC_LEADERSHIP)
-					button_pass()
-				} else {
-					prompt(`You do not have ${get_card_log_alias(C_ENERGETIC_LEADERSHIP)}.`)
-					button_pass()
-				}
-			}
-			return
-		default:
-			if (L.step === -1) {
-				prompt(`Pick who executes ${get_order_type_name(L.order_type)} first this turn.`)
-				button("russia")
+		if (L.first_player === -1) {
+			prompt(`Select who will execute the first ${get_order_type_name(L.type)} order this turn.`)
+			button("russia")
+			if (L.type !== COSSACK_RAID)
 				button("france")
-			} else {
-				prompt(`You chose ${ROLES[L.first_player]} to go first.`)
-				button_confirm()
-			}
-			return
+		} else {
+			prompt(`You chose ${ROLES[L.first_player]} to execute the first ${get_order_type_name(L.type)} order.`)
+			button_confirm()
 		}
-	},
-	card(card) {
-		push_undo()
-		L.played_card = true
-		card_box_begin(card)
-	},
-	next() {
-		push_undo()
-		++L.step
-	},
-	pass() {
-		push_undo()
-		G.active = get_who_has_initiative()
-		L.state = -1
-		L.step = -1
 	},
 	_resume() {
-		++L.step
-	},
-	confirm() {
-		if (L.played_card) {
-			log("Russia executes all 'Forced March' orders first this turn, but may not end moves in or adjacent to enemy-occupied areas.")
-			card_box_end()
-			if ((L.state === C_EVASIVE_MANEUVERS) || (L.state === C_ENERGETIC_LEADERSHIP)) {
-				add_persistent_event(L.state)
-				discard_card(L.state)
-			} 
-			
-			if (L.state === C_ENERGETIC_LEADERSHIP) {
-				L.first_player = FRANCE
-			} else if (L.state === C_EVASIVE_MANEUVERS) {
-				L.first_player = RUSSIA
-			}
+		if (L.$ === RUSSIA || L.$ === FRANCE) {
+			L.L.$ = L.$
+			end()
 		} else {
-			log(`${ROLES[G.active]} chose ${ROLES[L.first_player]} to go first.`)
+			G.active = get_who_has_initiative()
 		}
-		L.L.$ = L.first_player
-		
-		end()
 	},
 	russia() {
 		push_undo()
 		L.first_player = RUSSIA
-		++L.step
-		if (L.state === C_EVASIVE_MANEUVERS) call("draw_card_to_hand")
 	},
 	france() {
 		push_undo()
 		L.first_player = FRANCE
-		++L.step
-		if (L.state === C_EVASIVE_MANEUVERS) call("draw_card_to_hand")
+	},
+	confirm() {
+		push_undo()
+		log(`${ROLES[G.active]} chose ${ROLES[L.first_player]} to go first.`)
+		L.L.$ = L.first_player
+		end()
 	}
 }
 
@@ -4089,7 +4021,7 @@ P.execute_orders = script(`
 		eval { log("No " + get_order_type_name(L.type) + " orders placed.") }
 		log
 	} else {
-		call determine_who_goes_first { order_type: L.type }
+		call determine_who_goes_first { type: L.type }
 
 		if (L.type === CAVALRY_PATROLS) {
 			set G.active RUSSIA
@@ -4156,7 +4088,7 @@ function filter_orders(who, type) {
 		filter_orders_of_type(who, type, (order) => {
 			return has_friendly_troop(G.active, get_order_location(order)) 
 				&& has_battle(get_order_location(order)) 
-				&& !is_event_active(C_UNSUCCESSFUL_DISENGAGEMENT) || (is_event_active(C_UNSUCCESSFUL_DISENGAGEMENT) && !set_has(map_get(G.persistent_events, C_UNSUCCESSFUL_DISENGAGEMENT).cancelled_orders, order))
+				&& (!is_event_active(C_UNSUCCESSFUL_DISENGAGEMENT) || (is_event_active(C_UNSUCCESSFUL_DISENGAGEMENT) && !set_has(map_get(G.persistent_events, C_UNSUCCESSFUL_DISENGAGEMENT).cancelled_orders, order)))
 		})
 		return
 	case RALLY:
@@ -4303,7 +4235,6 @@ P.end_order = {
 
 //=== 5. EXECUTE FORCED MARCH ORDERS ===
 /*
-	STATUS: Almost done.
 	TODO: Bagration's Retreat, Indecision
 
 	Events:
@@ -5362,7 +5293,7 @@ P.select_evade_force = {
 		if (is_event_active(C_UNEXPECTED_RETREAT))
 			L.num_sps_selected = count_num_sps_of_type(FRANCE, FRESH_AUSTRIAN_INFANTRY, L.area) + count_num_sps_of_type(FRANCE, EXHAUSTED_AUSTRIAN_INFANTRY, L.area)
 		else
-			L.num_sps_selected = count_num_sps(FRANCE, L.area)
+			L.num_sps_selected = count_num_sps(G.active, L.area)
 	},
 	confirm() {
 		push_undo()
@@ -5479,6 +5410,7 @@ P.evade_pursuit_exhaustion = {
 			prompt(`No more fresh SPs at S${L.area}.`)
 			button_next()
 		} else if (!L.has_assigned_exhaustion) {
+			// RU #1 Well Disciplined Retreat: No exhaustion when executing Evade orders, regardless of the number of cavalry/cossacks involved.
 			if (L.evader === RUSSIA && is_event_active(C_WELL_DISCIPLINED_RETREAT)) {
 				prompt_card(C_WELL_DISCIPLINED_RETREAT, "No exhaustion when executing Evade orders.")
 				button_confirm()
@@ -8991,7 +8923,7 @@ P.event = script(`
 	}
 `)
 
-//RU #1: Well-Disciplined Retreat
+// RU #1: Well-Disciplined Retreat
 P.well_disciplined_retreat = {
 	inactive: "play C1",
 	prompt() {
@@ -9014,13 +8946,12 @@ P.may_play_confused_retreat = {
 		if (hand_has(RUSSIA, C_CONFUSED_RETREAT)) {
 			prompt(`You may play ${get_card_log_alias(C_CONFUSED_RETREAT)}.`)
 			action_card(C_CONFUSED_RETREAT)
-			button_pass()
 		} else {
 			prompt(`You do not have ${get_card_log_alias(C_CONFUSED_RETREAT)}.`)
-			button_pass()
 		}
+		button_pass()
 	},
-	card(card) {
+	card(_) {
 		push_undo()
 		goto("confused_retreat", { area: L.area })
 	},
@@ -9082,42 +9013,94 @@ P.confused_retreat = {
 		set_add(L.areas, area)
 
 		L.selected_order = -1
-		if (--L.count === 0) ++L.step
+		if (--L.count === 0) {
+			++L.step
+			L.areas.forEach((area) => {
+				logi(`S${area}`)
+				log(`<Evade`)
+			})
+		}
 	},
 	done() {
 		push_undo()
 		log("Placed")
-		L.areas.forEach((area) => {
-			logi(`S${area}`)
-			log(`<Evade`)
-		})
+		if (L.areas.length === 0)
+			log(`<Nothing`)
 		card_box_end()
 		discard_or_remove_card(C_CONFUSED_RETREAT)
 		goto("do_cavalry_patrols", { area: L.area })
 	}
 }
 
-//RU #3: Opolchenie
+// RU #3: Opolchenie
 P.opolchenie = {
 	_begin() {
-		//WILL FAIL IF THE ORDER OF THE SPACES IS CHANGED (set_delete() at this.area())
 		L.areas = [S_PSKOV, S_KIEV, S_SMOLENSK, S_KALUGA, S_MOSCOW].filter(area => is_ru_controlled(area))
+		log("Placed")
 	},
 	inactive: "raise the militia",
 	prompt() {
 		//Always guaranteed at least Pskov (Russian off-map area cannot be entered by France)
 		prompt_card(C_OPOLCHENIE, `Place 2 exhausted Russian Infantry SPs at ${join_array_with_and(L.areas.map(s => `S${s}`))}.`)
-		for (let area of L.areas) {
-			action_area(area)
-		}
+		L.areas.forEach(action_area)
 	},
 	area(area) {
 		push_undo()
-		log("Placed at S" + area)
+		logi(`S${area}`)
 		add_troop(RUSSIA, area, EXHAUSTED_INFANTRY, 2)
-		logi(2 + " " + get_troop_type_name(EXHAUSTED_INFANTRY))
+		log(`<2 ${get_troop_type_name(EXHAUSTED_INFANTRY)}`)
 		set_delete(L.areas, area)
-		if (!L.areas || L.areas.length === 0) end()
+		if (!L.areas || L.areas.length === 0) 
+			end()
+	}
+}
+
+// RU #4: Evasive Maneuvers
+P.may_play_evasive_maneuvers = {
+	prompt() {
+		if (hand_has(G.active, C_EVASIVE_MANEUVERS)) {
+			prompt(`You may play ${get_card_log_alias(C_EVASIVE_MANEUVERS)} to execute all Forced March orders first this turn.`)
+			action_card(C_EVASIVE_MANEUVERS)
+		} else {
+			prompt(`You do not have ${get_card_log_alias(C_EVASIVE_MANEUVERS)}.`)
+		}
+		button_pass()
+	},
+	card(_) {
+		push_undo()
+		goto("evasive_maneuvers")
+	},
+	pass() {
+		push_undo()
+		end()
+	}
+}
+
+P.evasive_maneuvers = {
+	_begin() { 
+		card_box_begin(C_EVASIVE_MANEUVERS)
+		L.step = -1 
+	},
+	prompt() {
+		if (L.step === -1)
+			prompt_card(C_EVASIVE_MANEUVERS, `Russia executes all Forced March orders first this turn.`)
+		else
+			prompt_card(C_EVASIVE_MANEUVERS, `Russian forces using Forced March orders may not end moves in, or adjacent to, French-occupied areas.`)
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		if (L.step === -1) {
+			++L.step
+			L.L.$ = RUSSIA
+			log(`Russia executes all Forced March orders first.`)
+		} else {
+			log(`Russian forces using Forced March orders may not end moves in, or adjacent to, French-occupied areas.`)
+			card_box_end()
+			add_persistent_event(C_EVASIVE_MANEUVERS)
+			discard_or_remove_card(C_EVASIVE_MANEUVERS)
+			end()
+		}
 	}
 }
 
@@ -10866,15 +10849,16 @@ P.do_cossack_patrols = {
 		push_undo()
 		remove_order(order)
 		log(`<1 Forage`)
-		L.has_eliminated_sp = false
-		set_delete(L.areas, L.selected_area)
-		L.selected_area = -1
+		if (!has_order_of_type(FRANCE, FORAGE, L.selected_area)) {
+			L.has_eliminated_sp = false
+			set_delete(L.areas, L.selected_area)
+			L.selected_area = -1
+		}
 	},
 	confirm() {
 		end()
 	}
 }
-
 
 // RU #50: Crumbling Cohesion
 E.crumbling_cohesion = function() { return is_battle_attacker(RUSSIA, G.current_battle) }
@@ -12008,6 +11992,59 @@ P.much_needed_victuals = {
 		add_persistent_event(C_MUCH_NEEDED_VICTUALS, { area: L.selected_area })
 		log(`No Attrition at S${L.selected_area}.`)
 		end()
+	}
+}
+
+// FR #46: Energetic Leadership
+P.may_play_energetic_leadership = {
+	// L.type
+	prompt() {
+		if (hand_has(FRANCE, C_ENERGETIC_LEADERSHIP)) {
+			prompt(`You may play ${get_card_log_alias(C_ENERGETIC_LEADERSHIP)}.`)
+			action_card(C_ENERGETIC_LEADERSHIP)
+		} else {
+			prompt(`You do not have ${get_card_log_alias(C_ENERGETIC_LEADERSHIP)}.`)
+		}
+		button_pass()
+	},
+	card(_) {
+		push_undo()
+		goto("energetic_leadership", { type: L.type })
+	},
+	pass() {
+		push_undo()
+		end()
+	}
+}
+
+P.energetic_leadership = {
+	// L.type
+	_begin() {
+		card_box_begin(C_ENERGETIC_LEADERSHIP)
+		L.step = -1
+	},
+	prompt() {
+		if (L.step === -1) {
+			prompt_card(C_ENERGETIC_LEADERSHIP, `France executes ${get_order_type_name(L.type)} first this turn.`)
+			button_confirm()
+		} else {
+			prompt_card(C_ENERGETIC_LEADERSHIP, "All done.")
+			button_confirm()
+		}
+	},
+	confirm() {
+		if (L.step === -1) {
+			clear_undo()
+			++L.step
+			L.L.$ = FRANCE
+			log(`France executes all ${get_order_type_name(L.type)} orders first this turn.`)
+			call("draw_card_to_hand")
+		} else {
+			push_undo()
+			card_box_end()
+			discard_or_remove_card(C_ENERGETIC_LEADERSHIP)
+			end()
+		}
 	}
 }
 
