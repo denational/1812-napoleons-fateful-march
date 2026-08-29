@@ -92,7 +92,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
 
 	& .h5 {
 		text-decoration: underline;
-		font-weight: 600;
+		font-weight: bold;
 	}
 
 	& .group.header { 

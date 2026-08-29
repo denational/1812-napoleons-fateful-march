@@ -879,7 +879,7 @@ function has_troop(area) {
 	return map_has(G.troops, area)
 }
 
-function get_area_troop_set(area, fallback) {
+function get_area_troop_set(area, fallback = null) {
 	return map_get(G.troops, area, fallback)
 }
 
@@ -1305,7 +1305,7 @@ function mark_already_moved(who, path, move_type, leaders, troops) {
 	for (let leader of leaders) set_add(entry.leaders, leader)
 	for (let type = 0; type < troops.length; ++type) entry.troops[type] += troops[type]
 
-	map_get(G.moved, destination, null).push(entry)
+	map_get(G.moved, destination).push(entry)
 }
 
 /* ORDERS */
@@ -2454,7 +2454,7 @@ P.end_turn = function() {
 			G.orders[order] = POOL
 
 	if (is_event_active(C_HOLY_MOTHER_RUSSIA_RU)) {
-		let key_controller = is_fr_controlled(map_get(G.persistent_events, C_HOLY_MOTHER_RUSSIA_RU, null).area) ? FRANCE: RUSSIA
+		let key_controller = is_fr_controlled(map_get(G.persistent_events, C_HOLY_MOTHER_RUSSIA_RU).area) ? FRANCE: RUSSIA
 		log(`${get_card_log_alias(C_HOLY_MOTHER_RUSSIA_RU)}`)
 		increase_vp(key_controller, 1)
 	}
@@ -7462,7 +7462,7 @@ P.end_battle = script(`
 	}
 	if (has_friendly_leader(L.loser, G.current_battle)) {
 		set G.active L.loser
-		call eliminate_leader
+		call eliminate_leader { area: G.current_battle }
 	}
 	if (has_friendly_depot(L.loser, G.current_battle)) {
 		set G.active L.loser
@@ -7900,7 +7900,7 @@ P.retreat = {
 
 P.eliminate_leader = {
 	_begin() {
-		L.leaders_to_eliminate = get_leaders_at_area(G.active, G.current_battle)
+		L.leaders_to_eliminate = get_leaders_at_area(G.active, L.area)
 		log("Eliminated")
 	},
 	prompt() {
@@ -8205,6 +8205,10 @@ P.do_place_depot = {
     FRANCE
     FR #45 Much Needed Victuals			Beginning	- FR must remove a Depot marker - do not check Attrition there and immediately rally 2 exhausted infantry there
     FR #48 Napoléon Returns to Paris	End			- Permanently remove Napoléon from the game at no VP cost
+
+	Leader abilities
+	Murat		+1 to Modified Size in his area (applies even if not seniormost leader)
+	Tormasov	-2 to Modified Size in his area
 */
 
 P.attrition = script(`
@@ -8223,8 +8227,12 @@ P.attrition = script(`
 	set G.active L.player_with_initiative
 	call roll_weather_die
 
-	set G.active [RUSSIA, FRANCE]
+	log "#Perform Attrition"
+	log
+	set G.active (1 - L.player_with_initiative)
 	call do_attrition	
+	set G.active L.player_with_initiative
+	call do_attrition
 `)
 
 function get_attrition_events(who) {
@@ -8331,20 +8339,20 @@ function calculate_modified_size(who, area) {
 	else
 		size += get_devastation(area)
 
-	// Murat: +1 to Modified Size in his area
+	// Murat: +1 to Modified Size in his area (applies even if not seniormost leader)
 	if ((who === FRANCE) && (get_leader_location(L_MURAT) === area))
 		size += 1
 
 	// Tormasov: -2 to Modified Size in his area
-	if ((who === RUSSIA) && (get_leader_location(L_TORMASOV) === area))
+	if ((who === RUSSIA) && (is_seniormost_leader(L_TORMASOV, area)))
 		size = Math.max(0, size - 2)
 
 	return size
 }
 
 function log_attrition_info(who, area) {
-	log_only(who, `%S${area}`)
-
+	log_only(who, `$${get_abbreviation(who)}S${area}`)
+	log_only(who, `%Result`)
 	let size = calculate_modified_size(who, area)
 	let distance_to_nearest_depot = G.supply[who][area]
 	let weather_effect = get_current_season() === SUMMER ? get_summer_weather_die_result(who, G.weather_roll) : get_winter_weather_die_result(who, G.weather_roll)
@@ -8365,7 +8373,7 @@ function log_attrition_info(who, area) {
 	}
 
 	if ((who === FRANCE) && (get_leader_location(L_MURAT) === area)) log_only(who, `<+1 L${L_MURAT}`)
-	if ((who === RUSSIA) && (get_leader_location(L_TORMASOV) === area)) log_only(who, `<-2 L${L_TORMASOV}`)
+	if ((who === RUSSIA) && (is_seniormost_leader(L_TORMASOV, area))) log_only(who, `<-2 L${L_TORMASOV}`)
 
 	log_only(who, `>Distance to nearest Depot: ${distance_to_nearest_depot}`)
 
@@ -8376,6 +8384,7 @@ function log_attrition_info(who, area) {
 
 function get_attrition_result_name(modified_size, distance_to_nearest_depot) {
 	let result = lookup_attrition_table(modified_size, distance_to_nearest_depot)
+	// The lookup returns an array of length 2: [<num. attrition losses>, <increase in devastation>]
 	return `${result[0]}${"D".repeat(result[1])}`
 }
 
@@ -8398,304 +8407,286 @@ function count_num_exhausted_sps(who, area) {
 	return count
 }
 
-// TODO: Apply restriction that one in three SPs affected must be cavalry (I haven't trapped a test case with 3+ hits yet)
+function get_current_attrition_area() {
+	return G.attrition_data.area
+}
+
+function has_attrition_losses_remaining() {
+	return G.attrition_data.num_losses_remaining > 0
+}
+
+function has_applied_attrition_devastation() {
+	return G.attrition_data.devastation_increase === 0
+}
+
+function reset_attrition_data() {
+	G.attrition_data = {
+		// Area currently being checked
+		area: -1,
+		// Number of ATTRITION LOSSES remaining
+		num_losses_remaining: -1,
+		// Raw amount of how much devastation must be increased
+		devastation_increase: -1,
+		// Number of UNITS assigned losses
+		num_sps_affected: 0,
+		// Number of ATTRITION LOSSES cancelled by a forage order
+		num_cancels_remaining: 0,
+		// Has assigned a Cavalry loss (1/3 hits)
+		has_assigned_cavalry_loss: false,
+	}
+}
+
 P.do_attrition = {
 	_begin() {
-		log_h3("Perform Attrition")
-		log()
+		// Update distances to nearest depot before calculations
+		update_supply(G.active)
 
-		update_supply(RUSSIA)
-		update_supply(FRANCE)
+		L.areas = []
+		for (let area of get_areas_with_sps(G.active)) {
+			let modified_size = calculate_modified_size(G.active, area)
+			let distance_to_nearest_depot = get_supply_status(G.active, area)
 
-		L.state = ["select_next_area", "select_next_area"]
-		L.undo = [[], []]
-
-		L.areas = [[], []]
-		G.attrition_checked = []
-
-		// Ignore areas with no attrition losses/devastation penalties (since 80% of stacks at any given time are unlikely to take any attrition penalties)
-		for (let who = RUSSIA; who <= FRANCE; ++who) {
-			for (let area of get_areas_with_sps(who)) {
-				let modified_size = calculate_modified_size(who, area)
-				let distance_to_nearest_depot = G.supply[who][area]
-				if ((lookup_attrition_losses(modified_size, distance_to_nearest_depot) === 0) && (lookup_attrition_devastation(modified_size, distance_to_nearest_depot) === 0)) {
-					set_add(G.attrition_checked, area)
-				} else {
-					set_add(L.areas[who], area)
-				}
-			}
-			if (L.areas[who].length === 0) L.state[who] = "attrition_done" 
-		}
-
-		L.attrition_data = [
-			{area: -1, num_losses_remaining: -1, devastation_increase: -1}, 
-			{area: -1, num_losses_remaining: -1, devastation_increase: -1}
-		]
-		L.count = [0, 0]
-	},
-	states: {
-		"select_next_area": {
-			prompt() {
-				prompt("Select next area to check attrition.")
-
-				if (L.areas[R].length <= 5) V.prompt += ` (${join_array_with_or(L.areas[R].map(area => `S${area}`))})` 
-
-				for (let area of L.areas[R]) 
-					action_area(area)
-			},
-			on_area(area) {
-				push_local_undo(R, "select_area")
-				L.attrition_data[R].area = area
-				L.attrition_data[R].num_losses_remaining = lookup_attrition_losses(calculate_modified_size(R, area), G.supply[R][area])
-				L.attrition_data[R].devastation_increase = lookup_attrition_devastation(calculate_modified_size(R, area), G.supply[R][area])
-				log_attrition_info(R, area)
-
-				if (has_order_of_type(R, FORAGE, area))
-					L.state[R] = "reveal_forage_order"
-				else if (L.attrition_data[R].num_losses_remaining > 0)
-					L.state[R] = "assign_attrition_losses"
-				else if (L.attrition_data[R].devastation_increase > 0)
-					L.state[R] = "increase_devastation"
-				else
-					L.state[R] = "end_area" 
-			}
-		},
-		"reveal_forage_order": {
-			prompt(){
-				prompt(`Reveal Forage order to reduce Attrition losses by 2?`)
-				action_order(get_placed_orders_of_type(FORAGE).find(order => (get_order_owner(order) === R) && (get_order_location(order) === L.attrition_data[R].area)))
-				button_pass()
-			},
-			on_order(order) {
-				push_local_undo(R, "reveal_forage_order", { id: order, area: get_order_location(order), num_losses_before_forage: L.attrition_data[R].num_losses_remaining })
-				G.orders[order] = POOL
-				L.attrition_data[R].num_losses_remaining = Math.max(0, L.attrition_data[R].num_losses_remaining - 2)
-
-				if (L.attrition_data[R].num_losses_remaining > 0)
-					L.state[R] = "assign_attrition_losses"
-				else if (L.attrition_data[R].devastation_increase > 0)
-					L.state[R] = "increase_devastation"
-				else
-					L.state[R] = "end_area" 
-			},
-			on_pass() {
-				push_local_undo(R, "pass")
-
-				if (L.attrition_data[R].num_losses_remaining > 0)
-					L.state[R] = "assign_attrition_losses"
-				else if (L.attrition_data[R].devastation_increase > 0)
-					L.state[R] = "increase_devastation"
-				else
-					L.state[R] = "end_area" 
-			}
-		},
-		"assign_attrition_losses": {
-			prompt() {
-				prompt(`Assign attrition losses: ${L.attrition_data[R].num_losses_remaining} remaining.`)
-				if (has_fresh_sp(R, L.attrition_data[R].area))
-					button("exhaust")
-				if (count_num_exhausted_sps(R, L.attrition_data[R].area) >= 2 || count_num_sps(R, L.attrition_data[R].area) === count_num_exhausted_sps(R, L.attrition_data[R].area))
-					button("eliminate_2")
-			},
-			on_exhaust() {
-				push_local_undo(R, "choose_attrition_option", { option: "exhaust" })
-				L.state[R] = "exhaust_sp"
-			},
-			on_eliminate_2() {
-				push_local_undo(R, "choose_attrition_option", { option: "eliminate_2" })
-				L.count[R] = 2
-				L.state[R] = "eliminate_2_exhausted"
-			}
-		},
-		"exhaust_sp": {
-			prompt() {
-				prompt(`Exhaust 1 fresh SP at S${L.attrition_data[R].area}.`)
-				for (let type of get_troop_types_at_area(R, L.attrition_data[R].area))
-					if (is_troop_type_fresh(type))
-						action_troop(type)
-			},
-			on_troop(type) {
-				push_local_undo(R, "exhaust", { type })
-				exhaust_troop(R, L.attrition_data[R].area, type)
-
-				if (--L.attrition_data[R].num_losses_remaining > 0)
-					L.state[R] = "assign_attrition_losses"
-				else if (L.attrition_data[R].devastation_increase > 0)
-					L.state[R] = "increase_devastation"
-				else
-					L.state[R] = "end_area" 
-			}
-		},
-		"eliminate_2_exhausted": {
-			prompt() {
-				if (has_friendly_troop(R, L.attrition_data[R].area)) {
-					prompt(`Eliminate ${L.count[R]} exhausted SPs at S${L.attrition_data[R].area}.`)
-					for (let type of get_all_exhausted_sp_types(R, L.attrition_data[R].area))
-						action_troop(type)
-				} else {
-					prompt(`No more SPs at S${L.attrition_data[R].area} to eliminate.`)
-					button_confirm()
-				}
-			},
-			on_troop(type) {
-				push_local_undo(R, "eliminate", { type })
-				eliminate_troop(R, L.attrition_data[R].area, type)
-
-				if (!is_friendly_controlled(R, L.attrition_data[R].area) && get_area_vp(L.attrition_data[R].area) > 0)
-					decrease_vp(R, get_area_vp(L.attrition_data[R].area))
-
-				if (--L.count[R] === 0) {
-					if (--L.attrition_data[R].num_losses_remaining > 0)
-						L.state[R] = "assign_attrition_losses"
-					else if (L.attrition_data[R].devastation_increase > 0)
-						L.state[R] = "increase_devastation"
-					else
-						L.state[R] = "end_area"
-				}
-			},
-			on_confirm() {
-				push_local_undo(R, "confirm", { num_losses_remaining: L.attrition_data[R].num_losses_remaining })
-				L.attrition_data[R].num_losses_remaining = 0
-				if (L.attrition_data[R].devastation_increase > 0)
-					L.state[R] = "increase_devastation"
-				else
-					L.state[R] = "end_area"
-			}
-		},
-		"increase_devastation": {
-			prompt() {
-				if (get_devastation(L.attrition_data[R].area) < 3) {
-					prompt(`Increase Devastation at S${L.attrition_data[R].area} by ${L.attrition_data[R].devastation_increase}.`)
-					action_area(L.attrition_data[R].area)
-				} else {
-					prompt(`Devastation at S${L.attrition_data[R].area} cannot be increased further.`)
-					button_confirm()
-				}
-				
-			},
-			on_area(area) {
-				push_local_undo(R, "increase_devastation", { old_devastation: get_devastation(area) })
-				let final_devastation = get_devastation(area) + L.attrition_data[R].devastation_increase
-				set_devastation(area, Math.min(final_devastation, 3))
-
-				L.attrition_data[R].devastation_increase = 0
-				if (final_devastation > 3 && has_friendly_troop(R, area)) {
-					L.attrition_data[R].num_losses_remaining = 1
-					L.state[R] = "assign_attrition_losses"
-				} else
-					L.state[R] = "end_area"
-			},
-			on_confirm() {
-				push_local_undo(R, "confirm", { num_losses_remaining: L.attrition_data[R].num_losses_remaining, devastation_increase: L.attrition_data[R].devastation_increase })
-				L.attrition_data[R].devastation_increase = 0
-				
-				if (has_friendly_troop(R, L.attrition_data[R].area)) {
-					L.attrition_data[R].num_losses_remaining = 1
-					L.state[R] = "assign_attrition_losses"
-				} else
-					L.state[R] = "end_area"
-				
-			}
-		},
-		"end_area": {
-			prompt() {
-				prompt(`Attrition at S${L.attrition_data[R].area}: All done.`)
-				button_next()
-			},
-			on_next() {
-				push_local_undo(R, "next", { attrition_data: object_copy(L.attrition_data[R]) })
-				set_delete(L.areas[R], L.attrition_data[R].area)
-				G.attrition_checked.push(L.attrition_data[R].area)
-				L.attrition_data[R].area = -1
-				L.attrition_data[R].num_losses_remaining = -1
-				L.attrition_data[R].devastation_increase = -1
-				
-				if (L.areas[R].length > 0)
-					L.state[R] = "select_next_area"
-				else
-					L.state[R] = "attrition_done"
-			}
-		},
-		"attrition_done": {
-			prompt() {
-				prompt(`Attrition: All done.`)
-				button_confirm()
-			},
-			on_confirm() {
-				set_delete(G.active, R)
-				if (G.active.length === 0) {
-					G.attrition_checked.length = 0
-					log()
-					end()
-				}
-			}
-		}
-	},
-	prompt() { 
-		this.states[L.state[R]].prompt()
-		button_undo(L.undo[R].length > 0)
-	},
-	undo() {
-		let previous_action = L.undo[R].pop()
-		L.state[R] = previous_action.state
-
-		switch(previous_action.action) {
-		case "select_area":
-			L.attrition_data[R].area = -1
-			L.attrition_data[R].num_losses_remaining = -1
-			L.attrition_data[R].devastation_increase = -1
-			//TODO: Figure out how to undo log, if at all
-			return
-		case "reveal_forage_order":
-			G.orders[previous_action.info.id] = previous_action.info.area
-			L.attrition_data[R].num_losses_remaining = previous_action.info.num_losses_before_forage
-			return
-		case "pass":
-			return
-		case "choose_attrition_option":
-			if (previous_action.info.option === "eliminate_2") 
-				L.count[R] = 0		
-			return
-		case "exhaust":
-			rally_troop(R, L.attrition_data[R].area, previous_action.info.type + 1)
-			++L.attrition_data[R].num_losses_remaining
-			return
-		case "eliminate":
-			add_troop(R, L.attrition_data[R].area, previous_action.info.type, 1)
-			++L.count[R]
-			++L.attrition_data[R].num_losses_remaining
-			return
-		case "increase_devastation":
-			set_devastation(L.attrition_data[R].area, previous_action.info.old_devastation)
-			L.attrition_data[R].devastation_increase = lookup_attrition_devastation(calculate_modified_size(R, L.attrition_data[R].area), G.supply[R][L.attrition_data[R].area])
-			return
-		case "confirm":
-			if (previous_action.state === "eliminate_2_exhausted") {
-				L.attrition_data[R].num_losses_remaining = previous_action.info.num_losses_remaining
+			// No need to make players check attrition in areas where it won't matter
+			if (lookup_attrition_losses(modified_size, distance_to_nearest_depot) === 0
+				&& lookup_attrition_devastation(modified_size, distance_to_nearest_depot) === 0
+			) {
+				// Populate 'Attrition Checked' markers
+				set_add(G.attrition_checked, area)
 			} else {
-				L.attrition_data[R].devastation_increase = previous_action.info.devastation_increase
-				L.attrition_data[R].num_losses_remaining = previous_action.info.num_losses_remaining
+				set_add(L.areas, area)
 			}
-			return
-		case "next":
-			set_add(L.areas[R], previous_action.info.attrition_data.area)
-			G.attrition_checked.pop()
-			L.attrition_data[R].area = previous_action.info.attrition_data.area
-			L.attrition_data[R].num_losses_remaining = previous_action.info.attrition_data.num_losses_remaining
-			L.attrition_data[R].devastation_increase = previous_action.info.attrition_data.devastation_increase
-			return
-		default:
-			throw new Error(`Unknown action: ${previous_action.action}`)
+		}
+
+		reset_attrition_data()
+	},
+	prompt() {
+		if (L.areas.length > 0) {
+			prompt(`Select next area to check attrition.`)
+			if (L.areas.length <= 5) add_to_prompt(` (${join_array_with_or(L.areas.map(area => `S${area}`))})`)
+
+			L.areas.forEach(action_area)
+		} else {
+			prompt(`Attrition: all done.`)
+			button_confirm()
 		}
 	},
-	area(area) 		{ this.states[L.state[R]].on_area(area) },
-	exhaust() 		{ this.states[L.state[R]].on_exhaust() },
-	eliminate_2() 	{ this.states[L.state[R]].on_eliminate_2() },
-	troop(type)		{ this.states[L.state[R]].on_troop(type) },
-	order(order)	{ this.states[L.state[R]].on_order(order) },
-	next()			{ this.states[L.state[R]].on_next() },
-	pass()			{ this.states[L.state[R]].on_pass() },
-	confirm()		{ this.states[L.state[R]].on_confirm() },
+	area(area) {
+		push_undo()
+		let modified_size = calculate_modified_size(G.active, area)
+		let distance_to_nearest_depot = get_supply_status(G.active, area)
+
+		G.attrition_data.area = area
+		G.attrition_data.num_losses_remaining = Math.min(count_num_sps(G.active, area), lookup_attrition_losses(modified_size, distance_to_nearest_depot))
+		G.attrition_data.devastation_increase = lookup_attrition_devastation(modified_size, distance_to_nearest_depot)
+
+		log_attrition_info(G.active, area)
+
+		if (has_order_of_type(G.active, FORAGE, area))
+			call("reveal_forage_order", { area })
+		else if (has_attrition_losses_remaining())
+			call("assign_attrition_losses", { area })
+		else
+			call("increase_devastation", { area })
+	},
+	_resume() {
+		if (has_attrition_losses_remaining() && has_friendly_troop(G.active, get_current_attrition_area()))
+			call("assign_attrition_losses", { area: get_current_attrition_area() })
+		else if (!has_applied_attrition_devastation())
+			call("increase_devastation", { area: get_current_attrition_area() })
+		else {
+			set_delete(L.areas, get_current_attrition_area())
+			set_add(G.attrition_checked, get_current_attrition_area())
+			reset_attrition_data()
+			log()
+		}
+	},
+	confirm() {
+		reset_attrition_data()
+		G.attrition_checked.length = 0
+		log()
+		end()
+	}
+}
+
+P.reveal_forage_order = {
+	prompt() {
+		prompt(`Reveal Forage order to reduce Attrition losses by 2?`)
+
+		action_order(get_orders_at_area(G.active, get_current_attrition_area()).find(order => get_order_type(order) === FORAGE))
+		button_pass()
+	},
+	order(order) {
+		push_undo()
+		remove_order(order)
+		log_only(G.active, "Revealed Forage order.")
+		log_only(G.active, `>-2 Attrition losses`)
+		G.attrition_data.num_cancels_remaining += 2
+		while (G.attrition_data.num_losses_remaining > 0 && G.attrition_data.num_cancels_remaining > 0) {
+			--G.attrition_data.num_losses_remaining
+			--G.attrition_data.num_cancels_remaining
+		}
+
+		if (has_attrition_losses_remaining())
+			goto("assign_attrition_losses", { area: get_current_attrition_area() })
+		else if (!has_applied_attrition_devastation())
+			goto("increase_devastation", { area: get_current_attrition_area() })
+		else
+			end()
+	},
+	pass() {
+		push_undo()
+
+		if (has_attrition_losses_remaining())
+			goto("assign_attrition_losses", { area: get_current_attrition_area() })
+		else if (!has_applied_attrition_devastation())
+			goto("increase_devastation", { area: get_current_attrition_area() })
+		else
+			end()
+	}
+}
+
+function must_assign_cavalry_attrition_loss() {
+	return G.attrition_data.num_sps_affected % 3 === 2 && !G.attrition_data.has_assigned_cavalry_loss && has_cavalry_or_cossack_in_area(G.active, L.area)
+}
+
+P.assign_attrition_losses = {
+	prompt() {
+		prompt(`Assign attrition losses: ${G.attrition_data.num_losses_remaining} remaining.`)
+
+		if (must_assign_cavalry_attrition_loss()) {
+			if (count_num_sps_of_type(G.active, FRESH_CAVALRY, L.area) > 0 || count_num_sps_of_type(G.active, FRESH_COSSACK, L.area) > 0)
+				button("exhaust")
+
+			if (count_num_sps_of_type(G.active, EXHAUSTED_CAVALRY, L.area) > 0 || count_num_sps_of_type(G.active, EXHAUSTED_COSSACK, L.area) > 0)
+				button("eliminate_2")
+		}
+		else {
+			if (has_fresh_sp(G.active, L.area))
+				button("exhaust")
+
+			if (count_num_exhausted_sps(G.active, L.area) >= 2
+				|| ((has_friendly_troop(G.active, L.area) && count_num_sps(G.active, L.area) === count_num_exhausted_sps(G.active, L.area)))
+			) {
+				switch(G.attrition_data.num_sps_affected % 3) {
+				case 0:
+					button("eliminate_2")
+					break
+				case 1:
+				case 2:
+					if (
+						get_all_exhausted_sp_types(G.active, L.area).some(type => is_cavalry(type) || is_cossack(type))
+						|| G.attrition_data.has_assigned_cavalry_loss
+						|| (!G.attrition_data.has_assigned_cavalry_loss && !has_cavalry_or_cossack_in_area(G.active, L.area))
+					)
+						button("eliminate_2")
+				}
+			}
+		}
+	},
+	exhaust() {
+		push_undo()
+		call_or_goto(--G.attrition_data.num_losses_remaining > 0, "exhaust_sp", { area: L.area })
+	},
+	eliminate_2() {
+		push_undo()
+		call_or_goto((--G.attrition_data.num_losses_remaining > 0) && (count_num_sps(G.active, L.area) > 2), "eliminate_2_exhausted_sps", { area: L.area })
+	}
+}
+
+P.exhaust_sp = {
+	// L.area
+	prompt() {
+		prompt(`Exhaust 1 fresh SP at S${L.area}.`)
+		if (must_assign_cavalry_attrition_loss() && (count_num_sps_of_type(G.active, FRESH_CAVALRY, L.area) > 0 || count_num_sps_of_type(G.active, FRESH_COSSACK, L.area) > 0))
+			get_all_fresh_sp_types(G.active, L.area).filter(type => is_cavalry(type) || is_cossack(type)).forEach(action_troop)
+		else
+			get_all_fresh_sp_types(G.active, L.area).forEach(action_troop)
+	},
+	troop(type) {
+		push_undo()
+		exhaust_troop(G.active, L.area, type)
+
+		if (is_cavalry(type) || is_cossack(type))
+			G.attrition_data.has_assigned_cavalry_loss = true
+		if (++G.attrition_data.num_sps_affected % 3 === 0)
+			G.attrition_data.has_assigned_cavalry_loss = false
+
+		log_only(G.active, "Exhausted")
+		log_only(G.active, `>1 ${get_troop_type_name(type)}`)
+
+		end()
+	}
+}
+
+P.eliminate_2_exhausted_sps = {
+	// L.area
+	_begin() {
+		L.count = Math.min(2, count_num_exhausted_sps(G.active, L.area))
+	},
+	prompt() {
+		prompt(`Eliminate ${L.count} SPs at S${L.area}.`)
+		if (must_assign_cavalry_attrition_loss() && (count_num_sps_of_type(G.active, EXHAUSTED_CAVALRY, L.area) > 0 || count_num_sps_of_type(G.active, EXHAUSTED_COSSACK, L.area) > 0))
+			get_all_exhausted_sp_types(G.active, L.area).filter(type => is_cavalry(type) || is_cossack(type)).forEach(action_troop)
+		else
+			get_all_exhausted_sp_types(G.active, L.area).forEach(action_troop)
+	},
+	troop(type) {
+		push_undo()
+		eliminate_troop(G.active, L.area, type)
+		
+		if (is_cavalry(type) || is_cossack(type))
+			G.attrition_data.has_assigned_cavalry_loss = true
+		if (++G.attrition_data.num_sps_affected % 3 === 0)
+			G.attrition_data.has_assigned_cavalry_loss = false
+
+		log_only(G.active, "Eliminated")
+		log_only(G.active, `>1 ${get_troop_type_name(type)}`)
+
+		// If the area is no longer controlled by the active player, apply VP penalties as appropriate
+		if (!is_friendly_controlled(G.active, L.area) && is_vp_area(L.area))
+			decrease_vp(G.active, get_area_vp(L.area))
+
+		if (--L.count === 0) {
+			if (!has_friendly_troop(G.active, L.area) && has_friendly_leader(G.active, L.area))
+				goto("eliminate_leader", { area: L.area })
+			else
+				end()
+		}
+	}
+}
+
+P.increase_devastation = {
+	prompt() {
+		if (get_devastation(L.area) < 3) {
+			prompt(`Increase Devastation at S${L.area} by ${G.attrition_data.devastation_increase}.`)
+			action_area(get_current_attrition_area())
+		} else {
+			prompt(`Devastation at S${L.area} cannot be increased further.`)
+			button_confirm()
+		}
+	},
+	area(_) {
+		this.confirm()
+	},
+	confirm() {
+		push_undo()
+		let raw_devastation = get_devastation(L.area) + G.attrition_data.devastation_increase
+		set_devastation(L.area, Math.min(3, raw_devastation))
+		G.attrition_data.devastation_increase = 0
+
+		log_only(G.active, `Devastation at S${L.area} increased to ${get_devastation(L.area)}.`)
+
+		if (raw_devastation > 3 
+			&& G.attrition_data.num_cancels_remaining === 0
+			&& has_friendly_troop(G.active, L.area)
+		) {
+			log_only(G.active, `Cannot increase devastation further.`)
+			++G.attrition_data.num_losses_remaining
+			goto("assign_attrition_losses", { area: get_current_attrition_area() })
+		} else {
+			end()
+		}
+	}
 }
 
 // === LINES OF COMMUNICATIONS ===
@@ -8760,6 +8751,10 @@ function is_in_supply(who, space) {
 
 function has_enemy_sp(who, space) {
 	return (who === RUSSIA && has_friendly_troop(FRANCE, space)) || (who === FRANCE && has_friendly_troop(RUSSIA, space))
+}
+
+function get_supply_status(who, area) {
+	return G.supply[who][area]
 }
 
 /* SUPPLY */
@@ -12941,6 +12936,7 @@ function map_has(map, key) {
 	return false
 }
 
+// WARNING: Added a null fallback for missing
 function map_get(map, key, missing = null) {
 	var a = 0
 	var b = (map.length >> 1) - 1

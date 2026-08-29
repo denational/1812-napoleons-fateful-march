@@ -1079,7 +1079,7 @@ function on_prompt(text) {
 
 scroll_with_middle_mouse("main")
 
-/* FRAMEWORK */
+// === Framework map & set functions
 
 function array_insert(array, index, item) {
 	for (var i = array.length; i > index; --i)
