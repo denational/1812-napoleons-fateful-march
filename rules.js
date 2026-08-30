@@ -2,9 +2,6 @@
 
 //MOSTLY DONE: Battle events
 //TODO: Fix & complete retreat
-//MOSTLY DONE: Attrition
-//TODO: Attrition events
-//TODO: Resources Phase
 //TODO: New Living Rules updates (from notes.html)
 
 const data = require("./data")
@@ -2518,6 +2515,8 @@ P.end_turn = function() {
 */
 
 function draw_a_card(player) {
+	// Reshuffle deck if empty
+	// Impossible for all practical purposes (fuzzer handling)
 	if (get_deck(player).length === 0) {
 		G.deck[player] = get_discard(player).slice()
 		get_discard(player).length = 0
@@ -3779,6 +3778,7 @@ function can_switch_order(leader, current_type) {
 		return (current_type === FORCED_MARCH) && (has_card_in_hand(RUSSIA) && has_order_of_type(RUSSIA, FORCED_MARCH, POOL))
 	//May change an order to ANY order
 	case L_NAPOLEON:
+		if (is_event_active(C_INDECISION)) return false
 		return (has_order_of_type(FRANCE, current_type, area) && has_switchable_order_in_pool(FRANCE, current_type))
 		|| (has_non_dummy_order_at_area(FRANCE, area) && get_orders_at_area(FRANCE, area).some(order => get_order_type(order) !== current_type && get_order_type(order) !== DUMMY_ORDER) && has_order_of_type(FRANCE, current_type, POOL))
 	//May change an order to ‘March’
@@ -3816,6 +3816,12 @@ P.change_orders = {
 		L.discarded_card = [-1, -1]
 		L.napoleon_action = -1
 		L.log = [[], []] //Cache of all logging, sorted by player (all done at the end of the state)
+
+		// For rewinding in case RU #7 Indecision is played
+		L.napoleon_change = {
+			removed: -1,
+			placed: -1
+		}
 
 		for (let who = RUSSIA; who <= FRANCE; ++who)
 			L.leaders_who_can_use_abilities[who] = L.leaders_who_can_use_abilities[who].filter(leader => can_switch_order(leader, L.current_order_type))
@@ -3928,6 +3934,7 @@ P.change_orders = {
 				L.napoleon_action = 1
 				if (get_order_type(order) === L.current_order_type) {
 					remove_order(order)
+					L.napoleon_change.removed = order
 					L.removed_orders[R].push(order)
 					++L.step[R]
 					return
@@ -3940,6 +3947,7 @@ P.change_orders = {
 			} else {
 				L.napoleon_action = 3
 				place_order(order, get_leader_location(L_NAPOLEON))
+				L.napoleon_change.placed = order
 				L.placed_orders[R].push(order)
 				this.push_log(`>Changed an order.`)
 				break
@@ -3955,10 +3963,15 @@ P.change_orders = {
 		set_delete(L.leaders_who_can_use_abilities[R], L.selected_leader[R])
 		L.leaders_who_have_used_abilities[R].push(L.selected_leader[R])
 		L.selected_leader[R] = -1
+		L.leaders_who_can_use_abilities[R] = L.leaders_who_can_use_abilities[R].filter(leader => can_switch_order(leader, L.current_order_type))
 	},
 	switch_order(order, replacement_type) {
 		remove_order(order)
+		if (L.selected_leader[R] === L_NAPOLEON)
+			L.napoleon_change.removed = order
 		let replacement_order = add_order_of_type_from_pool(R, replacement_type, get_leader_location(L.selected_leader[R]))
+		if (L.selected_leader[R] === L_NAPOLEON)
+			L.napoleon_change.placed = replacement_order
 		L.switches[R].push([order, replacement_order])
 		if (L.selected_leader[R] !== L_NAPOLEON)
 			this.push_log(`>Changed an order to ${get_order_type_name(replacement_type)}.`)
@@ -3974,6 +3987,7 @@ P.change_orders = {
 					L.discarded_card[R] = -1
 				} else if (L.selected_leader[R] === L_NAPOLEON) {
 					place_order(L.removed_orders[R].pop(), get_leader_location(L_NAPOLEON))
+					L.napoleon_change.removed = -1
 				}
 				--L.step[R]
 			}
@@ -3989,6 +4003,11 @@ P.change_orders = {
 
 				remove_order(order_that_was_placed)
 				place_order(order_that_was_removed, get_leader_location(L.selected_leader[R]))
+
+				if (L.selected_leader === L_NAPOLEON) {
+					L.napoleon_change.removed = -1
+					L.napoleon_change.placed = -1
+				}
 			}
 			else if ((L.selected_leader[R] === L_CHICHAGOV) || (L.selected_leader[R] === L_SCHWARZENBERG) || ((L.selected_leader[R] === L_NAPOLEON) && (L.napoleon_action === 3))) {
 				let order_that_was_placed = L.placed_orders[R].pop()
@@ -3997,7 +4016,10 @@ P.change_orders = {
 
 				L.step[R] = 0
 
-				if (L.selected_leader[R] === L_NAPOLEON) L.napoleon_action = 1
+				if (L.selected_leader[R] === L_NAPOLEON) {
+					L.napoleon_action = 1
+					L.napoleon_change.placed = -1
+				}
 			}
 
 			set_add(L.leaders_who_can_use_abilities[R], L.selected_leader[R])
@@ -4024,7 +4046,12 @@ P.change_orders = {
 				for (let s of L.log[who])
 					log(s)
 
-			end()
+			if (set_has(L.leaders_who_have_used_abilities[FRANCE], L_NAPOLEON)) {
+				G.active = RUSSIA
+				goto("may_play_indecision", { response_to: "napoleon_change", napoleon_change: L.napoleon_change })
+			} else {
+				end()
+			}
 		}
 	}
 }
@@ -5239,6 +5266,7 @@ function get_evade_sps(who, area) {
 P.select_evade_force = {
 	_begin() {
 		// Leaders & troops eligible for evade
+		// Schwarzenberg is the only leader who can choose to join the Unexpected Retreat
 		if (is_event_active(C_UNEXPECTED_RETREAT))
 			L.leaders = get_leader_location(L_SCHWARZENBERG) === L.area ? [L_SCHWARZENBERG] : []
 		else
@@ -7273,6 +7301,7 @@ P.determine_battle_winner = function() {
 		log()
 		set_battle_winner(FRANCE, G.current_battle)
 		set_battle_loser(RUSSIA, G.current_battle)
+		// Cancels pursuit after battle so go immediately go to Step 6 (VP Shifts)
 		goto("end_battle", { drawn_battle: false })
 	}
 
@@ -8373,37 +8402,36 @@ function calculate_modified_size(who, area) {
 }
 
 function log_attrition_info(who, area) {
-	log_only(who, `$${get_abbreviation(who)}S${area}`)
-	log_only(who, `%Result`)
+	log_h4(`S${area}`, who)
 	let size = calculate_modified_size(who, area)
 	let distance_to_nearest_depot = get_supply_status(who, area)
 	let weather_effect = get_current_season() === SUMMER ? get_summer_weather_die_result(who, G.weather_roll) : get_winter_weather_die_result(who, G.weather_roll)
 
-	log_only(who, `>Modified Size: ${size}`)
-	log_only(who, `<+${count_num_sps(who, area)} SPs`)
-	log_only(who, `<${weather_effect >= 0 ? "+" : ""}${weather_effect} Weather`)
-	if (is_key_city(area)) log_only(who, `<-3 Key City`)
+	log_only(who, `Modified Size: ${size}`)
+	log_only(who, `>+${count_num_sps(who, area)} SPs`)
+	log_only(who, `>${weather_effect >= 0 ? "+" : ""}${weather_effect} Weather`)
+	if (is_key_city(area)) log_only(who, `>-3 Key City`)
 
 	if (is_event_active(C_DEVASTATED_LANDSCAPE)) {
-		log_only(who, `<${get_card_log_alias(C_DEVASTATED_LANDSCAPE)}`)
-		log_only(who, `<+${2 * get_devastation(area)} Devastation`)
+		log_only(who, `>${get_card_log_alias(C_DEVASTATED_LANDSCAPE)}`)
+		log_only(who, `>+${2 * get_devastation(area)} Devastation`)
 	} else if (is_event_active(C_DEVASTATED_COUNTRYSIDE)) {
-		log_only(who, `<${get_card_log_alias(C_DEVASTATED_COUNTRYSIDE)}`)
-		log_only(who, `<+${2 * get_devastation(area)} Devastation`)
+		log_only(who, `>${get_card_log_alias(C_DEVASTATED_COUNTRYSIDE)}`)
+		log_only(who, `>+${2 * get_devastation(area)} Devastation`)
 	} else if (get_devastation(area) > 0) {
-		log_only(who, `<+${get_devastation(area)} Devastation`)
+		log_only(who, `>+${get_devastation(area)} Devastation`)
 	}
 
-	if ((who === FRANCE) && (get_leader_location(L_MURAT) === area)) log_only(who, `<+1 L${L_MURAT}`)
-	if ((who === RUSSIA) && (is_seniormost_leader(L_TORMASOV, area))) log_only(who, `<-2 L${L_TORMASOV}`)
+	if ((who === FRANCE) && (get_leader_location(L_MURAT) === area)) log_only(who, `>+1 L${L_MURAT}`)
+	if ((who === RUSSIA) && (is_seniormost_leader(L_TORMASOV, area))) log_only(who, `>-2 L${L_TORMASOV}`)
 
-	log_only(who, `>Distance to nearest Depot: ${distance_to_nearest_depot}`)
+	log_only(who, `Distance to nearest Depot: ${distance_to_nearest_depot}`)
 	if (is_event_active(C_OVERSTRETCHED_LOGISTICS) && who === FRANCE)
-		log_only(who, `<+1 ${get_card_log_alias(C_OVERSTRETCHED_LOGISTICS)}`)
+		log_only(who, `>+1 ${get_card_log_alias(C_OVERSTRETCHED_LOGISTICS)}`)
 
 	log_only(who, `Attrition ${size} &times; ${distance_to_nearest_depot <= MAX_SUPPLY_DISTANCE ? distance_to_nearest_depot : "OOS"}: ${get_attrition_result_name(size, distance_to_nearest_depot)}`)
-
-	log_only(who, " ")
+	log_only(enemy(who), `Attrition: ${get_attrition_result_name(size, distance_to_nearest_depot)}`)
+	log()
 }
 
 function get_attrition_result_name(modified_size, distance_to_nearest_depot) {
@@ -8443,6 +8471,28 @@ function has_applied_attrition_devastation() {
 	return G.attrition_data.devastation_increase === 0
 }
 
+function log_attrition() {
+	if (G.attrition_data.previously_exhausted.length > 0) {
+		log("Exhausted")
+		let total = 0
+		map_for_each(G.attrition_data.previously_exhausted, (type, num) => {
+			log_only(G.active, `>${num} ${get_troop_type_name(type)}`)
+			total += num
+		})
+		log_only(enemy(G.active), `>${total} fresh SPs`)
+	}
+
+	if (G.attrition_data.previously_eliminated.length > 0) {
+		log("Eliminated")
+		let total = 0
+		map_for_each(G.attrition_data.previously_eliminated, (type, num) => {
+			log_only(G.active, `>${num} ${get_troop_type_name(type)}`)
+			total += num
+		})
+		log_only(enemy(G.active), `>${total} fresh SPs`)
+	}
+}
+
 function reset_attrition_data() {
 	G.attrition_data = {
 		// Area currently being checked
@@ -8453,10 +8503,13 @@ function reset_attrition_data() {
 		devastation_increase: -1,
 		// Number of UNITS assigned losses
 		num_sps_affected: 0,
-		// Number of ATTRITION LOSSES cancelled by a forage order
+		// Number of ATTRITION LOSSES cancelled by a forage order (losses as a result of not being able to increase Devastation may be cancelled)
 		num_cancels_remaining: 0,
 		// Has assigned a Cavalry loss (1/3 hits)
 		has_assigned_cavalry_loss: false,
+		// Caches for logging
+		previously_exhausted: [],
+		previously_eliminated: [],
 	}
 }
 
@@ -8522,6 +8575,8 @@ P.do_attrition = {
 		else if (!has_applied_attrition_devastation())
 			call("increase_devastation", { area: get_current_attrition_area() })
 		else {
+			log()
+			log_attrition()
 			set_delete(L.areas, get_current_attrition_area())
 			set_add(G.attrition_checked, get_current_attrition_area())
 			reset_attrition_data()
@@ -8531,7 +8586,6 @@ P.do_attrition = {
 	confirm() {
 		reset_attrition_data()
 		G.attrition_checked.length = 0
-		log()
 		end()
 	}
 }
@@ -8546,8 +8600,9 @@ P.reveal_forage_order = {
 	order(order) {
 		push_undo()
 		remove_order(order)
-		log_only(G.active, "Revealed Forage order.")
-		log_only(G.active, `>-2 Attrition losses`)
+		log("Revealed Forage order.")
+		logi(`-2 Attrition Losses`)
+		log()
 		G.attrition_data.num_cancels_remaining += 2
 		while (G.attrition_data.num_losses_remaining > 0 && G.attrition_data.num_cancels_remaining > 0) {
 			--G.attrition_data.num_losses_remaining
@@ -8632,15 +8687,37 @@ P.exhaust_sp = {
 	},
 	troop(type) {
 		push_undo()
+
 		exhaust_troop(G.active, L.area, type)
+
+		// These sections are specific to the 'Exhausting March' event (since they may mutate moved/battle entries)
+		if (is_event_active(C_EXHAUSTING_MARCH_1) || is_event_active(C_EXHAUSTING_MARCH_2)) {
+			if (has_battle(L.area)) {
+				let battle_data = get_player_battle_data(G.active, L.area)
+
+				let force = battle_data.forces.find(force => force.from === G.move.path[G.move.path.length - 2] && force.move_type === G.move.type)
+				force.troops[type]--
+				force.troops[type + 1]++
+			}
+
+			if (map_has(G.moved, L.area) && map_get(G.moved, L.area).some(force => force.faction === G.active)) {
+				let force = map_get(G.moved, L.area).find(force => force.faction === G.active && force.from === G.move.path[G.move.path.length - 2] && force.move_type === G.move.type)
+
+				force.troops[type]--
+				force.troops[type + 1]++
+			}
+		}
+
 
 		if (is_cavalry(type) || is_cossack(type))
 			G.attrition_data.has_assigned_cavalry_loss = true
 		if (++G.attrition_data.num_sps_affected % 3 === 0)
 			G.attrition_data.has_assigned_cavalry_loss = false
 
-		log_only(G.active, "Exhausted")
-		log_only(G.active, `>1 ${get_troop_type_name(type)}`)
+		if (!map_has(G.attrition_data.previously_exhausted, type))
+			map_set(G.attrition_data.previously_exhausted, type, 1)
+		else
+			map_increment(G.attrition_data.previously_exhausted, type)
 
 		end()
 	}
@@ -8662,17 +8739,40 @@ P.eliminate_2_exhausted_sps = {
 		push_undo()
 		eliminate_troop(G.active, L.area, type)
 
+		// These sections are specific to the 'Exhausting March' event (since they may mutate moved/battle entries)
+		if (is_event_active(C_EXHAUSTING_MARCH_1) || is_event_active(C_EXHAUSTING_MARCH_2)) {
+			if (has_battle(L.area)) {
+				let battle_data = get_player_battle_data(G.active, L.area)
+
+				let force = battle_data.forces.find(force => force.from === G.move.path[G.move.path.length - 2] && force.move_type === G.move.type)
+				force.troops[type]--
+			}
+
+			if (map_has(G.moved, L.area) && map_get(G.moved, L.area).some(force => force.faction === G.active)) {
+				let force = map_get(G.moved, L.area).find(force => force.faction === G.active && force.from === G.move.path[G.move.path.length - 2] && force.move_type === G.move.type)
+
+				force.troops[type]--
+			}
+		}
+
 		if (is_cavalry(type) || is_cossack(type))
 			G.attrition_data.has_assigned_cavalry_loss = true
 		if (++G.attrition_data.num_sps_affected % 3 === 0)
 			G.attrition_data.has_assigned_cavalry_loss = false
 
-		log_only(G.active, "Eliminated")
-		log_only(G.active, `>1 ${get_troop_type_name(type)}`)
+		if (!map_has(G.attrition_data.previously_eliminated, type))
+			map_set(G.attrition_data.previously_eliminated, type, 1)
+		else
+			map_increment(G.attrition_data.previously_eliminated, type)
 
 		// If the area is no longer controlled by the active player, apply VP penalties as appropriate
-		if (!is_friendly_controlled(G.active, L.area) && is_vp_area(L.area))
-			decrease_vp(G.active, get_area_vp(L.area))
+		if (is_event_active(C_EXHAUSTING_MARCH_1) || is_event_active(C_EXHAUSTING_MARCH_2)) {
+			if (!has_friendly_troop(G.active, L.area) && is_vp_area(L.area))
+				decrease_vp(G.active, get_area_vp(L.area))
+		} else {
+			if (!is_friendly_controlled(G.active, L.area) && is_vp_area(L.area))
+				decrease_vp(G.active, get_area_vp(L.area))
+		}
 
 		if (--L.count === 0) {
 			if (!has_friendly_troop(G.active, L.area) && has_friendly_leader(G.active, L.area))
@@ -8702,7 +8802,7 @@ P.increase_devastation = {
 		set_devastation(L.area, Math.min(3, raw_devastation))
 		G.attrition_data.devastation_increase = 0
 
-		log_only(G.active, `Devastation at S${L.area} increased to ${get_devastation(L.area)}.`)
+		log(`Devastation at S${L.area} increased to ${get_devastation(L.area)}.`)
 
 		if (raw_devastation > 3
 			&& G.attrition_data.num_cancels_remaining === 0
@@ -9265,7 +9365,7 @@ P.may_play_bagrations_retreat = {
 	}
 }
 
-P.bagrations_retreat = { //TODO
+P.bagrations_retreat = {
 	_begin() {
 		card_box_begin(C_BAGRATIONS_RETREAT)
 		L.destination = -1
@@ -9334,21 +9434,32 @@ P.execute_bagrations_retreat = {
 
 // RU #7: Indecision
 P.may_play_indecision = {
+	// L.napoleon_change (only when prompted to cancel Napoleon's ability)
+	// NOTE: Cancelling Napoleon's ability is done retroactively for expediency
 	prompt() {
-		if (L.response_to === "the_imperial_guard") {
-			prompt(`You may play ${get_card_log_alias(C_INDECISION)} to cancel the effect of ${get_card_log_alias(C_THE_IMPERIAL_GUARD)}.`)
-			action_card(C_INDECISION)
-			button_pass()
+		if (!hand_has(RUSSIA, C_INDECISION)) {
+			prompt(`You do not have ${get_card_log_alias(C_INDECISION)}.`)
 		} else {
-			prompt(`Change order with Napoleon - todo`)
+			if (L.response_to === "the_imperial_guard")
+				prompt(`You may play ${get_card_log_alias(C_INDECISION)} to cancel the effect of ${get_card_log_alias(C_THE_IMPERIAL_GUARD)}.`)
+			else
+				prompt(`You may play ${get_card_log_alias(C_INDECISION)} to prevent L${L_NAPOLEON} from changing orders this turn.`)
+			action_card(C_INDECISION)
 		}
+		button_pass()
 	},
-	card(card) {
+	_resume() {
+		card_box_end()
+		discard_or_remove_card(C_INDECISION)
+		end()
+	},
+	card(_) {
 		push_undo()
+		card_box_begin(C_INDECISION)
 		if (L.response_to === "the_imperial_guard")
-			goto("indecision_cancel_imperial_guard")
+			call("indecision_cancel_imperial_guard")
 		else
-			goto("indecision_cancel_napoleon_change")
+			call("indecision_cancel_napoleon_change", { napoleon_change: L.napoleon_change })
 	},
 	pass() {
 		push_undo()
@@ -9357,9 +9468,6 @@ P.may_play_indecision = {
 }
 
 P.indecision_cancel_imperial_guard = {
-	_begin() {
-		card_box_begin(C_INDECISION)
-	},
 	prompt() {
 		prompt_card(C_INDECISION, `Cancel the effect of ${get_card_log_alias(C_THE_IMPERIAL_GUARD)} (cannot be undone).`)
 		button_confirm()
@@ -9367,11 +9475,24 @@ P.indecision_cancel_imperial_guard = {
 	confirm() {
 		clear_undo()
 		log(`Cancelled ${get_card_log_alias(C_THE_IMPERIAL_GUARD)}.`)
-		log_box_end()
-		discard_or_remove_card(C_INDECISION)
 		discard_or_remove_card(C_THE_IMPERIAL_GUARD)
 		remove_battle_event(G.current_battle, C_THE_IMPERIAL_GUARD)
 		set_delete(G.played_cards[FRANCE], C_THE_IMPERIAL_GUARD)
+		end()
+	}
+}
+
+P.indecision_cancel_napoleon_change = {
+	prompt() {
+		prompt_card(C_INDECISION, `Cancel L${L_NAPOLEON}'s ability to change orders this turn.`)
+		button_confirm()
+	},
+	confirm() {
+		clear_undo()
+		log(`L${L_NAPOLEON} may not change orders this turn.`)
+		place_order(L.napoleon_change.removed, get_leader_location(L_NAPOLEON))
+		remove_order(L.napoleon_change.placed, get_leader_location(L_NAPOLEON))
+		add_persistent_event(C_INDECISION)
 		end()
 	}
 }
@@ -9405,11 +9526,11 @@ P.fighting_withdrawal = {
 }
 
 //RU #9: Uninspired Tactics
-E.uninspired_tactics = function() { return (is_battle_defender(RUSSIA, G.current_battle) && is_fortress_town(G.current_battle)) || battle_has_defend_order(G.current_battle) }
+E.uninspired_tactics = function() { return is_battle_defender(RUSSIA, G.current_battle) && (is_fortress_town(G.current_battle) || battle_has_defend_order(G.current_battle)) }
 
 P.uninspired_tactics = {
 	prompt() {
-		prompt_card(C_UNINSPIRED_TACTICS, "French losses +1.")
+		prompt_card(C_UNINSPIRED_TACTICS, "Increase French losses by 1.")
 		button_confirm()
 	},
 	confirm() {
@@ -9448,7 +9569,6 @@ P.scorched_earth = {
 				prompt_card(C_SCORCHED_EARTH, "Increase Devastation - All done.")
 				button_next()
 			}
-
 		} else {
 			prompt_card(C_SCORCHED_EARTH, "Receive 1 Evade order.")
 			button_next()
@@ -9507,6 +9627,8 @@ function get_locations_with_leader(who) {
 	}
 	return result
 }
+
+// RU #11 Holy Mother Russia (must-play event): See draw_card_to_hand
 
 // RU #12: Outflanking
 // FR #6: Outflanking
@@ -9577,6 +9699,7 @@ P.outflanking = {
 
 P.outflanking_no_effect = {
 	_begin() {
+		// RU #12 Outflanking has no card that cancels it
 		G.active = FRANCE
 	},
 	prompt() {
@@ -9618,6 +9741,7 @@ P.garrison_troops = {
 				for (let area of get_areas_with_sps(RUSSIA))
 					if (!has_friendly_leader(RUSSIA, area) && is_area_in_supply(RUSSIA, area))
 						action_area(area)
+				button_pass()
 			} else {
 				prompt_card(C_GARRISON_TROOPS, "All done.")
 				button_done()
@@ -9631,6 +9755,9 @@ P.garrison_troops = {
 			for (let area of get_locations_with_leader(RUSSIA))
 				if (does_path_exist(RUSSIA, L.selected_area, area))
 					action_area(area)
+
+			// A human can undo and select another area
+			if (globalThis.RTT_FUZZER) button_pass()
 		}
 	},
 	area(area) {
@@ -9652,10 +9779,11 @@ P.garrison_troops = {
 		push_undo()
 		L.selected_sp_type = type
 	},
-	done() {
-		end()
-	}
+	done() { end() },
+	pass() { end() }
 }
+
+// RU #14: Extreme Weather (must-play event) -- See draw_card_to_hand
 
 // RU #15: Pride and Hesitation
 E.pride_and_hesitation = function() { return is_fr_controlled(S_MOSCOW) }
@@ -9666,12 +9794,12 @@ P.pride_and_hesitation = {
 	},
 	inactive: "exploit Napoleon's hubris",
 	prompt() {
-		if (L.has_shifted_initiative) {
-			prompt_card(C_PRIDE_AND_HESITATION, "This turn, Russia +1 VP if any French leaders leave Moscow.")
-			button_next()
-		} else {
+		if (!L.has_shifted_initiative) {
 			prompt_card(C_PRIDE_AND_HESITATION, "Shift Initiative 1 in Russia's favor.")
 			action_initiative_marker()
+		} else {
+			prompt_card(C_PRIDE_AND_HESITATION, "This turn, Russia +1 VP if any French leaders leave Moscow.")
+			button_next()
 		}
 	},
 	next() {
@@ -9688,6 +9816,7 @@ P.pride_and_hesitation = {
 }
 
 // RU #16: Kutuzov Appointed
+// TODO: Apply optional rule effects
 E.kutuzov_appointed = function() { return get_current_month() >= AUG }
 
 P.kutuzov_appointed = {
@@ -9823,13 +9952,12 @@ P.may_play_flying_columns = {
 		if (hand_has(RUSSIA, C_FLYING_COLUMNS)) {
 			prompt(`You may play ${get_card_log_alias(C_FLYING_COLUMNS)}.`)
 			action_card(C_FLYING_COLUMNS)
-			button_pass()
 		} else {
 			prompt(`You do not have ${get_card_log_alias(C_FLYING_COLUMNS)}.`)
-			button_pass()
 		}
+		button_pass()
 	},
-	card(card) {
+	card(_) {
 		push_undo()
 		goto("flying_columns")
 	},
@@ -9885,9 +10013,7 @@ P.flying_columns = {
 		add_order_of_type_from_pool(G.active, COSSACK_RAID, area)
 		logi(`S${area}`)
 		log(`<Cossack Raid`)
-
-		if (--L.count === 0)
-			++L.step
+		if (--L.count === 0) ++L.step
 	},
 	done() {
 		push_undo()
@@ -9897,7 +10023,8 @@ P.flying_columns = {
 	}
 }
 
-// RU #21 Overstretched Logistics
+// RU #21: Overstretched Logistics
+// TODO: Maybe break into two states for simplicity
 P.overstretched_logistics = {
 	_begin() {
 		L.has_russia_confirmed = false
@@ -10083,7 +10210,8 @@ P.stubborn_rearguard_ru = {
 		button_confirm()
 	},
 	confirm() {
-		//TO CHECK: Do we even need to go to pursuit at this point?
+		// TO CHECK: Do we need to go to pursuit at this point since all losses are canceled?
+		// I skip pursuit for now for simplicity
 		goto("end_battle", { drawn_battle: false } )
 	}
 }
@@ -10166,11 +10294,12 @@ P.new_posting = {
 // RU #25, RU #26 Exhausting March
 P.may_play_exhausting_march = {
 	prompt() {
+		add_to_hand(RUSSIA, C_EXHAUSTING_MARCH_1)
 		if (hand_has(G.active, C_EXHAUSTING_MARCH_1)) {
-			prompt(`You may play ${get_card_log_alias(C_EXHAUSTING_MARCH_1)}.`)
+			prompt(`You may play ${get_card_log_alias(C_EXHAUSTING_MARCH_1)} (cannot be undone).`)
 			action_card(C_EXHAUSTING_MARCH_1)
 		} else if (hand_has(G.active, C_EXHAUSTING_MARCH_2)) {
-			prompt(`You may play ${get_card_log_alias(C_EXHAUSTING_MARCH_2)}.`)
+			prompt(`You may play ${get_card_log_alias(C_EXHAUSTING_MARCH_2)} (cannot be undone).`)
 			action_card(C_EXHAUSTING_MARCH_2)
 		} else {
 			prompt(`You do not have ${get_card_log_alias(C_EXHAUSTING_MARCH_1)}.`)
@@ -10179,7 +10308,7 @@ P.may_play_exhausting_march = {
 		button_pass()
 	},
 	card(card) {
-		push_undo()
+		clear_undo() // Since we reveal the size of the army in the subsequent step
 		goto("exhausting_march", { card })
 	},
 	pass() {
@@ -10203,7 +10332,7 @@ function is_track_connection(a, b) {
 P.exhausting_march = {
 	_begin() {
 		// L.card, G.move
-		card_box_begin(C_EXHAUSTING_MARCH_1)
+		card_box_begin(L.card)
 		L.num_losses = 0
 		L.sp_losses = 0
 
@@ -10214,19 +10343,45 @@ P.exhausting_march = {
 		for (let i = 0; i < G.move.path.length - 1; ++i)
 			if (is_track_connection(G.move.path[i], G.move.path[i + 1]))
 				++L.num_losses
+
+		L.has_assigned = false
+		if (L.num_losses === 0)
+			L.has_assigned = true
 	},
 	prompt() {
-		prompt_card(L.card, `France must take ${L.num_losses} attrition losses.`)
-		button_confirm()
+		if (!L.has_assigned) {
+			prompt_card(L.card, `France must take ${L.num_losses} attrition losses.`)
+			button_confirm()
+		} else {
+			prompt_card(L.card, `All done.`)
+			button_done()
+		}
 	},
 	confirm() {
 		push_undo()
+		add_persistent_event(L.card)
 		log(`France takes ${L.num_losses} attrition losses.`)
 		logi(`+${L.sp_losses} SPs`)
 		logi(`+${L.num_losses - L.sp_losses} Tracks`)
-		// G.active = FRANCE
-		// TODO
+
+		reset_attrition_data()
+		G.attrition_data.area = G.move.path[G.move.path.length - 1]
+		G.attrition_data.num_losses_remaining = L.num_losses
+		G.active = FRANCE
+		call("assign_attrition_losses", { area: G.move.path[G.move.path.length - 1] })
+	},
+	_resume() {
+		log_attrition()
+		L.has_assigned = true
+	},
+	done() {
+		push_undo()
+		if (L.num_losses === 0)
+			log(`No losses to assign.`)
 		card_box_end()
+		discard_or_remove_card(L.card)
+		map_delete(G.persistent_events, L.card)
+		G.active = RUSSIA
 		if (has_executable_order(G.active, FORCED_MARCH)) {
 			goto("execute_next_order", { type: FORCED_MARCH })
 		} else if (has_executable_order(enemy(G.active), FORCED_MARCH)) {
