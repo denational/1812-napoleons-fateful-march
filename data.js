@@ -4410,7 +4410,7 @@ const data = {
 			"id": 23,
 			"who": 0,
 			"name": "Stubborn Rearguard",
-			"state_name": "stubborn_rearguard",
+			"state_name": "stubborn_rearguard_ru",
 			"season": 2,
 			"type": 3,
 			"ops": 3,

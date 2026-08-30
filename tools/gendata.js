@@ -80,7 +80,7 @@ fs.createReadStream(names)
 			road: [],
 			bridge: [],
 			zone,
-		}) 
+		})
 	})
 	.on('end', () => {
 		fs.createReadStream(connections)
@@ -113,7 +113,7 @@ fs.createReadStream(names)
 				}
 			})
 			.on('end', () => { //Not the most pretty way to do it, but it works
-				
+
 				//=== CARDS ===
 				data.cards = []
 
@@ -160,7 +160,7 @@ fs.createReadStream(names)
 				def_card(RUSSIA,    20, "Flying Columns",           	"flying_columns",				BOTH,   EVENT,  2)
 				def_card(RUSSIA,    21, "Overstretched Logistics",  	"overstretched_logistics",		BOTH,   EVENT,  3)
 				def_card(RUSSIA,    22, "City Ablaze!",             	"city_ablaze",					BOTH,   RESP,   3)
-				def_card(RUSSIA,    23, "Stubborn Rearguard",       	"stubborn_rearguard",			BOTH,   RESP,   3)
+				def_card(RUSSIA,    23, "Stubborn Rearguard",       	"stubborn_rearguard_ru",		BOTH,   RESP,   3)
 				def_card(RUSSIA,    24, "New Posting",              	"new_posting",					BOTH,   EVENT,  2)
 				def_card(RUSSIA,    25, "Exhausting March",         	"exhausting_march_1",			BOTH,   RESP,   3)
 				def_card(RUSSIA,    26, "Exhausting March",        		"exhausting_march_2",			BOTH,   RESP,   3)
@@ -430,9 +430,9 @@ fs.createReadStream(names)
 						"Au. Infantry": 6,
 					}
 				]
-				
+
 				fs.writeFileSync("data.js", "const data = " + JSON.stringify(data, 0, 2) + "\nif (typeof module !== 'undefined') module.exports = data\n", "utf8")
 			})
-			
+
 	})
 
