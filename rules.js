@@ -2613,6 +2613,12 @@ P.draw_card_to_hand = {
 						get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).troop_type = -1
 						get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area = -1
 						get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).removed_depot = -1
+					} else if (L.drawn_card[R] === C_CHAOS_IN_THE_REAR_AREAS) {
+						get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining = Math.min(get_devastated_areas_with_french_troops().length, 2)
+						get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = null
+						get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area = -1
+						get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count = 0
+						get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo = []
 					}
 				} else {
 					finish_state(R)
@@ -2811,12 +2817,110 @@ P.draw_card_to_hand = {
 		"chaos_in_the_rear_areas":
 		{
 			prompt() {
-				prompt("TODO")
-				button_done()
+				if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining > 0) {
+					if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === null) {
+						prompt(`Assign attrition losses: ${get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining} remaining.`)
+						let any_action = false
+
+						if (get_devastated_areas_with_french_troops().some(area => has_exhausted_sp(FRANCE, area))) {
+							button("exhaust")
+							any_action = true
+						}
+
+						let num_exhausted = 0
+						for (let area of get_devastated_areas_with_french_troops()) {
+							if (has_exhausted_sp(FRANCE, area))
+								num_exhausted += count_num_exhausted_sps(FRANCE, area)
+							if (num_exhausted >= 2) {
+								button("eliminate_2")
+								any_action = true
+								break
+							}
+						}
+
+						if (!any_action)
+							button_done()
+					} else if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area === -1) {
+						prompt(`Select an area to ${get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice } a SP.`)
+						let areas
+						if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "exhaust")
+							areas = get_devastated_areas_with_french_troops().filter(area => has_fresh_sp(FRANCE, area))
+						else
+							areas = get_devastated_areas_with_french_troops().filter(area => has_exhausted_sp(FRANCE, area))
+
+						if (areas.length <= 5) add_to_prompt(` (${join_array_with_or(areas.map(area => `S${area}`))})`)
+						areas.forEach(action_area)
+					} else if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count > 0) {
+						prompt(`Select an SP to ${get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice}.`)
+						if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "exhaust") {
+							get_all_fresh_sp_types(FRANCE, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area).forEach(action_troop)
+						} else {
+							get_all_exhausted_sp_types(FRANCE, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area).forEach(action_troop)
+						}
+					}
+				} else {
+					prompt_card(C_CHAOS_IN_THE_REAR_AREAS, "All done.")
+					button_done()
+				}
+				button_undo(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.length > 0)
+			},
+			on_exhaust() {
+				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.push({action: "select_choice", type: "exhaust"})
+				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = "exhaust"
+				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count = 1
+			},
+			on_eliminate_2() {
+				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.push({action: "select_choice", type: "eliminate"})
+				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = "eliminate"
+				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count = 2
+			},
+			on_area(area) {
+				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.push({action: "select_area", area })
+				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area = area
+			},
+			on_troop(type) {
+				if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "exhaust") {
+					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.push({action: "exhaust", area: get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area, type })
+					exhaust_troop(FRANCE, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area, type)
+				} else {
+					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.push({action: "eliminate", area: get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area, type })
+					eliminate_troop(FRANCE, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area, type)
+				}
+				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area = -1
+				if (--get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count === 0) {
+					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = null
+					--get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining
+				}
 			},
 			on_done() {
-				log("TODO")
 				finish_state(R)
+			},
+			on_undo() {
+				let action = get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.pop()
+				switch(action.action) {
+				case "select_choice":
+					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = null
+					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count = 0
+					return
+				case "select_area":
+					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area = -1
+					return
+				case "exhaust":
+					rally_troop(FRANCE, action.area, action.type + 1)
+					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area = action.area
+					if (++get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count === 1) {
+						get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = "exhaust"
+						++get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining
+					}
+					return
+				case "eliminate":
+					add_troop(FRANCE, action.area, action.type)
+					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area = action.area
+					if (++get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count === 1) {
+						get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = "eliminate"
+						++get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining
+					}
+				}
 			}
 		},
 		"vulnerable_supply_lines":
@@ -3028,6 +3132,8 @@ P.draw_card_to_hand = {
 	draw() 			{ this.states[L.state[R]].on_draw() },
 	confirm() 		{ this.states[L.state[R]].on_confirm() },
 	next() 			{ this.states[L.state[R]].on_next() },
+	exhaust()		{ this.states[L.state[R]].on_exhaust() },
+	eliminate_2()	{ this.states[L.state[R]].on_eliminate_2() },
 	area(area) 		{ this.states[L.state[R]].on_area(area) },
 	card(card) 		{ this.states[L.state[R]].on_card(card)},
 	depot(depot) 	{ this.states[L.state[R]].on_depot(depot)},
