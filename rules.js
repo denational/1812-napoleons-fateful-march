@@ -4409,7 +4409,7 @@ P.end_order = {
 */
 
 P.execute_forced_march = function() {
-	if (G.active === RUSSIA && hand_has(RUSSIA, C_BAGRATIONS_RETREAT) && get_leader_location(L_BAGRATION) === L.area)
+	if (G.active === RUSSIA && hand_has(RUSSIA, C_BAGRATIONS_RETREAT) && can_play_event(C_BAGRATIONS_RETREAT) && get_leader_location(L_BAGRATION) === L.area)
 		goto("may_play_bagrations_retreat", { area: L.area })
 	else
 		goto("select_force", { type: FORCED_MARCH, area: L.area })
@@ -5360,7 +5360,7 @@ P.execute_evade = script(`
 	} else {
 		call select_evade_destination { area: L.area }
 		call select_evade_force { area: L.area, destination: L.$ }
-		if (has_friendly_troop(L.evader, L.area)) {
+		if (has_battle(L.area)) {
 			call evade { evader: L.evader, area: L.area }
 		}
 		call finish_evade { evader: L.evader, area: L.area }
@@ -5849,15 +5849,15 @@ function get_other_area(connection, area) {
 	return data.connections[connection].find(loc => loc !== area)
 }
 
-function find_retreat_destinations(who, area, among = get_all_adjacent_areas(area)) {
-	let closest_depots = find_closest_depot_for_retreat(who, area)
+function find_retreat_destinations(who, area, among = get_all_adjacent_areas(area), ignore_enemy_sps = false) {
+	let closest_depots = find_closest_depot_for_retreat(who, area, ignore_enemy_sps)
 	let retreat_destinations = []
 	let best_distance = 999
 
 	for (let depot of closest_depots) {
 		let distances = []
 		for (let neighbor of among) {
-			let distance = find_path_distance(neighbor, depot)
+			let distance = find_path_distance(neighbor, depot, -1, ignore_enemy_sps)
 
 			if (!map_has(distances, distance))
 				map_set(distances, distance, [])
@@ -5878,10 +5878,12 @@ function find_retreat_destinations(who, area, among = get_all_adjacent_areas(are
 			}
 		}
 	}
-	return retreat_destinations.filter(dest => !has_enemy_sp(who, dest) && !set_has(get_connections_used_in_battle(enemy(who), area), dest))
+	return retreat_destinations.filter(dest => {
+		return ignore_enemy_sps || (!ignore_enemy_sps && !has_enemy_sp(who, dest))
+	})
 }
 
-function find_path_distance(a, b, connection_type = -1) {
+function find_path_distance(a, b, connection_type = -1, ignore_enemy_sps = false) {
 	let queue = [ a ]
 	let distance = []
 	let visited = []
@@ -5893,7 +5895,8 @@ function find_path_distance(a, b, connection_type = -1) {
 	while (queue.length > 0) {
 		let current = queue.shift()
 
-		if (current === b) return get_distance(current)
+		if (current === b)
+			return get_distance(current)
 
 		if (set_has(visited, current)) {
 			continue
@@ -5901,7 +5904,8 @@ function find_path_distance(a, b, connection_type = -1) {
 
 		set_add(visited, current)
 
-		if (has_enemy_sp(G.active, current)) continue
+		if (!ignore_enemy_sps && has_enemy_sp(G.active, current))
+			continue
 
 		let current_distance = get_distance(current)
 		let adjacencies = (connection_type === ROAD) ? get_adjacent_areas_by_road(current) : get_all_adjacent_areas(current)
@@ -5917,8 +5921,9 @@ function find_path_distance(a, b, connection_type = -1) {
 }
 
 //Returns a set of depots that are closest to an area (for retreat purposes)
-function find_closest_depot_for_retreat(who, area) {
+function find_closest_depot_for_retreat(who, area, ignore_enemy_sps = false) {
 	let depots = get_areas_with_depots(who)
+	// If there are NO depots on the map, use supply sources instead (mostly relevant for first-turn evasions)
 	if (depots.length === 0) depots = get_supply_sources(who)
 
 	let visited = []
@@ -5948,13 +5953,13 @@ function find_closest_depot_for_retreat(who, area) {
 		}
 		set_add(visited, current)
 
+		if (!ignore_enemy_sps && has_enemy_sp(who, current))
+			continue //The closest depot area might be contested, so continue after checking
+
 		//The closest depot might be in an area with a battle, so update depot status for an area before checking enemy troop presence (which blocks further tracing along that path)
-		//https://boardgamegeek.com/thread/3700409/when-precisely-are-captured-depots-removed
 		if (set_has(depots, current)) {
 			set_add(closest_depots, current)
 		}
-
-		if (has_enemy_sp(who, current)) continue //The closest depot area might be contested, so continue after checking
 
 		let new_distance = get_distance(current) + 1
 		for (let loc of get_all_adjacent_areas(current)) {
@@ -6379,7 +6384,7 @@ function is_fresh_cavalry(troop_type) {
 P.battle = (`
 	log "@Battles"
 	call change_orders { current_order_type: DEFEND }
-	call resolve_battles
+	goto resolve_battles
 `)
 
 const BATTLES_WITHOUT_LEADERS = 0
@@ -6406,11 +6411,8 @@ P.resolve_battles = {
 	_begin() {
 		log_h3("Resolve Battles")
 		G.active = get_who_has_initiative()
-
 		L.battles_by_type = sort_battles_by_type()
-
 		L.current_battle_type = L.battles_by_type.findIndex(type => type.length > 0)
-		//console.log(L.battles_by_type)
 	},
 	prompt() {
 		if (L.current_battle_type === -1) {
@@ -6469,6 +6471,8 @@ function has_friendly_order(who, area) {
 }
 
 P.do_battle = script(`
+	call play_battle_events { attacker: L.attacker, defender: L.defender, area: L.area }
+
 	eval { log_h5("Reveal Defend Orders") }
 	if (has_friendly_order(L.defender, L.area)) {
 		set G.active L.defender
@@ -6478,7 +6482,6 @@ P.do_battle = script(`
 	}
 	log ""
 
-	call play_battle_events { attacker: L.attacker, defender: L.defender, area: L.area }
 	call calculate_combat_value { attacker: L.attacker, defender: L.defender, area: L.area }
 `)
 
@@ -6486,6 +6489,7 @@ P.defend = {
 	_begin() {
 		//L.area
 		L.has_defend_order = get_orders_at_area(G.active, L.area).some(order => get_order_type(order) === DEFEND)
+		L.loss_reduction = is_event_active(C_FORTIFICATIONS) ? 2 : 1
 		L.has_confirmed = false
 	},
 	prompt() {
@@ -6493,7 +6497,7 @@ P.defend = {
 			prompt(`You do not have a defend order at S${L.area}.`)
 			button_pass()
 		} else {
-			prompt(`Reveal 'Defend' order to reduce your losses by 1 this battle?`)
+			prompt(`Reveal 'Defend' order to reduce your losses by ${L.loss_reduction} this battle?`)
 			for (let order of get_orders_at_area(G.active, L.area))
 				if (get_order_type(order) === DEFEND) action_order(order)
 			button_pass()
@@ -6507,6 +6511,8 @@ P.defend = {
 		remove_order(order)
 		add_defend_order_to_battle(L.area)
 		log("Revealed Defend order.")
+		if (is_battle_event_currently_active(C_FORTIFICATIONS))
+			log(`${get_card_log_alias(C_FORTIFICATIONS)}: Double effect.`)
 		end()
 	}
 }
@@ -6947,11 +6953,13 @@ P.determine_losses = function() {
 	if (is_fortress_town(G.current_battle) && ((count_num_infantry(L.defender, G.current_battle) > 0) || (count_num_guard(L.defender, G.current_battle) > 0)))
 		++L.losses[L.attacker]
 
-	if (battle_has_defend_order(G.current_battle))
-		L.losses[L.defender] = Math.max(0, L.losses[L.defender] - 1)
-
-	if (is_battle_event_currently_active(C_FORTIFICATIONS)) //Doubles effect of Defend order
-		L.losses[L.defender] = Math.max(0, L.losses[L.defender] - 1)
+	if (battle_has_defend_order(G.current_battle)) {
+		// RU #33 Fortifications: Doubles effect of Defend order
+		if (is_battle_defender(RUSSIA, G.current_battle) && is_event_active(C_FORTIFICATIONS))
+			L.losses[L.defender] = Math.max(0, L.losses[L.defender] - 2)
+		else
+			L.losses[L.defender] = Math.max(0, L.losses[L.defender] - 1)
+	}
 
 	//Riga: special rule
 	if (G.current_battle === S_RIGA && (is_battle_defender(RUSSIA, G.current_battle))) //Fortress Riga special rule
@@ -7982,20 +7990,68 @@ function get_valid_defender_retreat_connections(battle) {
 	return possible_areas.filter(area => !set_has(get_connections_used_by_attacker(battle), area))
 }
 
+function get_valid_retreat_destinations(who, area, ignore_enemy_sps = false) {
+	// Attackers in battle must select among the areas used to enter battle
+	if (is_battle_attacker(who, area))
+		return find_retreat_destinations(who, G.current_battle, get_valid_attacker_retreat_connections(area), ignore_enemy_sps)
+	else
+		return find_retreat_destinations(who, G.current_battle, get_valid_defender_retreat_connections(area), ignore_enemy_sps)
+}
+
+function has_retreat_destination(who, area) {
+	return get_valid_retreat_destinations(who, area).length > 0
+}
+
+/*
 //TODO: Handling with no retreat areas
 //TODO: Alexander & Platov ability enforcement (will do after finishing battle events)
+
+P.retreat = script(`
+	log "%Retreat"
+	set G.active L.loser
+	while (has_friendly_troop(L.loser, G.current_battle)) {
+		call select_retreat_destination	{ loser: L.loser }
+		call select_retreat_force { area: L.$ }
+	}
+`)
+
+P.select_retreat_destination = {
+	_begin() {
+		if (has_retreat_destination(L.loser, G.current_battle)) {
+			L.has_valid_retreat_destination = true
+			L.retreat_destinations = get_valid_retreat_destinations(G.active, L.area)
+		} else {
+			L.has_valid_retreat_destination = false
+			log(`No valid retreat destinations.`)
+			L.retreat_destinations = get_valid_retreat_destinations(G.active, L.area, true)
+		}
+	},
+	prompt() {
+		prompt(`Select a destination to retreat. (${join_array_with_or(L.retreat_destinations.map(area => `S${area}`))})`)
+		L.retreat_destinations.forEach(action_area)
+	},
+	area(area) {
+		push_undo()
+		end(area)
+	}
+}
+
+P.select_retreat_force = {
+	_begin() {
+		G.move = {
+			leaders: [],
+			sps: Array(NUM_TROOP_TYPES).fill(0)
+		}
+	}
+}
+*/
+
 P.retreat = {
 	_begin() {
 		//L.loser
 		log_h5("Retreat")
 		G.active = L.loser
-		let possible_retreat_destinations = []
-		if (is_battle_attacker(L.loser, G.current_battle))
-			possible_retreat_destinations = get_valid_attacker_retreat_connections(G.current_battle)
-		else
-			possible_retreat_destinations = get_valid_defender_retreat_connections(G.current_battle)
-
-		L.retreat_destinations = find_retreat_destinations(L.loser, G.current_battle, possible_retreat_destinations)
+		L.retreat_destinations = get_valid_retreat_destinations(L.loser, G.current_battle)
 
 		L.retreat = {
 			total_num: 0,
@@ -9499,7 +9555,6 @@ function get_bagrations_retreat_destinations(area, radius = 2) {
 E.bagrations_retreat = function() {
 	if (!is_leader_on_map(L_BAGRATION) || has_leader_moved(L_BAGRATION))
 		return false
-
 	return get_bagrations_retreat_destinations(get_leader_location(L_BAGRATION)).length > 0
 }
 
@@ -10574,7 +10629,7 @@ P.unexpected_retreat_evade = {
 	_begin() {
 		L.areas = []
 		for (let area of map_keys(G.battles))
-			if (has_austrian_sp(area) && has_russian_sp(area))
+			if (has_troop(area) && has_austrian_sp(area) && has_russian_sp(area))
 				set_add(L.areas, area)
 		L.did_evade = false
 	},
@@ -10786,7 +10841,6 @@ P.the_artillery_corps = {
 }
 
 // RU #33: Fortifications
-// TODO: Clarify sequencing with revealing a 'defend' order
 E.fortifications = function() { return is_battle_defender(RUSSIA, G.current_battle) && has_leader_in_battle(RUSSIA, G.current_battle) }
 
 P.fortifications = {
@@ -10796,17 +10850,15 @@ P.fortifications = {
 	},
 	prompt() {
 		if (L.step === -1) {
-			if (battle_has_defend_order(G.current_battle)) {
-				prompt_card(C_FORTIFICATIONS, `Double the effect of Defend at S${G.current_battle}.`)
+			if (has_order_of_type(G.active, DEFEND, G.current_battle)) {
+				prompt_card(C_FORTIFICATIONS, `Double effect of the existing Defend order at S${G.current_battle}.`)
 				button_confirm()
+			} else if (has_order_of_type(G.active, DEFEND, POOL)) {
+				prompt_card(C_FORTIFICATIONS, `Place a Defend order at S${G.current_battle}.`)
+				action_area(G.current_battle)
 			} else {
-				if (has_order_of_type(G.active, DEFEND, POOL)) {
-					prompt_card(C_FORTIFICATIONS, `Place a Defend order at S${G.current_battle}.`)
-					action_area(G.current_battle)
-				} else {
-					prompt_card(C_FORTIFICATIONS, `No defend orders in pool.`)
-					button_pass()
-				}
+				prompt_card(C_FORTIFICATIONS, `No Defend orders in pool to place.`)
+				button_pass()
 			}
 		} else {
 			prompt_card(C_FORTIFICATIONS, `Cancels the effect of ${get_card_log_alias(L.outflanking)}.`)
@@ -10815,23 +10867,27 @@ P.fortifications = {
 	},
 	confirm() {
 		push_undo()
-		if (L.step === -1)
-			log("Doubles effect of Defend order.")
-		else
+		if (L.step === -1) {
+			log(`Doubles effect of existing Defend order.`)
+			add_persistent_event(C_FORTIFICATIONS)
+			if (L.outflanking > -1) ++L.step
+			else end()
+		} else {
 			log(`Cancels ${get_card_log_alias(L.outflanking)}.`)
-		this.transition()
+			end()
+		}
+	},
+	pass() {
+		push_undo()
+		log(`No Defend orders in pool.`)
+		if (L.outflanking > -1) ++L.step
+		else end()
 	},
 	area(area) {
 		push_undo()
 		add_order_of_type_from_pool(G.active, DEFEND, area)
-		this.transition()
-	},
-	pass() {
-		push_undo()
-		this.transition()
-	},
-	transition() {
-		if (L.outflanking > -1 && L.step === -1) ++L.step
+		log(`Placed Defend at S${G.current_battle}.`)
+		if (L.outflanking > -1) ++L.step
 		else end()
 	}
 }
