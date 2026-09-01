@@ -1,34 +1,31 @@
 "use strict"
 
+// Nations
+// NOTE: Prussia & Austria are defined separately here, unlike rules.js
 const RUSSIA = 0
 const FRANCE = 1
 const PRUSSIA = 2
 const AUSTRIA = 3
 
 const ROLES = ["Russia", "France"]
-const abbreviations = ["ru", "fr", "pr", "au"]
+const ABBREVIATIONS = ["ru", "fr", "pr", "au"]
 
-function get_abbreviation(who) {
-	return abbreviations[who]
-}
-
-function enemy(who) {
-	return 1 - who
-}
-
-/* SPACES */
+// === CONSTANTS ===
+/* AREAS */
 const areas = data.areas
-const area_length = areas.length
+const NUM_AREAS = 158
 
+const FIRST_AREA = 1
+const LAST_AREA = 156
+
+// Some useful areas
+const OUT_OF_PLAY = -1
 const POOL = 0
 const FRENCH_CASUALTIES = 157
-const OUT_OF_PLAY = -1
-
-function get_area_name(area) {
-	return areas[area].name
-}
 
 /* CARDS */
+// TODO: Maybe add to data.js later?
+// Cards that could be selected during a Resources Turn (defined as action buttons with argument in on_update())
 const C_SCORCHED_EARTH = 10
 const C_PRIDE_AND_HESITATION = 15
 const C_KUTUZOV_APPOINTED = 16
@@ -51,63 +48,35 @@ const C_COURAGE_OF_DESPERATION = 104
 const C_NEYS_ESCAPE = 106
 const C_LETHARGIC_PURSUIT = 107
 
+const RESOURCE_PHASE_CARD_OPTIONS = [
+	// RUSSIA
+	[
+		C_SCORCHED_EARTH, C_PRIDE_AND_HESITATION, C_KUTUZOV_APPOINTED, C_THE_FINLAND_CORPS, C_TREATY_OF_BUCHAREST,
+		C_THE_CZAR_LEAVES_THE_ARMY, C_EXHAUSTING_MARCH_1, C_EXHAUSTING_MARCH_2, C_DISORDERLY_MARCH, C_COSSACK_PATROLS
+	],
+	// FRANCE
+	[
+		C_HARD_MARCHING_2, C_HOLY_MOTHER_RUSSIA_FR, C_INFIGHTING_AND_INTRIGUE, C_PEACE_OFFER, C_DAVOUT_TAKES_COMMAND,
+		C_IX_CORPS_ARRIVES, C_XI_CORPS_ARRIVES, C_COURAGE_OF_DESPERATION, C_NEYS_ESCAPE, C_LETHARGIC_PURSUIT
+	]
+]
+
 /* LEADERS */
-const ALEXANDER_I = 0
-const KUTUZOV = 1
-const DE_TOLLY = 2
-const BAGRATION = 3
-const TORMASOV = 4
-const WITTGENSTEIN = 5
-const CHICHAGOV = 6
-const PLATOV = 7
-
-const NAPOLEON = 8
-const JEROME = 9
-const DE_BEAUHARNAIS = 10
-const DAVOUT = 11
-const MURAT = 12
-const SCHWARZENBERG = 13
-
 const leaders = data.leaders
-const first_ru_leader = 0
-const last_ru_leader = 7
-const first_fr_leader = 8
-const last_fr_leader = 13
+const NUM_LEADERS = 14
 
-function get_leader_name(leader) {
-	return leaders[leader].name
-}
-
-function get_leader_short_name(leader) {
-	return leaders[leader].short_name
-}
-
-function get_leader_location(leader) {
-	return V.leaders[leader]
-}
-
-function get_leader_faction(leader) {
-	return leaders[leader].faction
-}
-
-function get_first_leader(faction) {
-	return (faction === RUSSIA) ? first_ru_leader : first_fr_leader
-}
-
-function get_last_leader(faction) {
-	return (faction === RUSSIA) ? last_ru_leader : last_fr_leader
-}
-
-function has_friendly_leader(who, s) {
-	return get_seniormost_leader(who, s) !== -1
-}
+const first_russia_leader = 0
+const last_russia_leader = 7
+const first_france_leader = 8
+const last_france_leader = 13
 
 /* ORDERS */
-const first_ru_order = 1
-const last_ru_order = 28
-const first_fr_order = 29
-const last_fr_order = 53
+const first_russia_order = 1
+const last_russia_order = 28
+const first_france_order = 29
+const last_france_order = 53
 
+// NOTE: The FORCED_MARCH and MARCH constants are also used as constants for move type
 const FORCED_MARCH = 0
 const CAVALRY_PATROLS = 1
 const MARCH = 2
@@ -119,35 +88,7 @@ const PLACE_DEPOT = 7
 const FORAGE = 8
 const DUMMY_ORDER = 9
 
-function get_first_order(who) {
-	return (who === RUSSIA) ? first_ru_order : first_fr_order
-}
-
-function get_last_order(who) {
-	return (who === RUSSIA) ? last_ru_order : last_fr_order
-}
-
-function get_player_orders(who) {
-	return (who === RUSSIA) ? G.russian.orders : (who === FRANCE) ? G.french.orders : null
-}
-
-function get_order_type_name(type) {
-	switch(type) {
-	case FORCED_MARCH: return "forced_march"
-	case CAVALRY_PATROLS: return "cavalry_patrols"
-	case MARCH: return "march"
-	case EVADE: return "evade"
-	case DEFEND: return "defend"
-	case RALLY: return "rally"
-	case COSSACK_RAID: return "cossack_raid"
-	case PLACE_DEPOT: return "place_depot"
-	case FORAGE: return "forage"
-	case DUMMY_ORDER: return "dummy_order"
-	default: return type
-	}
-}
-
-/* TROOPS */
+/* SPs */
 const FRESH_INFANTRY = 0
 const EXHAUSTED_INFANTRY = 1
 const FRESH_CAVALRY = 2
@@ -157,10 +98,19 @@ const EXHAUSTED_COSSACK = 5
 const FRESH_GUARD = 6
 const EXHAUSTED_GUARD = 7
 
+// Fudged Prussian and Austrian SPs as SP 'types' for simplcity since there are very few of them
 const FRESH_PRUSSIAN_INFANTRY = 8
 const EXHAUSTED_PRUSSIAN_INFANTRY = 9
 const FRESH_AUSTRIAN_INFANTRY = 10
 const EXHAUSTED_AUSTRIAN_INFANTRY = 11
+
+// Troop Bitmasks
+/*
+	Each bitpacked troop entry is 11 bits:
+	1 bit - player (RUSSIA or FRANCE)
+	4 bits - troop type (FRESH_INFANTRY (0) to EXHAUSTED_AUSTRIAN_INFANTRY (11))
+	6 bits - number of SPs of that type in a particular area
+*/
 
 const TROOP_ENTRY_WHO_SHIFT = 10
 const TROOP_ENTRY_TYPE_SHIFT = 6
@@ -170,6 +120,7 @@ const TROOP_ENTRY_WHO_MASK = 1024
 const TROOP_ENTRY_TYPE_MASK = 960
 const TROOP_ENTRY_NUM_MASK = 63
 
+// SP Pool
 const first_ru_inf = 0
 const last_ru_inf = 79
 const first_fr_inf = 80
@@ -208,58 +159,234 @@ const INFANTRY = 0
 const CAVALRY = 1
 const SPECIAL = 2
 
-function get_troop_name(type) {
-	switch(type) {
-	case FRESH_INFANTRY:
-	case EXHAUSTED_INFANTRY:
-	case FRESH_PRUSSIAN_INFANTRY:
-	case EXHAUSTED_PRUSSIAN_INFANTRY:
-	case FRESH_AUSTRIAN_INFANTRY:
-	case EXHAUSTED_AUSTRIAN_INFANTRY:
-		return "infantry"
-	case FRESH_CAVALRY:
-	case EXHAUSTED_CAVALRY:
-		return "cavalry"
-	case FRESH_COSSACK:
-	case EXHAUSTED_COSSACK:
-		return "cossack"
-	case FRESH_GUARD:
-	case EXHAUSTED_GUARD:
-		return "guard"
-	default:
-		return "unknown"
+/* TIME */
+const JUNE_5 = 0
+const JULY_R = 1
+const JULY_5 = 6
+const AUG_R = 7
+const AUG_5 = 12
+const SEPT_R = 13
+const SEPT_5 = 18
+const OCT_R = 19
+const OCT_5 = 24
+const NOV_R = 25
+const NOV_5 = 30
+
+/* CONNECTIONS */
+const FIRST_CONNECTION = 1
+const LAST_CONNECTION = 261
+
+/* DEPOTS */
+const NUM_DEPOTS_RU = 14
+const NUM_DEPOTS_FR = 7
+
+/* DEVASTATION */
+var num_devastated = 0
+
+// === DATA FUNCTIONS ===
+/* PLAYERS/NATIONS */
+function is_observer(role) {
+	return role !== RUSSIA && role !== FRANCE
+}
+
+function get_nation_name(nation) {
+	switch(nation) {
+	case RUSSIA:
+	case FRANCE:
+		return ROLES[nation]
+	case PRUSSIA: return "Prussia"
+	case AUSTRIA: return "Austria"
 	}
 }
 
-function get_troop_bucket(type) {
-	switch(type) {
-	case FRESH_INFANTRY:
-	case EXHAUSTED_INFANTRY:
-	case FRESH_CAVALRY:
-	case EXHAUSTED_CAVALRY:
-	case FRESH_PRUSSIAN_INFANTRY:
-	case FRESH_AUSTRIAN_INFANTRY:
-		return get_troop_name(type)
-	default:
-		return "special"
+function get_abbreviation(nation) {
+	return ABBREVIATIONS[nation]
+}
+
+function get_opponent(player) {
+	return 1 - player
+}
+
+/* AREAS */
+function get_area_name(area) {
+	return areas[area].name
+}
+
+// TODO: Add CSS based on area's type: e.g. key_city, riga, etc.
+function get_area_type(area) {
+	return areas[area].type
+}
+
+// The zone the area is on the map, for ease-of-use
+function get_area_zone(area) {
+	return areas[area].zone
+}
+
+// Some areas have the same name, so some additional identifying info was added when defining areas' layout
+function process_area_name(name) {
+	name = name.replace(/(Grand Duchy of Warsaw|Prussia) (North|South)/, "$1")
+	name = name.replace(/^Unnamed\W.*/, "Unnamed")
+	name = name.replace(/^Vladimir\W.*/, "Vladimir")
+
+	return name
+}
+
+/* LEADERS */
+function get_leader_owner(leader) {
+	return leaders[leader].faction
+}
+
+// A leader's last name, stripped of prepositions e.g. 'de', and using only plain English characters
+// For CSS selectors
+function get_leader_short_name(leader) {
+	return leaders[leader].short_name
+}
+
+function get_first_leader(player) {
+	switch(player) {
+	case RUSSIA: return first_russia_leader
+	case FRANCE: return first_france_leader
+	default: return -1
 	}
 }
 
-function is_fresh(type) {
-	switch(type) {
-	case FRESH_INFANTRY:
-	case FRESH_CAVALRY:
-	case FRESH_COSSACK:
-	case FRESH_GUARD:
-	case FRESH_PRUSSIAN_INFANTRY:
-	case FRESH_AUSTRIAN_INFANTRY:
-		return true
-	}
+function get_last_leader(player) {
+	if (player === RUSSIA)
+		return last_russia_leader
+	return last_france_leader
+}
+
+function get_leader_location(leader) {
+	return V.leaders[leader]
+}
+
+function has_friendly_leader(player, area) {
+	for (let leader = get_first_leader(player); leader <= get_last_leader(player); ++leader)
+		if (get_leader_location(leader) === area)
+			return true
+
 	return false
 }
 
-function get_exhaustion(type) {
-	return is_fresh(type) ? "fresh" : "exhausted"
+// V.seniority contains the current hierarchy of leaders of a side.
+// Some leaders have the same seniority, so the hierarchy could change (to an extent)
+function get_seniormost_leader(player, area) {
+	return V.seniority[player].find(leader => get_leader_location(leader) === area)
+}
+
+function is_seniormost_leader(leader, area) {
+	return get_seniormost_leader(get_leader_owner(leader), area) === leader
+}
+
+/* ORDERS */
+function get_first_order(player) {
+	switch(player) {
+	case RUSSIA: return first_russia_order
+	case FRANCE: return first_france_order
+	default: return -1
+	}
+}
+
+function get_last_order(player) {
+	switch(player) {
+	case RUSSIA: return last_russia_order
+	case FRANCE: return last_france_order
+	default: return -1
+	}
+}
+
+function get_order_type(order) {
+	return data.orders[order].type
+}
+
+function get_order_owner(order) {
+	return data.orders[order].owner
+}
+
+function get_order_type_selector(type) {
+	switch(type) {
+	case FORCED_MARCH: 		return "forced_march"
+	case CAVALRY_PATROLS: 	return "cavalry_patrols"
+	case MARCH:				return "march"
+	case EVADE:				return "evade"
+	case DEFEND:			return "defend"
+	case RALLY:				return "rally"
+	case COSSACK_RAID:		return "cossack_raid"
+	case PLACE_DEPOT:		return "place_depot"
+	case FORAGE:			return "forage"
+	case DUMMY_ORDER:		return "dummy_order"
+	default:				return type
+	}
+}
+
+function get_order_keyword(order) {
+	let selector = get_order_type_selector(get_order_type(order))
+	let abbreviation = get_abbreviation(get_order_owner(order))
+	return `${selector} ${abbreviation}`
+}
+
+/* SPs */
+function decode_troop_entry_who(entry) {
+	return (entry & TROOP_ENTRY_WHO_MASK) >> TROOP_ENTRY_WHO_SHIFT
+}
+
+function decode_troop_entry_type(entry) {
+	return (entry & TROOP_ENTRY_TYPE_MASK) >> TROOP_ENTRY_TYPE_SHIFT
+}
+
+function decode_troop_entry_num(entry) {
+	return entry & TROOP_ENTRY_NUM_MASK
+}
+
+function is_infantry(type) {
+	return set_has([FRESH_INFANTRY, EXHAUSTED_INFANTRY, FRESH_PRUSSIAN_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, FRESH_AUSTRIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY], type)
+}
+
+function is_cavalry(type) {
+	return type === FRESH_CAVALRY || type === EXHAUSTED_CAVALRY
+}
+
+function is_cossack(type) {
+	return type === FRESH_COSSACK || type === EXHAUSTED_COSSACK
+}
+
+function is_guard(type) {
+	return type === FRESH_GUARD || type === EXHAUSTED_GUARD
+}
+
+function is_fresh(type) {
+	return !is_exhausted(type)
+}
+
+function is_exhausted(type) {
+	return !!(type & 1)
+}
+
+function get_sp_selector(type) {
+	if (is_infantry(type))
+		return "infantry"
+	else if (is_cavalry(type))
+		return "cavalry"
+	else if (is_cossack(type))
+		return "cossack"
+	else if (is_guard(type))
+		return "guard"
+	else
+		throw new Error(`Unknown SP selector: ${type}`)
+}
+
+// Returns which section of a leader mat a given SP must be populated
+function get_sp_bucket(type) {
+	if (is_infantry(type) || is_cavalry(type))
+		return `subordinate_${get_sp_selector(type)}`
+	else if (is_cossack(type) || is_guard(type))
+		return "subordinate_special"
+	else
+		throw new Error(`Unknown SP bucket: ${type}`)
+}
+
+function get_exhaustion_selector(type) {
+	return is_exhausted(type) ? "exhausted" : "fresh"
 }
 
 function get_used(who, type) {
@@ -316,90 +443,74 @@ function reset_used() {
 	]
 }
 
-function decode_troop_entry_who(entry) {
-	return (entry & TROOP_ENTRY_WHO_MASK) >> TROOP_ENTRY_WHO_SHIFT
+/* DEPOTS */
+function get_num_depots(player) {
+	switch(player) {
+	case RUSSIA: return NUM_DEPOTS_RU
+	case FRANCE: return NUM_DEPOTS_FR
+	default: return -1
+	}
 }
-
-function decode_troop_entry_type(entry) {
-	return (entry & TROOP_ENTRY_TYPE_MASK) >> TROOP_ENTRY_TYPE_SHIFT
-}
-
-function decode_troop_entry_num(entry) {
-	return entry & TROOP_ENTRY_NUM_MASK
-}
-
-
-function is_cavalry(troop_type) {
-	return (troop_type === FRESH_CAVALRY) || (troop_type === EXHAUSTED_CAVALRY)
-}
-
-function is_cossack(troop_type) {
-	return (troop_type === FRESH_COSSACK) || (troop_type === EXHAUSTED_COSSACK)
-}
-
-/* TIME */
-const JUNE_5 = 0
-const JULY_R = 1
-const JULY_5 = 6
-const AUG_R = 7
-const AUG_5 = 12
-const SEPT_R = 13
-const SEPT_5 = 18
-const OCT_R = 19
-const OCT_5 = 24
-const NOV_R = 25
-const NOV_5 = 30
-
-var num_devastated = 0
-
-const FIRST_AREA = 1
-const LAST_AREA = 156
-
-const FIRST_CONNECTION = 1
-const LAST_CONNECTION = 261
-
-const NO_MOVE = -1
-
-/* MISC FUNCTIONS */
-function process_area_name(name) {
-	name = name.replace(/(Grand Duchy of Warsaw|Prussia) (North|South)/, "$1")
-	name = name.replace(/^Unnamed\W.*/, "Unnamed")
-	name = name.replace(/^Vladimir\W.*/, "Vladimir")
-
-	return name
-}
-
 
 function get_pool_depots(side) {
 	return (side === RUSSIA) ? "ru_pool_depots" : "fr_pool_depots"
 }
 
+// === INITIALIZE THINGS ===
+/* HELPERS */
 function translate_right(rect, amt) {
 	rect[0] += amt
 	return rect
 }
 
-//=== INITIALIZE VIEW ===
+function define_leader_board(leader) {
+	const leader_board = define_thing("leader_board", leader)
+		.keyword(get_leader_short_name(leader))
+	define_thing("subordinate_leaders", leader)
+		.static_child(leader_board)
+		.keyword("square")
+	define_thing("subordinate_infantry", leader)
+		.static_child(leader_board)
+		.keyword("square")
+	define_thing("subordinate_cavalry", leader)
+		.static_child(leader_board)
+		.keyword("square")
+	define_thing("subordinate_special", leader)
+		.static_child(leader_board)
+		//.keyword("square")
+}
+
+function define_troop_list(action, a, b, keywords) {
+	for (var i = a; i <= b; ++i) {
+		define_piece(action, i, keywords)
+			.stackable()
+		define_thing("troop-text", i)
+	}
+}
+
 function on_init() {
 	define_board("#map", 2500, 2027, [0, 0, 0, 0])
+
+	// Panel containing orders that are in the player's pool
 	define_panel("#plan_orders", "plan_orders", 0)
-	define_panel("#played", "played", 0)
+	// Panel for cards that have been revealed ('on the table')
+	define_panel("#table", "table", 0)
+	// Player hand
 	define_panel("#hand", "hand", 0)
+	// Leaders
 	define_panel("#ru_leaders", "leaders", RUSSIA)
 	define_panel("#fr_leaders", "leaders", FRANCE)
-   
-	/* SPACES */
-	for (let area = FIRST_AREA; area <= LAST_AREA; ++area) {
-		define_space("area", area, layout[get_area_name(area)], areas[area].type)
-			.tooltip(`${process_area_name(get_area_name(area))} (${areas[area].zone})`)
-		
-		define_stack("area_stack", area, layout[get_area_name(area)], -20, -20, 0, -58, 0, 36, 1, 4)
-		define_stack("orders_stack", area, translate_right(layout[get_area_name(area)], 52), 0, -100, 0, -125)
-	}
 
-	for (let connection = FIRST_CONNECTION; connection <= LAST_CONNECTION; ++connection) {
-		define_space("connection", connection, layout[`Connection${connection}`]).tooltip(`Connection${connection}`)
-		define_stack("connection_stack", connection, layout[`Connection${connection}`], -20, -20, 0, -58, 0, 36, 1, 4, 0.5, 0.5)
+	/* AREAS */
+	for (let area = FIRST_AREA; area <= LAST_AREA; ++area) {
+		// For actions & populating static markers (devastation, depots)
+		define_space("area", area, layout[get_area_name(area)], get_area_type(area))
+			.tooltip(`${process_area_name(get_area_name(area))} (${get_area_zone(area)})`)
+
+		// Where leaders & SPs are populated
+		define_stack("area_stack", area, layout[get_area_name(area)], -20, -20, 0, -58, 0, 36, 1, 4)
+		// Where we populate orders
+		define_stack("orders_stack", area, translate_right(layout[get_area_name(area)], 52), 0, -100, 0, -125)
 	}
 
 	define_layout("ru_pool_depots", 0, layout["Russia Pool Depots"])
@@ -408,45 +519,28 @@ function on_init() {
 	define_layout("fr_pool_leaders", 0, layout["France Pool Leaders"])
 	define_layout("fr_casualties", 0, layout["France Casualties"])
 
-	/* ORDERS */
-	for (let id = first_ru_order; id <= last_fr_order; ++id) {
-		define_piece("order", id, `${get_order_type_name(data.orders[id].type)} ${get_abbreviation(data.orders[id].owner)}`)
+	/* CONNECTIONS */
+	for (let connection = FIRST_CONNECTION; connection <= LAST_CONNECTION; ++connection) {
+		// A clickable action space
+		define_space("connection", connection, layout[`Connection${connection}`])//.tooltip(connection)
+
+		// Where leaders & SPs are populated
+		// Same as area stack
+		define_stack("connection_stack", connection, layout[`Connection${connection}`], -20, -20, 0, -58, 0, 36, 1, 4,)
 	}
+
+	/* ORDERS */
+	for (let order = first_russia_order; order <= last_france_order; ++order)
+		define_piece("order", order, get_order_keyword(order))
 
 	/* LEADERS */
-	function define_leader_board(leader) {
-		const leader_board = define_thing("leader_board", leader)
-			.keyword(get_leader_short_name(leader))
-		define_thing("subordinate_leaders", leader)
-			.static_child(leader_board)
-			.keyword("square")
-		define_thing("subordinate_infantry", leader)
-			.static_child(leader_board)
-			.keyword("square")
-		define_thing("subordinate_cavalry", leader)
-			.static_child(leader_board)
-			.keyword("square")
-		define_thing("subordinate_special", leader)
-			.static_child(leader_board)
-			//.keyword("square")
-	}
-
-	for (let leader = 0; leader < leaders.length; ++leader) {
+	for (let leader = first_russia_leader; leader <= last_france_leader; ++leader) {
 		define_piece("leader", leader, get_leader_short_name(leader))
 			.stackable()
 		define_leader_board(leader)
 	}
 
-	/* TROOPS */
-	//Modified define_piece_list()
-	function define_troop_list(action, a, b, keywords) {
-		for (var i = a; i <= b; ++i) {
-			let troop = define_piece(action, i, keywords)
-				.stackable()
-			define_thing("troop-text", i)
-		}
-	}
-
+	/* SPs */
 	define_troop_list("infantry", first_ru_inf, last_ru_inf, "ru")
 	define_troop_list("infantry", first_fr_inf, last_fr_inf, "fr")
 	define_troop_list("infantry", first_fr_pr_inf, last_fr_pr_inf, "pr")
@@ -512,7 +606,7 @@ function on_update() {
 
 	if (V.played_cards && V.played_cards[R])
 		for (let c of V.played_cards[R])
-			populate("played", 0, "card", c)
+			populate("table", 0, "card", c)
 
 	for (let leader = 0; leader <= 13; ++leader) {
 		action_button_with_argument(`leader_button`, leader, leaders[leader].log_name)
@@ -616,7 +710,7 @@ function on_update() {
 	action_button_with_argument("card_button", C_EXHAUSTING_MARCH_2, "#26 Exhausting March")
 	action_button_with_argument("card_button", C_DISORDERLY_MARCH, "#48 Disorderly March")
 	action_button_with_argument("card_button", C_COSSACK_PATROLS, "#49 Cossack Patrols")
-	
+
 	action_button_with_argument("card_button", C_HARD_MARCHING_2, "#2 Hard Marching")
 	action_button_with_argument("card_button", C_HOLY_MOTHER_RUSSIA_FR, "#4 Holy Mother Russia")
 	action_button_with_argument("card_button", C_INFIGHTING_AND_INTRIGUE, "#8 Infighting amp; Intrigue")
@@ -631,19 +725,6 @@ function on_update() {
 	action_button("undo", "Undo")
 
 	end_update()
-}
-
-function is_seniormost_leader(leader, area) {
-	return get_seniormost_leader(get_leader_faction(leader), area) === leader
-}
-
-function get_seniormost_leader(who, area) {
-	for (let leader of V.seniority[who]) {
-		if (get_leader_location(leader) === area) {
-			return leader
-		}
-	}
-	return -1
 }
 
 function update_tracks() {
@@ -714,18 +795,18 @@ function get_leaders_on_connection(who, area, from) {
 	for (let entry of battle_data.forces) {
 		if ((entry.from === from) && (entry.leaders.length > 0)) {
 			for (let leader of entry.leaders) set_add(leaders, leader)
-		} 
+		}
 	}
 	return leaders
 }
 
 function get_leader_battle_origin(leader, battle) {
 	let battle_data
-	if (get_battle_attacker(battle) === get_leader_faction(leader))
+	if (get_battle_attacker(battle) === get_leader_owner(leader))
 		battle_data = get_attacker_data(battle)
 	else
 		battle_data = get_defender_data(battle)
-		
+
 	for (let entry of battle_data.forces) {
 		if (set_has(entry.leaders, leader)) return entry.from
 	}
@@ -750,31 +831,31 @@ function update_leaders() {
 		let location = get_leader_location(leader)
 		switch(location) {
 		case OUT_OF_PLAY:
-			populate((get_leader_faction(leader) === RUSSIA) ? "fr_pool_leaders" : "ru_pool_leaders", 0, "leader", leader)
+			populate((get_leader_owner(leader) === RUSSIA) ? "fr_pool_leaders" : "ru_pool_leaders", 0, "leader", leader)
 			break
 		case POOL:
-			populate((get_leader_faction(leader) === RUSSIA) ? "ru_pool_leaders" : "fr_pool_leaders", 0, "leader", leader)
+			populate((get_leader_owner(leader) === RUSSIA) ? "ru_pool_leaders" : "fr_pool_leaders", 0, "leader", leader)
 			break
 		case FRENCH_CASUALTIES:
 			populate("fr_casualties", 0, "leader", leader)
 			break
-		default:			
+		default:
 			if (has_battle(location)) {
-				for (let force of get_player_battle_data(get_leader_faction(leader), location).forces) {
+				for (let force of get_player_battle_data(get_leader_owner(leader), location).forces) {
 					if (set_has(force.leaders, leader)) {
 						if (force.from === location) {
-							if (get_seniormost_leader_on_connection(get_leader_faction(leader), location, location) === leader) {
+							if (get_seniormost_leader_on_connection(get_leader_owner(leader), location, location) === leader) {
 								populate("area_stack", get_leader_location(leader), "leader", leader)
-								populate("leaders", get_leader_faction(leader), "leader_board", leader)
+								populate("leaders", get_leader_owner(leader), "leader_board", leader)
 							} else {
-								populate("subordinate_leaders", get_seniormost_leader_on_connection(get_leader_faction(leader), force.from, location), "leader", leader)
+								populate("subordinate_leaders", get_seniormost_leader_on_connection(get_leader_owner(leader), force.from, location), "leader", leader)
 							}
 						} else {
-							if (get_seniormost_leader_on_connection(get_leader_faction(leader), force.from, location) === leader) {
+							if (get_seniormost_leader_on_connection(get_leader_owner(leader), force.from, location) === leader) {
 								populate("connection_stack", find_connection(location, force.from), "leader", leader)
-								populate("leaders", get_leader_faction(leader), "leader_board", leader)
+								populate("leaders", get_leader_owner(leader), "leader_board", leader)
 							} else {
-								populate("subordinate_leaders", get_seniormost_leader_on_connection(get_leader_faction(leader), force.from, location), "leader", leader)
+								populate("subordinate_leaders", get_seniormost_leader_on_connection(get_leader_owner(leader), force.from, location), "leader", leader)
 							}
 						}
 					}
@@ -782,9 +863,9 @@ function update_leaders() {
 			} else {
 				if (is_seniormost_leader(leader, get_leader_location(leader))) {
 					populate("area_stack", get_leader_location(leader), "leader", leader)
-					populate("leaders", get_leader_faction(leader), "leader_board", leader)
-				} else 
-					populate("subordinate_leaders", get_seniormost_leader(get_leader_faction(leader), get_leader_location(leader)), "leader", leader)
+					populate("leaders", get_leader_owner(leader), "leader_board", leader)
+				} else
+					populate("subordinate_leaders", get_seniormost_leader(get_leader_owner(leader), get_leader_location(leader)), "leader", leader)
 			}
 		}
 	}
@@ -810,63 +891,63 @@ function update_troops() {
 			// To make battle calculations easier on the server, SPs participating in battle are all 'within' the area where the battle is occuring.
 			// However:
 			// Some SPs need to be populated on the connections corresponding to where they entered from.
-			// All attacking SPs are populated on connections.
-			// Defending SPs which were in the area before the battle started are populated within the area.
-			// Defending SPs which entered after the battle started are populated on the connection from which they entered the area.
+			// 		All attacking SPs are populated on connections.
+			// 		Defending SPs which were in the area before the battle started are populated within the area.
+			// 		Defending SPs which entered after the battle started are populated on the connection from which they entered the area.
 
 			// Battle population logic
 			if (has_battle(area)) {
 				// All battle entries use V.battles as basis to populate them onto the right places.
-				// Attacker: All SPs are populated on connections.				
+				// Attacker: All SPs are populated on connections.
 
 				for (let force of get_player_battle_data(player, area).forces) {
-					if (force.troops[type] > 0) 
+					if (force.troops[type] > 0)
 					{
 						// Update the exhaustion status of the next unused troop piece of the current type
-						update_keyword(get_troop_name(type), get_used(player, type), is_fresh(type) ? "fresh" : "exhausted")
-						
+						update_keyword(get_sp_selector(type), get_used(player, type), is_fresh(type) ? "fresh" : "exhausted")
+
 						// Defending forces who were in the area before the battle started
 						if (force.from === area) {
 							if (get_seniormost_leader_on_connection(player, area, area) > -1) {
-								populate( 
-									`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader_on_connection(player, force.from, area),
-									get_troop_name(type), get_used(player, type)
+								populate(
+									get_sp_bucket(type), get_seniormost_leader_on_connection(player, force.from, area),
+									get_sp_selector(type), get_used(player, type)
 								)
-								populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
+								populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
 							}
 							else {
 								populate(
 									`area_stack`, area,
-									get_troop_name(type), get_used(player, type)
+									get_sp_selector(type), get_used(player, type)
 								)
-								populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
+								populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
 							}
-						} 
+						}
 						else {
 							// SPs with a leader on their connection go to his mat
 							if (get_seniormost_leader_on_connection(player, force.from, area) > -1) {
 								populate(
-									`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader_on_connection(player, force.from, area),
-									get_troop_name(type), get_used(player, type)
+									get_sp_bucket(type), get_seniormost_leader_on_connection(player, force.from, area),
+									get_sp_selector(type), get_used(player, type)
 								)
-								populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
-							} 
+								populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
+							}
 							// Otherwise they are populated on the map
 							else {
 								populate(
 									`connection_stack`, find_connection(force.from, area),
-									get_troop_name(type), get_used(player, type)
+									get_sp_selector(type), get_used(player, type)
 								)
-								populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
+								populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
 							}
 						}
 
 						if (force.move_type === FORCED_MARCH)
-							populate(get_troop_name(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
+							populate(get_sp_selector(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
 
 						if (is_battle_attacker(player, area) && has_bridge(force.from, area))
-							populate(get_troop_name(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
-						
+							populate(get_sp_selector(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
+
 						if (!map_has(troop_nums, get_used(player, type)))
 							map_set(troop_nums, get_used(player, type), force.troops[type])
 
@@ -880,24 +961,24 @@ function update_troops() {
 				if (map_has(V.moved, area) && map_get(V.moved, area, null).some(force => force.move_type === FORCED_MARCH)) {
 					for (let force of map_get(V.moved, area, null)) {
 						if (force.faction === player && force.troops[type] > 0 && force.move_type === FORCED_MARCH) {
-							update_keyword(get_troop_name(type), get_used(player, type), is_fresh(type) ? "fresh" : "exhausted")
+							update_keyword(get_sp_selector(type), get_used(player, type), is_fresh(type) ? "fresh" : "exhausted")
 
 							if (has_friendly_leader(player, area)) {
 								populate(
-									`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader(player, area),
-									get_troop_name(type), get_used(player, type)
+									get_sp_bucket(type), get_seniormost_leader(player, area),
+									get_sp_selector(type), get_used(player, type)
 								)
-								populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
+								populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
 							} else {
 								populate(
-									"area_stack", area, 
-									get_troop_name(type), get_used(player, type)
+									"area_stack", area,
+									get_sp_selector(type), get_used(player, type)
 								)
-								populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
+								populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
 							}
 
 							num_moved += force.troops[type]
-							populate(get_troop_name(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
+							populate(get_sp_selector(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
 
 							if (!map_has(troop_nums, get_used(player, type)))
 								map_set(troop_nums, get_used(player, type), force.troops[type])
@@ -910,21 +991,21 @@ function update_troops() {
 				// Default population logic
 				// If there is a friendly leader in the area, put SPs there on his mat
 				if (num > num_moved) {
-					update_keyword(get_troop_name(type), get_used(player, type), is_fresh(type) ? "fresh" : "exhausted")
+					update_keyword(get_sp_selector(type), get_used(player, type), is_fresh(type) ? "fresh" : "exhausted")
 
 					if (has_friendly_leader(player, area)) {
 						populate(
-							`subordinate_${get_troop_bucket(type)}`, get_seniormost_leader(player, area),
-							get_troop_name(type), get_used(player, type)
+							get_sp_bucket(type), get_seniormost_leader(player, area),
+							get_sp_selector(type), get_used(player, type)
 						)
-						populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
+						populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
 					} else {
 						if (area === FRENCH_CASUALTIES) {
-							populate("fr_casualties", 0, get_troop_name(type), get_used(player, type))
-							populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
+							populate("fr_casualties", 0, get_sp_selector(type), get_used(player, type))
+							populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
 						} else {
-							populate("area_stack", area, get_troop_name(type), get_used(player, type))
-							populate(get_troop_name(type), get_used(player, type), "troop-text", get_used(player, type))
+							populate("area_stack", area, get_sp_selector(type), get_used(player, type))
+							populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
 						}
 					}
 
@@ -971,10 +1052,13 @@ function update_orders() {
 		}
 	}
 
-	for (let order = 0; order < V.enemy_orders.length; ++order) {
-		populate("orders_stack", V.enemy_orders[order], "order", order + get_first_order(enemy(R)))
-		update_keyword("order", order + get_first_order(enemy(R)), `hidden ${get_abbreviation(enemy(R))}`)
+	if (!is_observer(R)) {
+		for (let order = 0; order < V.enemy_orders.length; ++order) {
+			populate("orders_stack", V.enemy_orders[order], "order", order + get_first_order(get_opponent(R)))
+			update_keyword("order", order + get_first_order(get_opponent(R)), `hidden ${get_abbreviation(get_opponent(R))}`)
+		}
 	}
+
 
 	if (V.selected_orders) {
 		for (let o of V.selected_orders) {
@@ -1013,10 +1097,10 @@ function on_log(text, ix) {
 			return p
 		}
 	}
-	
+
 	let is_box_header = false
 	update_log_boxes(ix)
-	
+
 	switch(text[0]) {
 	case "}":
 		close_log_box(ix)
@@ -1031,7 +1115,7 @@ function on_log(text, ix) {
 			p.className = 'h1 summer'
 		else if (text[1] === "W")
 			p.className = 'h1 winter'
-		else 
+		else
 			p.className = 'h1'
 		text = text.substring(2)
 		break
@@ -1064,7 +1148,7 @@ function on_log(text, ix) {
 		p.className = 'italic'
 		break
 	}
-    
+
 	p.innerHTML = escape_text(text)
 	if (is_box_header) {
 		p.classList.add("header")
