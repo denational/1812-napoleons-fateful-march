@@ -159,6 +159,9 @@ const INFANTRY = 0
 const CAVALRY = 1
 const SPECIAL = 2
 
+const HALF_STRENGTH = 0
+const FULL_STRENGTH = 1
+
 /* TIME */
 const JUNE_5 = 0
 const JULY_R = 1
@@ -942,7 +945,7 @@ function update_troops() {
 							}
 						}
 
-						if (force.move_type === FORCED_MARCH)
+						if (force.strength === HALF_STRENGTH)
 							populate(get_sp_selector(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
 
 						if (is_battle_attacker(player, area) && has_bridge(force.from, area))
@@ -958,7 +961,7 @@ function update_troops() {
 			else {
 				let num_moved = 0
 
-				if (map_has(V.moved, area) && map_get(V.moved, area, null).some(force => force.move_type === FORCED_MARCH)) {
+				if (map_has(V.moved, area) && map_get(V.moved, area, null).some(force => force.strength === HALF_STRENGTH)) {
 					for (let force of map_get(V.moved, area, null)) {
 						if (force.faction === player && force.troops[type] > 0 && force.move_type === FORCED_MARCH) {
 							update_keyword(get_sp_selector(type), get_used(player, type), is_fresh(type) ? "fresh" : "exhausted")

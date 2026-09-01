@@ -400,8 +400,8 @@ const NUM_ORDERS = 54
 
 /* TROOPS */
 // X1 vs. X0,5
-const FULL_STRENGTH = 0
-const HALF_STRENGTH = 1
+const HALF_STRENGTH = 0
+const FULL_STRENGTH = 1
 
 const FRESH_INFANTRY = 0
 const EXHAUSTED_INFANTRY = 1
@@ -1009,6 +1009,18 @@ function get_troop_list_by_type(who, area) {
 	return list
 }
 
+function get_move_strength(move_type) {
+	if (move_type === FORCED_MARCH)
+		return HALF_STRENGTH
+	return FULL_STRENGTH
+}
+
+function get_strength_move(strength) {
+	if (strength === HALF_STRENGTH)
+		return FORCED_MARCH
+	return MARCH
+}
+
 /* TIME */
 function get_month(turn) {
 	return Math.ceil(turn / 6)
@@ -1278,12 +1290,13 @@ function move_formation(leaders, troops, from, to) {
 function mark_already_moved(who, path, move_type, leaders, troops) {
 	let from = path[path.length - 2]
 	let destination = path[path.length - 1]
+	let strength = get_move_strength(move_type)
 
 	if (!map_has(G.moved, destination))
 		map_set(G.moved, destination, [])
 
-	if (map_get(G.moved, destination).some(force => force.from === from && force.move_type === move_type)) {
-		let force = map_get(G.moved, destination).find(f => f.from === from && f.move_type === move_type)
+	if (map_get(G.moved, destination).some(force => force.from === from && force.strength === strength)) {
+		let force = map_get(G.moved, destination).find(f => f.from === from && f.strength === strength)
 
 		for (let leader of leaders)
 			set_add(force.leaders, leader)
@@ -1297,7 +1310,7 @@ function mark_already_moved(who, path, move_type, leaders, troops) {
 	{
 		faction: who,
 		from,
-		move_type,
+		strength,
 		river_crossing: has_bridge(path[path.length - 2], destination) ,
 		leaders: [],
 		troops: Array(NUM_TROOP_TYPES).fill(0)
@@ -5018,7 +5031,7 @@ P.move = {
 			let troops = get_troop_list_by_type(enemy(G.active), L.current_area)
 			for (let entry of map_get(G.moved, L.current_area, null)) {
 				if (entry.faction === enemy(G.active)) {
-					add_defender_to_battle(enemy(G.active), L.current_area, L.current_area, entry.move_type, entry.leaders, entry.troops)
+					add_defender_to_battle(enemy(G.active), L.current_area, L.current_area, get_strength_move(entry.strength), entry.leaders, entry.troops)
 					for (let leader of entry.leaders)
 						set_delete(leaders, leader)
 					for (let type = 0; type < troops.length; ++type)
@@ -5187,7 +5200,7 @@ P.post_move_exhaustion = {
 
 		// Update moved registry
 		let force = map_get(G.moved, destination, null).find((f) => {
-			return f.from === G.move.path[G.move.path.length - 2] && f.move_type === G.move.type && f.troops[type] > 0
+			return f.from === G.move.path[G.move.path.length - 2] && f.strength === get_move_strength(G.move.type) && f.troops[type] > 0
 		})
 		force.troops[type]--
 		force.troops[type + 1]++
@@ -5195,7 +5208,7 @@ P.post_move_exhaustion = {
 		// Update battle registry
 		if (has_battle(destination)) {
 			let bforce = get_player_battle_data(G.active, destination).forces.find((f) => {
-				return f.from === G.move.path[G.move.path.length - 2] && f.move_type === G.move.type && f.troops[type] > 0
+				return f.from === G.move.path[G.move.path.length - 2] && f.strength === get_move_strength(G.move.type) && f.troops[type] > 0
 			})
 			bforce.troops[type]--
 			bforce.troops[type + 1]++
@@ -5415,7 +5428,7 @@ function get_evade_sps(who, area) {
 			}
 		}
 
-		map_set(map_get(evade_sps, force.from, null), force.move_type, troops)
+		map_set(map_get(evade_sps, force.from, null), force.strength, troops)
 	})
 
 	return evade_sps
@@ -5450,7 +5463,7 @@ P.select_evade_force = {
 		}
 
 		L.selected_from = -1
-		L.selected_move_type = -2
+		L.selected_strength = -2
 	},
 	prompt() {
 		// Selecting a force: unlimited with a leader, max. 4 without
@@ -5476,7 +5489,7 @@ P.select_evade_force = {
 
 			button_confirm(L.num_sps_selected > 0)
 		} else {
-			if (L.selected_move_type === -2) {
+			if (L.selected_strength === -2) {
 				prompt(`Select a move type of SPs to select from S${L.area}.`)
 				for (let i = 0; i < map_get(L.sps, L.selected_from, null).length; i += 2)
 					action("move_type", map_get(L.sps, L.selected_from, null)[i])
@@ -5486,17 +5499,17 @@ P.select_evade_force = {
 					if (!set_has(G.move.leaders, leader))
 						button_leader(leader)
 
-				let troops = map_get(map_get(L.sps, L.selected_from, null), L.selected_move_type, null)
+				let troops = map_get(map_get(L.sps, L.selected_from, null), L.selected_strength, null)
 
 				for (let type = 0; type < NUM_TROOP_TYPES; ++type) {
 					if (troops[type] > 0
 						&& L.num_sps_selected < max_sps_selectable
-						&& troops[type] > map_get(map_get(G.move.sps, L.selected_from, null), L.selected_move_type, null)[type]
+						&& troops[type] > map_get(map_get(G.move.sps, L.selected_from, null), L.selected_strength, null)[type]
 					) {
 						action("add_troop", type)
 					}
 
-					if (map_get(map_get(G.move.sps, L.selected_from, null), L.selected_move_type, null)[type] > 0)
+					if (map_get(map_get(G.move.sps, L.selected_from, null), L.selected_strength, null)[type] > 0)
 						action("remove_troop", type)
 				}
 
@@ -5509,44 +5522,44 @@ P.select_evade_force = {
 			L.selected_from = area
 			if (!map_has(G.move.sps, area))
 				map_set(G.move.sps, area, [])
-			map_keys(map_get(L.sps, L.selected_from, [])).forEach((move_type) => {
-				if (!map_has(map_get(G.move.sps, L.selected_from, null), move_type))
-					map_set(map_get(G.move.sps, area, null), move_type, Array(NUM_TROOP_TYPES).fill(0))
+			map_keys(map_get(L.sps, L.selected_from, [])).forEach((strength) => {
+				if (!map_has(map_get(G.move.sps, L.selected_from, null), strength))
+					map_set(map_get(G.move.sps, area, null), strength, Array(NUM_TROOP_TYPES).fill(0))
 			})
-			L.selected_move_type = -2
+			L.selected_strength = -2
 		}
 	},
 	connection(id) {
 		L.selected_from = get_other_area(id, L.area)
 		if (!map_has(G.move.sps, L.selected_from))
 			map_set(G.move.sps, L.selected_from, [])
-		map_keys(map_get(L.sps, L.selected_from, [])).forEach((move_type) => {
-			if (!map_has(map_get(G.move.sps, L.selected_from, null), move_type))
-				map_set(map_get(G.move.sps, L.selected_from, null), move_type, Array(NUM_TROOP_TYPES).fill(0))
+		map_keys(map_get(L.sps, L.selected_from, [])).forEach((strength) => {
+			if (!map_has(map_get(G.move.sps, L.selected_from, null), strength))
+				map_set(map_get(G.move.sps, L.selected_from, null), strength, Array(NUM_TROOP_TYPES).fill(0))
 		})
-		L.selected_move_type = -2
+		L.selected_strength = -2
 	},
 	leader_button(leader) {
 		push_undo()
 		set_toggle(G.move.leaders, leader)
 	},
-	move_type(move_type) {
+	move_type(strength) {
 		push_undo()
-		L.selected_move_type = move_type
+		L.selected_strength = strength
 	},
 	add_troop(type) {
 		push_undo()
-		++map_get(map_get(G.move.sps, L.selected_from, null), L.selected_move_type, null)[type]
+		++map_get(map_get(G.move.sps, L.selected_from, null), L.selected_strength, null)[type]
 		++L.num_sps_selected
 	},
 	remove_troop(type) {
 		push_undo()
-		--map_get(map_get(G.move.sps, L.selected_from, null), L.selected_move_type, null)[type]
+		--map_get(map_get(G.move.sps, L.selected_from, null), L.selected_strength, null)[type]
 		--L.num_sps_selected
 	},
 	next() {
 		push_undo()
-		L.selected_move_type = -2
+		L.selected_strength = -2
 	},
 	done() {
 		push_undo()
@@ -5558,8 +5571,8 @@ P.select_evade_force = {
 		G.move.sps = []
 		map_for_each(L.sps, (from, forces) => {
 			let copy = []
-			map_for_each(forces, (move_type, sps) => {
-				copy.push(move_type)
+			map_for_each(forces, (strength, sps) => {
+				copy.push(strength)
 				copy.push(sps.slice())
 			})
 			map_set(G.move.sps, from, copy)
@@ -5650,7 +5663,7 @@ P.evade_pursuit = {
 function get_evading_sps() {
 	let list = Array(NUM_TROOP_TYPES).fill(0)
 	map_for_each(G.move.sps, (from, forces) => {
-		map_for_each(forces, (move_type, sps) => {
+		map_for_each(forces, (strength, sps) => {
 			for (let type = 0; type < sps.length; ++type)
 				if (sps[type] > 0) {
 					list[type] += sps[type]
@@ -5663,7 +5676,7 @@ function get_evading_sps() {
 function get_evading_sp_types() {
 	let list = []
 	map_for_each(G.move.sps, (from, forces) => {
-		map_for_each(forces, (move_type, sps) => {
+		map_for_each(forces, (strength, sps) => {
 			for (let type = 0; type < sps.length; ++type)
 				if (sps[type] > 0) {
 					set_add(list, type)
@@ -5704,7 +5717,7 @@ P.evade_pursuit_exhaustion = {
 
 		L.count = 1
 		map_for_each(G.move.sps, (from, forces) => {
-			map_for_each(forces, (move_type, sps) => {
+			map_for_each(forces, (strength, sps) => {
 				if (sps[type] > 0) {
 					if (L.count-- > 0) {
 						--sps[type]
@@ -5793,12 +5806,12 @@ P.evade = function() {
 	}
 
 	map_for_each(G.move.sps, (origin, forces) => {
-		map_for_each(forces, (move_type, sps) => {
+		map_for_each(forces, (strength, sps) => {
 			for (let type = 0; type < sps.length; ++type) {
 				if (sps[type] > 0) {
 					move_troop(L.evader, L.area, G.move.destination, type, sps[type])
 					for (let entry of battle_data.forces) {
-						if (entry.from === origin && entry.move_type === move_type) {
+						if (entry.from === origin && entry.strength === strength) {
 							entry.troops[type] -= sps[type]
 						}
 					}
@@ -6111,10 +6124,11 @@ function add_attacker_to_battle(who, from, area, move_type, leaders, troops) {
 	if (!has_battle(area)) init_battle_entry(area)
 
 	let battle = get_battle_entry(area, null)
+	let strength = get_move_strength(move_type)
 
 	//	Merge entries if there is already another with the same characteristics
-	if (battle.attacker.forces.some(force => force.from === from && force.move_type === move_type)) {
-		let force = battle.attacker.forces.find(f => f.from === from && f.move_type === move_type)
+	if (battle.attacker.forces.some(force => force.from === from && force.strength === strength)) {
+		let force = battle.attacker.forces.find(f => f.from === from && f.strength === strength)
 
 		for (let leader of leaders)
 			set_add(force.leaders, leader)
@@ -6128,7 +6142,7 @@ function add_attacker_to_battle(who, from, area, move_type, leaders, troops) {
 
 		battle.attacker.forces.push({
 			from: from,
-			move_type: move_type,
+			strength: strength,
 			river_crossing: has_bridge(from, area),
 			leaders: leaders,
 			troops: troops,
@@ -6152,9 +6166,10 @@ function add_defender_to_battle(who, from, area, move_type, leaders, troops) {
 	if (!has_battle(area)) init_battle_entry(area)
 
 	let battle = get_battle_entry(area, null)
+	let strength = get_move_strength(move_type)
 
-	if (battle.defender.forces.some(force => force.from === from && force.move_type === move_type)) {
-		let force = battle.defender.forces.find(f => f.from === from && f.move_type === move_type)
+	if (battle.defender.forces.some(force => force.from === from && force.strength === strength)) {
+		let force = battle.defender.forces.find(f => f.from === from && f.strength === strength)
 
 		for (let leader of leaders)
 			set_add(force.leaders, leader)
@@ -6167,7 +6182,7 @@ function add_defender_to_battle(who, from, area, move_type, leaders, troops) {
 
 		battle.defender.forces.push({
 			from: from,
-			move_type: move_type,
+			strength: strength,
 			river_crossing: false,
 			leaders: leaders,
 			troops: troops,
@@ -6383,7 +6398,7 @@ function is_fresh_cavalry(troop_type) {
 			forces: [
 				{
 					from: ,
-					move_type: FORCED_MARCH/MARCH
+					strength: FULL/HALF
 					leaders: [],
 					troops: [],
 				}
@@ -6757,7 +6772,7 @@ function get_modifier(who, battle_data) {
 
 	// Forced Marching SPs fight X0.5
 	// FR #1, FR #2 Hard Marching: France fights X1 despite forced marching.
-	if ((battle_data.move_type === FORCED_MARCH) && ((who !== FRANCE) || (!is_event_active(C_HARD_MARCHING_1) && !is_event_active(C_HARD_MARCHING_2))))
+	if ((battle_data.strength === HALF_STRENGTH) && ((who !== FRANCE) || (!is_event_active(C_HARD_MARCHING_1) && !is_event_active(C_HARD_MARCHING_2))))
 		modifier *= 0.5
 
 	// Forces that crossed a river fight X0.5
@@ -8925,13 +8940,13 @@ P.exhaust_sp = {
 			if (has_battle(L.area)) {
 				let battle_data = get_player_battle_data(G.active, L.area)
 
-				let force = battle_data.forces.find(force => force.from === G.move.path[G.move.path.length - 2] && force.move_type === G.move.type)
+				let force = battle_data.forces.find(force => force.from === G.move.path[G.move.path.length - 2] && force.strength === get_move_strength(G.move.type))
 				force.troops[type]--
 				force.troops[type + 1]++
 			}
 
 			if (map_has(G.moved, L.area) && map_get(G.moved, L.area).some(force => force.faction === G.active)) {
-				let force = map_get(G.moved, L.area).find(force => force.faction === G.active && force.from === G.move.path[G.move.path.length - 2] && force.move_type === G.move.type)
+				let force = map_get(G.moved, L.area).find(force => force.faction === G.active && force.from === G.move.path[G.move.path.length - 2] && force.strength === get_move_strength(G.move.type))
 
 				force.troops[type]--
 				force.troops[type + 1]++
@@ -8974,12 +8989,12 @@ P.eliminate_2_exhausted_sps = {
 			if (has_battle(L.area)) {
 				let battle_data = get_player_battle_data(G.active, L.area)
 
-				let force = battle_data.forces.find(force => force.from === G.move.path[G.move.path.length - 2] && force.move_type === G.move.type)
+				let force = battle_data.forces.find(force => force.from === G.move.path[G.move.path.length - 2] && force.strength === get_move_strength(G.move.type))
 				force.troops[type]--
 			}
 
 			if (map_has(G.moved, L.area) && map_get(G.moved, L.area).some(force => force.faction === G.active)) {
-				let force = map_get(G.moved, L.area).find(force => force.faction === G.active && force.from === G.move.path[G.move.path.length - 2] && force.move_type === G.move.type)
+				let force = map_get(G.moved, L.area).find(force => force.faction === G.active && force.from === G.move.path[G.move.path.length - 2] && force.strength === get_move_strength(G.move.type))
 
 				force.troops[type]--
 			}
