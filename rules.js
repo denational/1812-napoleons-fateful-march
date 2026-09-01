@@ -399,6 +399,10 @@ const LAST_ORDER = 53
 const NUM_ORDERS = 54
 
 /* TROOPS */
+// X1 vs. X0,5
+const FULL_STRENGTH = 0
+const HALF_STRENGTH = 1
+
 const FRESH_INFANTRY = 0
 const EXHAUSTED_INFANTRY = 1
 const FRESH_CAVALRY = 2
@@ -1371,17 +1375,31 @@ function on_view() {
 
 	'Local states' are enumerated within the multi-active state in the relative order in which they need to be executed, e.g.:
 	P.state = {
-	...
-	states: {
-		state1: {...},
-		state2: {...}
+		states: {
+			state1: {...},
+			state2: {...}
+		}
 	}
+
+	All action handlers are written within each 'local state' for clarity, and the action handler called by the global framework simply hands over to the current state's action handler.
+	e.g.
+	P.my_multi_active_state = {
+		states: {
+			state1 : {
+				prompt() { ... },
+				on_area(area) { ... },
+			}
+		}
+		area(area) { this.states[L.state[R]].on_area(area) }
 	}
+
+	Common functions:
+		advance_local_state(player): Advances to the next state (in enumeration order) that the player could possibly do.
 
 	(WIP)
 */
 
-function update_local_state(who) {
+function advance_local_state(who) {
 	let states = P[L.P].states
 	let keys = Object.keys(states)
 	let current_state = keys.indexOf(L.state[who])
@@ -1457,8 +1475,6 @@ function on_setup(scenario, options) {
 		[L_ALEXANDER, L_KUTUZOV, L_DE_TOLLY, L_BAGRATION, L_TORMASOV, L_WITTGENSTEIN, L_CHICHAGOV, L_PLATOV],
 		[L_NAPOLEON, L_JEROME, L_DE_BEAUHARNAIS, L_DAVOUT, L_MURAT, L_SCHWARZENBERG]
 	]
-
-
 
 	G.attrition_checked = []
 
@@ -2320,6 +2336,7 @@ P.additional_replacements = {
 	troop_2x(type)	{ this.states[L.state[R]].on_troop_2x(type) },
 }
 
+// TODO: Maybe move to data?
 const DESIGNATED_CARD_CHOICES = [
 	null,
 	{
@@ -2414,9 +2431,8 @@ P.select_new_cards = {
 	}
 }
 
-// Draw card needs refactor to allow same player to draw multiple cards
-
 // === NORMAL TURNS ===
+// Orders are defined as numbers so that they can easily be funnelled into their specific order execution handler
 const TURN_PHASES = [
 	"draw_card_to_hand",
 	"play_card_for_additional_orders",
@@ -2434,6 +2450,7 @@ const TURN_PHASES = [
 	"lines_of_communications"
 ]
 
+// WARNING: Called in P.turn script
 function is_order_turn(turn) {
 	return [FORCED_MARCH, CAVALRY_PATROLS, MARCH, EVADE, RALLY, COSSACK_RAID, PLACE_DEPOT].includes(TURN_PHASES[turn])
 }
@@ -2567,6 +2584,7 @@ function finish_state(player) {
 	}
 }
 
+// TODO: Cleanup after fixing possible bugs: LOTS of repeated code.
 P.draw_card_to_hand = {
 	_begin() {
 		// NOTE: Set G.active to whoever needs to draw a card before calling (since we don't want to define must-play events in different places)
@@ -3260,9 +3278,7 @@ P.play_events_with_ops_card = {
 	prompt() {
 		if (L.events_could_be_played.length > 0) {
 			prompt("Declare any events to be played with your OPs card, or pass.")
-			for (let c of L.events_could_be_played) {
-				action_card(c)
-			}
+			L.events_could_be_played.forEach(card => action_card(card))
 			button_pass()
 		} else if (L.has_played_event) {
 			prompt("No more eligible events can be played.")
@@ -3282,11 +3298,9 @@ P.play_events_with_ops_card = {
 		L.has_played_event = true
 	},
 	pass() {
-		if (!L.has_played_event) {
+		if (!L.has_played_event)
 			log(`${ROLES[G.active]} did not play events.`)
-			end()
-		} else
-			end()
+		end()
 	},
 	done() {
 		this.pass()
@@ -3295,10 +3309,10 @@ P.play_events_with_ops_card = {
 
 //=== 3. CHOOSE ORDERS ===
 function calculate_num_orders() {
-	//Each player has two free orders by default
+	// Each player has two free orders by default
 	var orders = [2, 2]
 
-	//And some additional orders based on the OPs value of their committed card
+	// And some additional orders based on the OPs value of their committed card
 	orders[RUSSIA] += G.additional_orders[RUSSIA]
 	orders[FRANCE] += G.additional_orders[FRANCE]
 
@@ -3344,6 +3358,9 @@ function find_forbidden_orders() { //Being proactive here, maybe rollback later?
 }
 
 /*
+	TODO: Make consistent with the newer multi-active state handling.
+	This state was made before I settled on a standard way to define tricky multi-active states.
+
 	Choose Orders
 	Current order of selection: (mainly so that players are able to pick all the specified orders before moving to freely choosable ones)
 
@@ -3581,6 +3598,7 @@ P.select_orders = {
 
 		if (L.state[R] === STATE_SELECT_FREE_ORDER_PLATOV) G.platov_order = -1
 	},
+	// NOTE: This handler is the precursor to the global advance_state() function, I haven't updated it yet since it works correctly
 	update_state(who) {
 		for (let state = L.state[who] + 1; state <= CHOOSE_ORDERS_STATE_TRANSITIONS.length; ++state) { //Pick the next state, in the order of states defined above that could be performed
 			if (CHOOSE_ORDERS_STATE_TRANSITIONS[state](who)) {
@@ -3619,8 +3637,8 @@ P.place_orders = script(`
 	call place_orders_events { time: "end" }
 `)
 
-//Common state for events that could be played at the beginning of place orders or end of place orders
-//The structure is identical, just the list of events that could be played vary and the player taking actions (beginning: FRANCE, end: RUSSIA)
+// Common state for events that could be played at the beginning of place orders or end of place orders
+// The structure is identical, just the list of events that could be played vary and the player taking actions (beginning: FRANCE, end: RUSSIA)
 P.place_orders_events = {
 	_begin() {
 		//L.time
@@ -3631,8 +3649,7 @@ P.place_orders_events = {
 	prompt() {
 		if (L.playable_events.length > 0) {
 			prompt(`You may play events (${L.events.map(card => get_card_log_alias(card)).join(", ")}).`)
-			for (let c of L.playable_events)
-				action_card(c)
+			L.playable_events.forEach(card => action_card(card))
 			button_pass()
 		} else {
 			if (L.has_played_event)
@@ -3652,7 +3669,6 @@ P.place_orders_events = {
 	done() { end() }
 }
 
-//TODO: implement orders that must be placed on a specific spot (e.g. Platov, french optional rule)
 P.do_place_orders = {
 	_begin() {
 		L.orders_to_place = G.selected_orders.slice() //Copy selected orders
@@ -3664,6 +3680,7 @@ P.do_place_orders = {
 
 		L.orders_placed = [[], []] //Undo stack
 
+		// So that we can conveniently use existing client logic
 		G.selected_orders = [[], []]
 	},
 	is_french_logistic_preparations() {
@@ -3851,13 +3868,13 @@ P.determine_who_goes_first = {
 function can_change_order_to(leader, current_type, type_to, area) {
 	let side = get_leader_faction(leader)
 
-	//If in an execution phase PRIOR to the order the leader has the ability to switch to,
-	//there must be an order of the current type in the leader's location and an order of the type he can switch to in the pool.
+	// If in an execution phase PRIOR to the order the leader has the ability to switch to,
+	// there must be an order of the current type in the leader's location and an order of the type he can switch to in the pool.
 	if (current_type < type_to)
 		return (has_order_of_type(side, current_type, area) && has_order_of_type(side, type_to, POOL))
 
-	//If in the execution phase of the order the leader has the ability to switch to,
-	//there must be a non-dummy (since dummies don't count) order at the leader's location and an order of the type he can switch to in the pool.
+	// If in the execution phase of the order the leader has the ability to switch to,
+	// there must be a non-dummy (since dummies don't count) order at the leader's location and an order of the type he can switch to in the pool.
 	if (current_type === type_to)
 		return get_orders_at_area(get_leader_faction(leader), area).some(order => (get_order_type(order) !== DUMMY_ORDER) && (get_order_type(order) !== current_type)) && has_order_of_type(side, type_to, POOL)
 
@@ -3870,27 +3887,27 @@ function can_switch_order(leader, current_type) {
 
 
 	switch(leader) {
-	//May change an order to ‘Rally’.
+	// May change an order to ‘Rally’.
 	case L_KUTUZOV:
 		return can_change_order_to(L_KUTUZOV, current_type, RALLY, area)
-	//May change an order to ‘Evade’
+	// May change an order to ‘Evade’
 	case L_DE_TOLLY:
 		return can_change_order_to(L_DE_TOLLY, current_type, EVADE, area)
-	//May change an order to ‘Defend’
+	// May change an order to ‘Defend’
 	case L_BAGRATION:
 		return can_change_order_to(L_BAGRATION, current_type, DEFEND, area)
-	//May discard a card to place a ‘Forced March’ order in that order´s step
+	// May discard a card to place a ‘Forced March’ order in that order´s step
 	case L_CHICHAGOV:
 		return (current_type === FORCED_MARCH) && (has_card_in_hand(RUSSIA) && has_order_of_type(RUSSIA, FORCED_MARCH, POOL))
-	//May change an order to ANY order
+	// May change an order to ANY order
 	case L_NAPOLEON:
 		if (is_event_active(C_INDECISION)) return false
 		return (has_order_of_type(FRANCE, current_type, area) && has_switchable_order_in_pool(FRANCE, current_type))
 		|| (has_non_dummy_order_at_area(FRANCE, area) && get_orders_at_area(FRANCE, area).some(order => get_order_type(order) !== current_type && get_order_type(order) !== DUMMY_ORDER) && has_order_of_type(FRANCE, current_type, POOL))
-	//May change an order to ‘March’
+	// May change an order to ‘March’
 	case L_DAVOUT:
 		return can_change_order_to(L_DAVOUT, current_type, MARCH, area)
-	//May discard a card to place an ‘Evade’ order during that order´s step
+	// May discard a card to place an ‘Evade’ order during that order´s step
 	case L_SCHWARZENBERG:
 		return (current_type === EVADE) && (has_card_in_hand(FRANCE) && has_order_of_type(FRANCE, EVADE, POOL))
 	}
@@ -3898,8 +3915,8 @@ function can_switch_order(leader, current_type) {
 
 P.change_orders = {
 	_begin() {
-		//L.current_order_type
-		//Defend doesn't have its own phase, so it might be unclear
+		// L.current_order_type
+		// Explicitly name order type when the header name doesn't march the order's name
 		if (L.current_order_type === DEFEND || L.current_order_type === FORAGE)
 			log_h3(`Change Orders – ${get_order_type_name(L.current_order_type)}`)
 		else
@@ -4386,8 +4403,6 @@ P.end_order = {
 
 //=== 5. EXECUTE FORCED MARCH ORDERS ===
 /*
-	TODO: Bagration's Retreat, Indecision
-
 	Events:
 		RUSSIA
 			RU #4 	Evasive Maneuvers		- before determine_initiative
@@ -4635,7 +4650,6 @@ P.select_force = {
 			if (is_event_active(C_BAGRATIONS_RETREAT) && L.area === get_leader_location(L_BAGRATION))
 				V.prompt += ` L${L_BAGRATION} must participate in ${get_card_log_alias(C_BAGRATIONS_RETREAT)}.`
 
-
 			if (
 				!is_event_active(C_INFIGHTING_AND_INTRIGUE)
 				|| (is_event_active(C_INFIGHTING_AND_INTRIGUE) && get_event_keyword(C_INFIGHTING_AND_INTRIGUE, "area") === L.area && has_valid_infighting_and_intrigue_destination(G.active, L.area, L.type))
@@ -4803,6 +4817,7 @@ function get_movable_areas_in_radius(source, radius, callback = function(area) {
 
 // NOTE: Brian rules that Evasive Maneuvers takes precedence over (and basically cancels) Infighting & Intrigue
 // Brian's ruling: "Evasive Maneuvres is placed last and thus takes precedence :)"
+// I have assumed the same applies for Bagration's Retreat vs. Infighting & Intrigue, since Bagration's Retreat is played after Infighting & Intrigue
 
 // TODO: Alexander must move towards the closest Russian leader if he doesn't have a babysitter
 function get_move_destinations(current_area, allowance) {
@@ -4819,8 +4834,17 @@ function get_move_destinations(current_area, allowance) {
 				&& possible_destinations.some(destination => find_path_distance(area, destination) <= allowance - 1)
 		})
 	}
+	// RU #6 Bagration's Retreat: All moving forces must move to the destination
+	else if (is_event_active(C_BAGRATIONS_RETREAT) && G.active === RUSSIA) {
+		let destination = get_event_keyword(C_BAGRATIONS_RETREAT, "destination")
+
+		return get_movable_areas_in_radius(current_area, 1, (area) => {
+			return can_enter_area(G.active, area)
+				&& find_path_distance(area, destination) <= allowance - 1
+		})
+	}
 	// FR #8 Infighting & Intrigue: Russian leaders in the target area may only execute a 'Forced March' order if they end up in a French-occupied area
-	if (is_event_active(C_INFIGHTING_AND_INTRIGUE) && G.active === RUSSIA && G.move.path[0] === map_get(G.persistent_events, C_INFIGHTING_AND_INTRIGUE, null).area && G.move.leaders.length > 0) {
+	else if (is_event_active(C_INFIGHTING_AND_INTRIGUE) && G.active === RUSSIA && G.move.path[0] === map_get(G.persistent_events, C_INFIGHTING_AND_INTRIGUE, null).area && G.move.leaders.length > 0) {
 		let possible_destinations = get_movable_areas_in_radius(current_area, allowance, (area) => {
 			return can_enter_area(G.active, area) && has_enemy_sp(G.active, area)
 		})
@@ -4828,15 +4852,6 @@ function get_move_destinations(current_area, allowance) {
 		return get_movable_areas_in_radius(current_area, 1, (area) => {
 			return can_enter_area(G.active, area)
 				&& possible_destinations.some(destination => find_path_distance(area, destination) <= allowance - 1)
-		})
-	}
-	// RU #6 Bagration's Retreat: All moving forces must move to the destination
-	if (is_event_active(C_BAGRATIONS_RETREAT) && G.active === RUSSIA) {
-		let destination = get_event_keyword(C_BAGRATIONS_RETREAT, "destination")
-
-		return get_movable_areas_in_radius(current_area, 1, (area) => {
-			return can_enter_area(G.active, area)
-				&& find_path_distance(area, destination) <= allowance - 1
 		})
 	}
 	else if (has_battle(current_area) && is_battle_defender(G.active, current_area)) {
@@ -5325,7 +5340,7 @@ P.may_play_evade_events = {
 	prompt() {
 		if (L.events.length > 0) {
 			prompt(`You may play ${join_array_with_or(L.events.map(card => get_card_log_alias(card)))}.`)
-			L.events.forEach(action_card)
+			L.events.forEach(card => action_card(card))
 			button_pass()
 		} else if (L.has_played_event) {
 			prompt(`Play Events: All done.`)
@@ -5427,7 +5442,6 @@ P.select_evade_force = {
 			leaders: [],
 			// Nested map of troops that can evade.
 			// First keyed by area of origin, then keyed by move type.
-			// For defenders, area of origin is set by default to the area they're evading from (since it's irrelevant for battle).
 			// For attackers, area of origin is important as it can influence their retreat options after battle.
 			// It has to be this intricate since connections influences where the force could retreat after battle & move type determines battle strength.
 			sps: [],
@@ -5878,6 +5892,7 @@ function find_retreat_destinations(who, area, among = get_all_adjacent_areas(are
 			}
 		}
 	}
+
 	return retreat_destinations.filter(dest => {
 		return ignore_enemy_sps || (!ignore_enemy_sps && !has_enemy_sp(who, dest))
 	})
@@ -5954,12 +5969,10 @@ function find_closest_depot_for_retreat(who, area, ignore_enemy_sps = false) {
 		set_add(visited, current)
 
 		if (!ignore_enemy_sps && has_enemy_sp(who, current))
-			continue //The closest depot area might be contested, so continue after checking
+			continue
 
-		//The closest depot might be in an area with a battle, so update depot status for an area before checking enemy troop presence (which blocks further tracing along that path)
-		if (set_has(depots, current)) {
+		if (set_has(depots, current))
 			set_add(closest_depots, current)
-		}
 
 		let new_distance = get_distance(current) + 1
 		for (let loc of get_all_adjacent_areas(current)) {
@@ -5973,6 +5986,8 @@ function find_closest_depot_for_retreat(who, area, ignore_enemy_sps = false) {
 
 //=== 9. BATTLE RESOLUTION ===
 /*
+	NOTE: The events with an asterisk are the ones that are complete so far (will remove these later)
+
 	Events
 	RUSSIA
 *		#5 	Idle Reserves 			If defending											- Imperial Guard fight X0, unless France play 'The Imperial Guard'
@@ -6053,7 +6068,10 @@ function init_battle_entry(area) {
 			attacker: {who: -1, forces: [], losses: 0, num_eliminated: 0,},
 			defender: {who: -1, forces: [], losses: 0, num_eliminated: 0,},
 			events: [],
+			// Event flags for those events that impact the global battle state (by completely ignoring certain connections)
 			outflanking: -1,
+			delayed_forces_ru: -1,
+			delayed_forces_fr: -1,
 		}
 	)
 }
@@ -6105,7 +6123,6 @@ function add_attacker_to_battle(who, from, area, move_type, leaders, troops) {
 			if (troops[type] > 0)
 				force.troops[type] += troops[type]
 	}
-
 	else {
 		battle.attacker.who = who
 
@@ -6214,8 +6231,6 @@ function add_battle_event(area, event) {
 	let battle = get_battle_entry(area, null)
 
 	set_add(battle.events, event)
-
-	//console.log(JSON.stringify(G.battles, null, 2))
 }
 
 function remove_battle_event(area, event) {
@@ -6668,9 +6683,7 @@ function is_outflanking_currently_active(who) {
 	if (who === RUSSIA)
 		return is_battle_event_currently_active(C_OUTFLANKING_RU)
 	else
-		if (!is_battle_event_currently_active(C_POOR_COORDINATION_RU))
-			return is_battle_event_currently_active(C_OUTFLANKING_FR_1) || is_battle_event_currently_active(C_OUTFLANKING_FR_2)
-	return false
+		return is_battle_event_currently_active(C_OUTFLANKING_FR_1) || is_battle_event_currently_active(C_OUTFLANKING_FR_2)
 }
 
 P.do_combat_value_calculations = function() {
@@ -7204,8 +7217,8 @@ P.assign_losses = {
 
 		//State machine to handle event interactions (as enumerated below)
 		L.state = [null, null]
-		update_local_state(RUSSIA)
-		update_local_state(FRANCE)
+		advance_local_state(RUSSIA)
+		advance_local_state(FRANCE)
 
 		//Local undo stack: stores the local state, type of action performed and any additional information necessary to reconstruct the previous game state
 		L.undo = [[], []]
@@ -7228,11 +7241,11 @@ P.assign_losses = {
 			on_troop(type) {
 				let connections = battle_rally_troop(FRANCE, G.current_battle, type)
 				push_local_undo(FRANCE, "rally", { type, num: 1, connections } )
-				update_local_state(FRANCE)
+				advance_local_state(FRANCE)
 			},
 			on_next() {
 				push_local_undo(FRANCE, "next")
-				update_local_state(FRANCE)
+				advance_local_state(FRANCE)
 			}
 		},
 		"fierce_fighting_fr":
@@ -7255,11 +7268,11 @@ P.assign_losses = {
 				log(`${get_card_log_alias(C_FIERCE_FIGHTING_FR)}: L${leader} killed!`)
 				increase_vp(FRANCE, get_leader_vp(leader))
 
-				update_local_state(RUSSIA)
+				advance_local_state(RUSSIA)
 			},
 			on_next() {
 				push_local_undo(RUSSIA, "next")
-				update_local_state(RUSSIA)
+				advance_local_state(RUSSIA)
 			}
 		},
 		"infantry_squares":
@@ -7280,11 +7293,11 @@ P.assign_losses = {
 				let connections = battle_exhaust_troop(R, G.current_battle, type) //First hit is always an exhaustion
 				push_local_undo(R, "exhaust", { type, num: 1, connections })
 				++L.count[R]
-				update_local_state(R)
+				advance_local_state(R)
 			},
 			on_next() {
 				push_local_undo(R, "next")
-				update_local_state(R)
+				advance_local_state(R)
 			}
 		},
 		"assign_losses_main":
@@ -7794,6 +7807,7 @@ function losing_force_includes_king(winner, battle) {
 
 // RU: Stoic Infantry
 // FR: The Imperial Guard, Murat's Cavalry, Ney's III Corps
+// WARNING: Called in end_battle script
 function could_any_end_battle_events_be_played() {
 	return (is_battle_event_currently_active(C_STOIC_INFANTRY) && has_russian_sp(G.current_battle))
 			|| (is_battle_event_currently_active(C_THE_IMPERIAL_GUARD) && get_battle_loser(G.current_battle) === FRANCE)
@@ -7812,8 +7826,8 @@ P.end_battle_events = {
 			set_add(G.active, FRANCE)
 
 		L.state = [null, null]
-		update_local_state(RUSSIA)
-		update_local_state(FRANCE)
+		advance_local_state(RUSSIA)
+		advance_local_state(FRANCE)
 
 		L.num_sps_to_rally = Math.min(count_num_sps_of_type(RUSSIA, EXHAUSTED_INFANTRY, G.current_battle), Math.min(2, get_event_keyword(C_STOIC_INFANTRY, "num_exhausted_infantry", 0)))
 		L.has_discarded = false
@@ -7872,12 +7886,12 @@ P.end_battle_events = {
 			},
 			on_next() {
 				push_local_undo(R, "next")
-				update_local_state(R)
+				advance_local_state(R)
 			},
 			on_vp() {
 				increase_vp(RUSSIA, 2)
 				push_local_undo(R, "vp")
-				update_local_state(R)
+				advance_local_state(R)
 			}
 		},
 		"murats_cavalry":
@@ -7895,11 +7909,11 @@ P.end_battle_events = {
 			on_troop(type) {
 				let connections = battle_exhaust_troop(FRANCE, G.current_battle, type)
 				push_local_undo(FRANCE, "exhaust", { type, num: 1, connections })
-				update_local_state(FRANCE)
+				advance_local_state(FRANCE)
 			},
 			on_next() {
 				push_local_undo(R, "next")
-				update_local_state(R)
+				advance_local_state(R)
 			}
 		},
 		"neys_iii_corps":
@@ -7918,11 +7932,11 @@ P.end_battle_events = {
 			on_troop(type) {
 				let connections = battle_rally_troop(FRANCE, G.current_battle, type)
 				push_local_undo(FRANCE, "rally", { type, num: 1, connections } )
-				update_local_state(FRANCE)
+				advance_local_state(FRANCE)
 			},
 			on_next() {
 				push_local_undo(R, "next")
-				update_local_state(R)
+				advance_local_state(R)
 			}
 		},
 		"finish_state":
@@ -8046,6 +8060,7 @@ P.select_retreat_force = {
 }
 */
 
+// WARNING: Placeholder retreat state without leader abilities so that test games progress
 P.retreat = {
 	_begin() {
 		//L.loser
@@ -9189,13 +9204,14 @@ function check_lines_of_communication(who) {
 
 //=== EVENTS ===
 /*
-	G.persistent events is a plain 1D array 'map' of alternating key, value pairs (see framework).
+	G.persistent events is a plain array 'map' using the framework functions.
 	key - event card id
 	value - an object that contains information relevant to the event, including
 		event removal turn
 		area it applies to (only some events)
 
 	Use add_event_keyword to add any keywords necessary to store the event's effect
+	Use get_event_keyword to read specific keywords attached to the event
 */
 function get_event_state_name(event) {
 	return cards[event].state_name
@@ -11262,7 +11278,7 @@ P.treacherous_allies = {
 		}
 
 		// Remove these guys from the battle
-		let battle_data = get_player_battle_data(FRANCE, L.current_battle)
+		let battle_data = get_player_battle_data(FRANCE, G.current_battle)
 		battle_data.forces.forEach(force => {
 			if (set_has(force.leaders, L_SCHWARZENBERG))
 				set_delete(force.leaders, L_SCHWARZENBERG)
@@ -11591,12 +11607,10 @@ P.war_weariness = {
 	vp() {
 		push_undo()
 		increase_vp(FRANCE, L.french_vp)
-		for (let s of L.controlled_areas) {
+		for (let s of L.controlled_areas)
 			logi(`+1 S${s}`)
-		}
-		for (let leader of L.eliminated_russian_leaders) {
+		for (let leader of L.eliminated_russian_leaders)
 			logi(`+1 L${leader}`)
-		}
 		end()
 	}
 }
@@ -11606,7 +11620,7 @@ P.holy_mother_russia_fr = {
 	inactive: "to exploit the pressure on the Russian leadership",
 	prompt() {
 		prompt_card(C_HOLY_MOTHER_RUSSIA_FR, "Designate a Key City area. France +1 VP for each RU force that leaves there via 'Forced March', 'March', or 'Evade' orders.")
-		for (let area = FIRST_AREA; area <= LAST_AREA; ++area) { //TO CHECK: Does this have to be restricted to RU-controlled Key cities?
+		for (let area = FIRST_AREA; area <= LAST_AREA; ++area) {
 			if (get_area_type(area) === "key_city") {
 				action_area(area)
 			}
@@ -11614,7 +11628,7 @@ P.holy_mother_russia_fr = {
 	},
 	area(area) {
 		log(`This turn, France will gain 1 VP for each RU force that leaves S${area} via 'Force March', 'March' or 'Evade'.`)
-		add_persistent_event(C_HOLY_MOTHER_RUSSIA_FR, {area: area})
+		add_persistent_event(C_HOLY_MOTHER_RUSSIA_FR, { area })
 		end()
 	}
 }
@@ -11651,9 +11665,6 @@ P.polish_support = {
 		push_undo()
 		end()
 	},
-	_resume() {
-		++L.step
-	},
 }
 
 // FR #7 Unsuccessful Disengagement
@@ -11667,7 +11678,7 @@ P.may_play_unsuccessful_disengagement = {
 		}
 		button_pass()
 	},
-	card(card) {
+	card(_) {
 		push_undo()
 		goto("unsuccessful_disengagement", { area: L.area })
 	},
@@ -11703,6 +11714,7 @@ P.unsuccessful_disengagement = {
 }
 
 // FR #8: Infighting & Intrigue
+// NOTE: This one is tricky and is enforced in the 'move' state
 function has_valid_infighting_and_intrigue_destination(who, area, type) {
 	let allowance = get_max_move_allowance(who, area, type)
 	return array_count(get_movable_areas_in_radius(area, allowance), destination => has_enemy_sp(who, destination)) > 0
@@ -12368,7 +12380,7 @@ P.the_imperial_guard = {
 }
 
 // FR #32: Delayed Forces
-
+// TODO
 E.delayed_forces_fr = function() {
 	return (is_battle_attacker(RUSSIA, G.current_battle) && did_attacker_attack_across_multiple_connections(G.current_battle)) ||
 		(is_battle_defender(RUSSIA, G.current_battle) && (count_num_defender_connections(G.current_battle) > 1))
