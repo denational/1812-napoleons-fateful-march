@@ -8926,9 +8926,10 @@ P.exhaust_sp = {
 	prompt() {
 		prompt(`Exhaust 1 fresh SP at S${L.area}.`)
 		if (must_assign_cavalry_attrition_loss() && (count_num_sps_of_type(G.active, FRESH_CAVALRY, L.area) > 0 || count_num_sps_of_type(G.active, FRESH_COSSACK, L.area) > 0))
-			get_all_fresh_sp_types(G.active, L.area).filter(type => is_cavalry(type) || is_cossack(type)).forEach(action_troop)
+			get_all_fresh_sp_types(G.active, L.area).filter(type => is_cavalry(type) || is_cossack(type)).forEach(type => action_troop_imp(type, L.area))
 		else
-			get_all_fresh_sp_types(G.active, L.area).forEach(action_troop)
+			get_all_fresh_sp_types(G.active, L.area).forEach(type => action_troop_imp(type, L.area))
+		console.log(V.actions)
 	},
 	troop(type) {
 		push_undo()
@@ -13017,6 +13018,67 @@ function action_depot(depot) 			{ action("depot", depot) }
 function action_connection(from, to) 	{ action("connection", find_connection(from, to)) }
 function action_troop(type) 			{ action("troop", type) }
 function button_leader(leader) 			{ action("leader_button", leader) }
+
+/*
+	20 bits
+	1 bit - player (RUSSIA or FRANCE)
+	4 bits - troop type (from FRESH_INFANTRY (0) to EXHAUSTED_AUSTRIAN_INFANTRY (11))
+	1 bit - strength (HALF_STRENGTH, FULL_STRENGTH)
+	7 bits - area (needs to accomodate at least until 157)
+	7 bit - area from which the SP entered (also needs to accomodate at least 157)
+*/
+
+const ACTION_TROOP_PLAYER_MASK = 1 << 19
+const ACTION_TROOP_TYPE_MASK = 491520
+const ACTION_TROOP_STRENGTH_MASK = 1 << 14
+const ACTION_TROOP_AREA_MASK = 16256
+const ACTION_TROOP_FROM_MASK = 127
+
+const ACTION_TROOP_PLAYER_SHIFT = 19
+const ACTION_TROOP_TYPE_SHIFT = 15
+const ACTION_TROOP_STRENGTH_SHIFT = 14
+const ACTION_TROOP_AREA_SHIFT = 7
+const ACTION_TROOP_FROM_SHIFT = 0
+
+function package_troop(player, type, strength, area, from) {
+	let p = player << ACTION_TROOP_PLAYER_SHIFT
+	let t = type << ACTION_TROOP_TYPE_SHIFT
+	let s = strength << ACTION_TROOP_STRENGTH_SHIFT
+	let a = area << ACTION_TROOP_AREA_SHIFT
+	let f = from << ACTION_TROOP_FROM_SHIFT
+
+	return p + t + s + a + f
+}
+
+function decode_troop_action_player(entry) {
+	return (entry & ACTION_TROOP_PLAYER_MASK) >> ACTION_TROOP_PLAYER_SHIFT
+}
+
+function decode_troop_action_type(entry) {
+	return (entry & ACTION_TROOP_TYPE_MASK) >> ACTION_TROOP_TYPE_SHIFT
+}
+
+function decode_troop_action_strength(entry) {
+	return (entry & ACTION_TROOP_STRENGTH_MASK) >> ACTION_TROOP_STRENGTH_SHIFT
+}
+
+function decode_troop_action_area(entry) {
+	return (entry & ACTION_TROOP_AREA_MASK) >> ACTION_TROOP_AREA_SHIFT
+}
+
+function decode_troop_action_from(entry) {
+	return (entry & ACTION_TROOP_FROM_MASK) >> ACTION_TROOP_FROM_SHIFT
+}
+
+function action_troop_imp(type, area = 0, strength = FULL_STRENGTH, from = POOL) {
+	let player
+	if (Array.isArray(G.active))
+		player = R
+	else
+		player = G.active
+
+	action("troop", package_troop(player, type, strength, area, from))
+}
 
 //=== LOGGING ===
 function get_abbreviation(who) {

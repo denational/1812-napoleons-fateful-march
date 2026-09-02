@@ -162,6 +162,9 @@ const SPECIAL = 2
 const HALF_STRENGTH = 0
 const FULL_STRENGTH = 1
 
+const FRESH = "fresh"
+const EXHAUSTED = "exhausted"
+
 /* TIME */
 const JUNE_5 = 0
 const JULY_R = 1
@@ -204,6 +207,10 @@ function get_nation_name(nation) {
 
 function get_abbreviation(nation) {
 	return ABBREVIATIONS[nation]
+}
+
+function get_faction(nation) {
+	return (nation === RUSSIA) ? RUSSIA : FRANCE
 }
 
 function get_opponent(player) {
@@ -392,6 +399,42 @@ function get_exhaustion_selector(type) {
 	return is_exhausted(type) ? "exhausted" : "fresh"
 }
 
+function get_first_counter(player, type) {
+	if (type === FRESH_INFANTRY || type === EXHAUSTED_INFANTRY) {
+		if (player === RUSSIA) return first_ru_inf
+		if (player === FRANCE) return first_fr_inf
+	} else if (type === FRESH_CAVALRY || type === EXHAUSTED_CAVALRY ) {
+		if (player === RUSSIA) return first_ru_cav
+		if (player === FRANCE) return first_fr_cav
+	} else if (type === FRESH_COSSACK || type === EXHAUSTED_COSSACK) {
+		return first_ru_cossack
+	} else if (type === FRESH_GUARD || type === EXHAUSTED_GUARD) {
+		return first_fr_guard
+	} else if (type === FRESH_PRUSSIAN_INFANTRY || type === FRESH_AUSTRIAN_INFANTRY) {
+		return first_fr_pr_inf
+	} else if (type === FRESH_AUSTRIAN_INFANTRY || type === EXHAUSTED_AUSTRIAN_INFANTRY) {
+		return first_fr_au_inf
+	}
+}
+
+function get_last_counter(player, type) {
+	if (type === FRESH_INFANTRY || type === EXHAUSTED_INFANTRY) {
+		if (player === RUSSIA) return last_ru_inf
+		if (player === FRANCE) return last_fr_inf
+	} else if (type === FRESH_CAVALRY || type === EXHAUSTED_CAVALRY ) {
+		if (player === RUSSIA) return last_ru_cav
+		if (player === FRANCE) return last_fr_cav
+	} else if (type === FRESH_COSSACK || type === EXHAUSTED_COSSACK) {
+		return last_ru_cossack
+	} else if (type === FRESH_GUARD || type === EXHAUSTED_GUARD) {
+		return last_fr_guard
+	} else if (type === FRESH_PRUSSIAN_INFANTRY || type === FRESH_AUSTRIAN_INFANTRY) {
+		return last_fr_pr_inf
+	} else if (type === FRESH_AUSTRIAN_INFANTRY || type === EXHAUSTED_AUSTRIAN_INFANTRY) {
+		return last_fr_au_inf
+	}
+}
+
 function get_used(who, type) {
 	switch(type) {
 	case FRESH_INFANTRY:
@@ -458,6 +501,115 @@ function get_num_depots(player) {
 function get_pool_depots(side) {
 	return (side === RUSSIA) ? "ru_pool_depots" : "fr_pool_depots"
 }
+
+// === SPECIAL TROOP HANDLING (WIP) ===
+// WARNING: Touches sections of the world.js framework.
+class Troop extends Thing {
+	constructor(element, type, action, id) {
+		// We can now conveniently use all world.js functions excepting those which affect actions
+		super(element, action, id)
+
+		this.my_player = -1
+		// Set to fresh version by default -- see update_troop_exhaustion
+		this.is_exhausted = false
+		this.my_type = type
+		this.my_strength = FULL_STRENGTH
+		this.my_area = -1
+		this.my_from = -1
+	}
+
+	// Modifies standard Thing action
+	// Calls a modified callback that supports the bitpacked argument that is sent with V
+	action() {
+		if (!this.is_action) {
+			this.is_action = true
+			this.element.addEventListener("mousedown", _on_click_troop)
+			world.action_list.push(this)
+		}
+		return this
+	}
+}
+
+function _on_click_troop(evt) {
+	if (evt.button === 0) {
+		var thing = evt.currentTarget.thing
+		evt.stopPropagation()
+		if (_focus_stack(thing.element.parentElement.thing))
+			if (!send_action("troop", package_troop_id(thing.my_id)))
+				_blur_stack()
+	}
+}
+
+function package_troop_id(id) {
+	let troop = lookup_troop(id)
+
+	let player = troop.my_player
+	let type = troop.my_type
+	let strength = troop.my_strength
+	let area = troop.my_area
+	let from = troop.my_from
+
+	return package_troop(player, type, strength, area, from)
+}
+
+function define_troop(type, id) {
+	return new Troop(document.createElement("div"), type, "troop", id)
+}
+
+function define_troop_of_type(type, id, nationality) {
+	let troop =  define_troop(type, id)
+		.keyword(get_sp_selector(type))
+		.action()
+		.animate()
+		.stackable()
+		.keyword(get_abbreviation(nationality))
+
+	define_thing("troop-text", id)
+	troop.my_player = get_faction(nationality)
+
+	return troop
+}
+
+function define_troop_type_list(type, a, b, keywords) {
+	for (let i = a; i <= b; ++i)
+		define_troop_of_type(type, i, keywords)
+}
+
+function lookup_troop(id) {
+	return lookup_thing("troop", id)
+}
+
+function update_troop_exhaustion(id, state) {
+	let troop = lookup_thing("troop", id)
+	if (!troop)
+		throw new Error (`Troop ${id} not found!`)
+	update_keyword("troop", id, state)
+	troop.is_exhausted = (state === EXHAUSTED)
+	if (is_exhausted(troop.my_type) && state === FRESH || is_fresh(troop.my_type) && state === EXHAUSTED)
+		troop.my_type = toggle_troop_type_exhaustion(troop.my_type)
+}
+
+function toggle_troop_type_exhaustion(type) {
+	if (is_fresh(type)) return type + 1
+	else return type - 1
+}
+
+function populate_half_strength(player, parent_id, count = 1) {
+	populate_generic("troop", parent_id, `half_strength_${get_abbreviation(player)}`, count)
+
+	let troop = lookup_troop(parent_id)
+	troop.my_strength = HALF_STRENGTH
+}
+
+function populate_troop(player, type, parent_action, parent_id) {
+	let troop_id = get_used(player, type)
+
+	populate(parent_action, parent_id, "troop", troop_id)
+
+	// Reset flag each render
+	lookup_troop(troop_id).my_strength = FULL_STRENGTH
+}
+
 
 // === INITIALIZE THINGS ===
 /* HELPERS */
@@ -544,16 +696,16 @@ function on_init() {
 	}
 
 	/* SPs */
-	define_troop_list("infantry", first_ru_inf, last_ru_inf, "ru")
-	define_troop_list("infantry", first_fr_inf, last_fr_inf, "fr")
-	define_troop_list("infantry", first_fr_pr_inf, last_fr_pr_inf, "pr")
-	define_troop_list("infantry", first_fr_au_inf, last_fr_au_inf, "au")
+	define_troop_type_list(FRESH_INFANTRY, first_ru_inf, last_ru_inf, RUSSIA)
+	define_troop_type_list(FRESH_INFANTRY, first_fr_inf, last_fr_inf, FRANCE)
+	define_troop_type_list(FRESH_PRUSSIAN_INFANTRY, first_fr_pr_inf, last_fr_pr_inf, PRUSSIA)
+	define_troop_type_list(FRESH_AUSTRIAN_INFANTRY, first_fr_au_inf, last_fr_au_inf, AUSTRIA)
 
-	define_troop_list("cavalry", first_ru_cav, last_ru_cav, "ru")
-	define_troop_list("cavalry", first_fr_cav, last_fr_cav, "fr")
+	define_troop_type_list(FRESH_CAVALRY, first_ru_cav, last_ru_cav, RUSSIA)
+	define_troop_type_list(FRESH_CAVALRY, first_fr_cav, last_fr_cav, FRANCE)
 
-	define_troop_list("cossack", first_ru_cossack, last_ru_cossack, "ru")
-	define_troop_list("guard", first_fr_guard, last_fr_guard, "fr")
+	define_troop_type_list(FRESH_COSSACK, first_ru_cossack, last_ru_cossack, RUSSIA)
+	define_troop_type_list(FRESH_GUARD, first_fr_guard, last_fr_guard, FRANCE)
 
 	/* CARDS */
 	define_card_list("card", 0, 107, "card_")
@@ -902,54 +1054,36 @@ function update_troops() {
 			if (has_battle(area)) {
 				// All battle entries use V.battles as basis to populate them onto the right places.
 				// Attacker: All SPs are populated on connections.
+				// Defender: Only SPs that entered the area after the battle was first declared.
 
 				for (let force of get_player_battle_data(player, area).forces) {
-					if (force.troops[type] > 0)
-					{
-						// Update the exhaustion status of the next unused troop piece of the current type
-						update_keyword(get_sp_selector(type), get_used(player, type), is_fresh(type) ? "fresh" : "exhausted")
+					if (force.troops[type] > 0) {
+						// Update the exhaustion status of the corresponding troop counter
+						update_troop_exhaustion(get_used(player, type), is_fresh(type) ? FRESH : EXHAUSTED)
 
-						// Defending forces who were in the area before the battle started
+						// Defending forces which were in the area before the battle started have their 'from' set to the area itself
 						if (force.from === area) {
-							if (get_seniormost_leader_on_connection(player, area, area) > -1) {
-								populate(
-									get_sp_bucket(type), get_seniormost_leader_on_connection(player, force.from, area),
-									get_sp_selector(type), get_used(player, type)
-								)
-								populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
-							}
-							else {
-								populate(
-									`area_stack`, area,
-									get_sp_selector(type), get_used(player, type)
-								)
-								populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
-							}
-						}
-						else {
-							// SPs with a leader on their connection go to his mat
-							if (get_seniormost_leader_on_connection(player, force.from, area) > -1) {
-								populate(
-									get_sp_bucket(type), get_seniormost_leader_on_connection(player, force.from, area),
-									get_sp_selector(type), get_used(player, type)
-								)
-								populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
-							}
-							// Otherwise they are populated on the map
-							else {
-								populate(
-									`connection_stack`, find_connection(force.from, area),
-									get_sp_selector(type), get_used(player, type)
-								)
-								populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
-							}
+							if (get_seniormost_leader_on_connection(player, area, area) > -1)
+								populate_troop(player, type, get_sp_bucket(type), get_seniormost_leader_on_connection(player, area, area))
+							else
+								populate_troop(player, type, "area_stack", area)
+
+							lookup_troop(get_used(player, type)).my_area = area
+							lookup_troop(get_used(player, type)).my_from = area
+						} else {
+							if (get_seniormost_leader_on_connection(player, force.from, area) > -1)
+								populate_troop(player, type, get_sp_bucket(type), get_seniormost_leader_on_connection(player, force.from, area))
+							else
+								populate_troop(player, type, "connection_stack", find_connection(force.from, area))
+
+							lookup_troop(get_used(player, type)).my_area = area
+							lookup_troop(get_used(player, type)).my_from = force.from
 						}
 
-						if (force.strength === HALF_STRENGTH)
-							populate(get_sp_selector(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
-
-						if (is_battle_attacker(player, area) && has_bridge(force.from, area))
-							populate(get_sp_selector(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
+						if (force.strength === HALF_STRENGTH && (is_battle_attacker(player, area) && has_bridge(force.from, area)))
+							populate_half_strength(player, get_used(player, type), 2)
+						else if ((force.strength === HALF_STRENGTH || (is_battle_attacker(player, area) && has_bridge(force.from, area))))
+							populate_half_strength(player, get_used(player, type))
 
 						if (!map_has(troop_nums, get_used(player, type)))
 							map_set(troop_nums, get_used(player, type), force.troops[type])
@@ -957,67 +1091,55 @@ function update_troops() {
 						incr_used(player, type)
 					}
 				}
-			}
-			else {
+			} else {
 				let num_moved = 0
 
 				if (map_has(V.moved, area) && map_get(V.moved, area, null).some(force => force.strength === HALF_STRENGTH)) {
 					for (let force of map_get(V.moved, area, null)) {
-						if (force.faction === player && force.troops[type] > 0 && force.move_type === FORCED_MARCH) {
-							update_keyword(get_sp_selector(type), get_used(player, type), is_fresh(type) ? "fresh" : "exhausted")
+						if (force.faction === player && force.troops[type] > 0 && force.strength === HALF_STRENGTH) {
+							update_troop_exhaustion(get_used(player, type), is_fresh(type) ? FRESH : EXHAUSTED)
 
-							if (has_friendly_leader(player, area)) {
-								populate(
-									get_sp_bucket(type), get_seniormost_leader(player, area),
-									get_sp_selector(type), get_used(player, type)
-								)
-								populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
-							} else {
-								populate(
-									"area_stack", area,
-									get_sp_selector(type), get_used(player, type)
-								)
-								populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
-							}
+							if (has_friendly_leader(player, area))
+								populate_troop(player, type, get_sp_bucket(type), get_seniormost_leader(player, area))
+							else
+								populate_troop(player, type, "area_stack", area)
+
+
+							lookup_troop(get_used(player, type)).my_area = area
+							lookup_troop(get_used(player, type)).my_from = POOL
 
 							num_moved += force.troops[type]
-							populate(get_sp_selector(type), get_used(player, type), `half_strength_${get_abbreviation(player)}`, used_half_strength[player]++)
-
+							populate_half_strength(player, get_used(player, type))
 							if (!map_has(troop_nums, get_used(player, type)))
 								map_set(troop_nums, get_used(player, type), force.troops[type])
-
 							incr_used(player, type)
 						}
 					}
 				}
 
-				// Default population logic
-				// If there is a friendly leader in the area, put SPs there on his mat
 				if (num > num_moved) {
-					update_keyword(get_sp_selector(type), get_used(player, type), is_fresh(type) ? "fresh" : "exhausted")
+					update_troop_exhaustion(get_used(player, type), is_fresh(type) ? FRESH : EXHAUSTED)
 
 					if (has_friendly_leader(player, area)) {
-						populate(
-							get_sp_bucket(type), get_seniormost_leader(player, area),
-							get_sp_selector(type), get_used(player, type)
-						)
-						populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
-					} else {
+						populate_troop(player, type, get_sp_bucket(type), get_seniormost_leader(player, area))
+					}  else {
 						if (area === FRENCH_CASUALTIES) {
-							populate("fr_casualties", 0, get_sp_selector(type), get_used(player, type))
-							populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
+							populate_troop(player, type, "fr_casualties", 0)
 						} else {
-							populate("area_stack", area, get_sp_selector(type), get_used(player, type))
-							populate(get_sp_selector(type), get_used(player, type), "troop-text", get_used(player, type))
+							populate_troop(player, type, "area_stack", area)
 						}
 					}
 
-					if (!map_has(troop_nums, get_used(player, type)))
-						map_set(troop_nums, get_used(player, type), num - num_moved)
-					incr_used(player, type)
+					lookup_troop(get_used(player, type)).my_area = area
+					lookup_troop(get_used(player, type)).my_from = POOL
 				}
+
+				if (!map_has(troop_nums, get_used(player, type)))
+					map_set(troop_nums, get_used(player, type), num - num_moved)
+				incr_used(player, type)
 			}
 			map_for_each(troop_nums, (id, count) => {
+				populate("troop", id, "troop-text", id)
 				update_text("troop-text", id, count)
 			})
 		}

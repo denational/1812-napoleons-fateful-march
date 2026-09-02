@@ -111,6 +111,92 @@ const world = {
 	parent_h: 1080,
 }
 
+// === MODIFICATIONS FOR 1812: NAPOLEON'S FATEFUL MARCH ===
+// Holds all the code & constants necessary to decode the special 'troop' action
+// Held separate from play.js since these code segments modify the operation of world.js
+
+const ACTION_TROOP_PLAYER_MASK = 1 << 19
+const ACTION_TROOP_TYPE_MASK = 491520
+const ACTION_TROOP_STRENGTH_MASK = 1 << 14
+const ACTION_TROOP_AREA_MASK = 16256
+const ACTION_TROOP_FROM_MASK = 127
+
+const ACTION_TROOP_PLAYER_SHIFT = 19
+const ACTION_TROOP_TYPE_SHIFT = 15
+const ACTION_TROOP_STRENGTH_SHIFT = 14
+const ACTION_TROOP_AREA_SHIFT = 7
+const ACTION_TROOP_FROM_SHIFT = 0
+
+function decode_troop_action_player(entry) {
+	return (entry & ACTION_TROOP_PLAYER_MASK) >> ACTION_TROOP_PLAYER_SHIFT
+}
+
+function decode_troop_action_type(entry) {
+	return (entry & ACTION_TROOP_TYPE_MASK) >> ACTION_TROOP_TYPE_SHIFT
+}
+
+function decode_troop_action_strength(entry) {
+	return (entry & ACTION_TROOP_STRENGTH_MASK) >> ACTION_TROOP_STRENGTH_SHIFT
+}
+
+function decode_troop_action_area(entry) {
+	return (entry & ACTION_TROOP_AREA_MASK) >> ACTION_TROOP_AREA_SHIFT
+}
+
+function decode_troop_action_from(entry) {
+	return (entry & ACTION_TROOP_FROM_MASK) >> ACTION_TROOP_FROM_SHIFT
+}
+
+function package_troop(player, type, strength, area, from) {
+	let p = player << ACTION_TROOP_PLAYER_SHIFT
+	let t = type << ACTION_TROOP_TYPE_SHIFT
+	let s = strength << ACTION_TROOP_STRENGTH_SHIFT
+	let a = area << ACTION_TROOP_AREA_SHIFT
+	let f = from << ACTION_TROOP_FROM_SHIFT
+
+	return p + t + s + a + f
+}
+
+function find_troop(argument) {
+	let player = decode_troop_action_player(argument)
+	let type = decode_troop_action_type(argument)
+	let strength = decode_troop_action_strength(argument)
+	let area = decode_troop_action_area(argument)
+	let from = decode_troop_action_from(argument)
+
+	for (let i = get_first_counter(player, type); i <= get_last_counter(player, type); ++i) {
+		let troop = world.things.troop[i]
+
+		if (
+			troop.my_strength === strength
+			&& troop.my_area === area
+			&& troop.my_from === from
+		) {
+			return troop.my_id
+		}
+	}
+
+	return -1
+}
+
+// WARNING: 1812 Napoleon's Fateful March modification for special troop action
+function is_troop_action(action, id) {
+	if (V.actions) {
+		if (id === undefined)
+			return V.actions[action] === 1
+		if (V.actions[action] === undefined)
+			return false
+		if (!Array.isArray(V.actions[action]))
+			throw new Error("action is not a list: " + action)
+
+		let troop_action_ids = V.actions[action].map(entry => find_troop(entry))
+		return troop_action_ids.includes(id)
+	}
+	return false
+}
+
+// === END OF 1812 - SPECIFIC MODIFICATIONS (EXCEPTING end_update) ===
+
 class Thing {
 	constructor(element, action, id) {
 		assert(element, "thing without an html element")
@@ -943,8 +1029,12 @@ function end_update() {
 			thing.element.textContent = ""
 	}
 
+	// WARNING: 1812 Napoleon's Fateful March modification for special troop action
 	for (thing of world.action_list) {
-		thing.element.classList.toggle("action", is_action(thing.my_action, thing.my_id))
+		if (thing.my_action === "troop")
+			thing.element.classList.toggle("action", is_troop_action(thing.my_action, thing.my_id))
+		else
+			thing.element.classList.toggle("action", is_action(thing.my_action, thing.my_id))
 	}
 
 	for (thing of world.button_list) {
