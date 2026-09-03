@@ -6550,7 +6550,6 @@ P.play_battle_events = script(`
 `)
 
 const BATTLE_CARD = 2
-
 function is_battle_card(card) {
 	return cards[card].type === BATTLE_CARD
 }
@@ -6559,13 +6558,6 @@ function count_num_battle_events_in_hand(who) {
 	return array_count(get_hand(who), card => is_battle_card(card))
 }
 
-//TODO:  RU #7 "Indecision" trigger after FR plays #31 "The Imperial Guard"
-/*
-	Events that need a state transition:
-	RUSSIA
-		#33 Fortifications
-
-*/
 P.commit_battle_events = {
 	_begin() {
 		//L.area
@@ -7088,6 +7080,45 @@ function count_num_sps_of_type(who, type, area) {
 	return count
 }
 
+function battle_rally_sp(who, area, type, strength, from, num = 1) {
+	rally_troop(who, area, type, num)
+
+	let battle_data = get_player_battle_data(who, area)
+	let force = battle_data.forces.find(f => f.strength === strength && f.from === from)
+	force.troops[type] -= num
+	force.troops[type - 1] += num
+}
+
+function battle_exhaust_sp(who, area, type, strength, from, num = 1) {
+	exhaust_troop(who, area, type, num)
+
+	let battle_data = get_player_battle_data(who, area)
+	let force = battle_data.forces.find(f => f.strength === strength && f.from === from)
+	force.troops[type] -= num
+	force.troops[type + 1] += num
+}
+
+function battle_eliminate_sp(who, area, type, strength, from, num = 1) {
+	eliminate_troop(who, area, type, num)
+	increment_eliminated(who, area, num)
+
+	let battle_data = get_player_battle_data(who, area)
+	let force = battle_data.forces.find(f => f.strength === strength && f.from === from)
+	force.troops[type] -= num
+}
+
+function battle_add_sp(who, area, type, strength, from, num = 1) {
+	add_troop(who, area, type, num)
+	decrement_eliminated(who, area, num)
+
+	if (who === FRANCE)
+		remove_troop(who, FRENCH_CASUALTIES, type, num)
+
+	let battle_data = get_player_battle_data(who, area)
+	let force = battle_data.forces.find(f => f.strength === strength && f.from === from)
+	force.troops[type] += num
+}
+
 function battle_rally_troop(who, area, type, num = 1) {
 	rally_troop(who, area, type, num)
 
@@ -7160,62 +7191,98 @@ function battle_eliminate_troop(who, area, type, num = 1) {
 	return connections_rallied
 }
 
-function battle_eliminate_leader(leader) {
-	move_leader(leader, OUT_OF_PLAY)
-	L.eliminated_leader = leader
-
-	let battle_data = get_player_battle_data(get_leader_faction(leader), G.current_battle)
-	for (let i = 0; i <= battle_data.forces.length; ++i) {
-		if (set_has(battle_data.forces[i].leaders, leader)) {
-			set_delete(battle_data.forces[i].leaders, leader)
-			return i
-		}
-	}
-}
-
 // Push to stack of each action and an object of associated info needed to reconstruct the state
 function push_local_undo(who, action_type, info = {}) {
 	L.undo[who].push({state: L.state[who], action: action_type, info})
 }
 
-//TODO: Response trigger for "Stubborn Rearguard" if Russia loses
+function would_be_eliminated_after_battle(player, area, losses) {
+	if (!has_fresh_sp(player, area))
+		return true
+
+	let count
+	let sps = get_troop_list_by_type(player, area)
+	let has_assigned_cavalry_loss = false
+
+	function would_have_fresh_sp() {
+		for (let type = 0; type < sps.length; ++type) {
+			if (is_troop_type_fresh(type) && sps[type] > 0)
+				return true
+		}
+		return false
+	}
+
+	while(losses > count && would_have_fresh_sp()) {
+		if (count % 3 === 2 && sps[FRESH_CAVALRY] > 0 && !has_assigned_cavalry_loss) {
+			sps[FRESH_CAVALRY]--
+			if (count % 2 === 0)
+				sps[EXHAUSTED_CAVALRY]++
+		} else {
+			let loss_type
+			for (let type = 0; type < sps.length; ++type) {
+				if (is_troop_type_fresh(type) && sps[type] > 0)
+					loss_type = type
+			}
+			if (loss_type === undefined) return true
+			sps[loss_type]--
+			if (count % 2 === 0)
+				++sps[loss_type + 1]
+		}
+
+		++count
+	}
+
+	return would_have_fresh_sp()
+}
+
 P.assign_losses = {
 	_begin() {
-		//L.losses: Gives the count of number of hits total need to be taken
-		//L.attacker, L.defender
+		// L.losses: Gives the count of number of hits total need to be taken
+		// L.attacker, L.defender
 		log_h5("Assign Losses")
 		G.active = [RUSSIA, FRANCE]
 
-		//Running count of number of hits taken (used to determine elimination/exhaustion/cavalry hit)
+		// Running count of the number of losses taken.
+		// We can use modulus operations to determine when the player must take an exhaustion, elimination or a cavalry loss.
 		L.count = [0, 0]
+		// Has the player taken a cavalry loss in the last set of three losses?
 		L.has_assigned_cavalry_loss = [false, false]
 
-		//State machine to handle event interactions (as enumerated below)
+		// State machine to funnel each player through separate resolution steps
 		L.state = [null, null]
 		advance_local_state(RUSSIA)
 		advance_local_state(FRANCE)
 
-		//Local undo stack: stores the local state, type of action performed and any additional information necessary to reconstruct the previous game state
+		// Local undo stack, held separately for each player
 		L.undo = [[], []]
 	},
-	// Enumerate possible local 'states' a player could run into
 	states: {
-		"napoleons_marshals":
-		{
-			eligible(player) { return player === FRANCE && is_battle_event_currently_active(C_NAPOLEONS_MARSHALS) },
+		"napoleons_marshals": {
+			eligible(player) {
+				return (player === FRANCE) && is_battle_event_currently_active(C_NAPOLEONS_MARSHALS)
+			},
 			prompt() {
 				if (has_exhausted_sp(FRANCE, G.current_battle)) {
-					prompt_card(C_NAPOLEONS_MARSHALS, `Rally an exhausted SP.`)
-					for (let type of get_all_exhausted_sp_types(FRANCE, G.current_battle))
-						action_troop(type)
+					prompt_card(C_NAPOLEONS_MARSHALS, `Rally an exhausted SP at S${G.current_battle}.`)
+					get_player_battle_data(FRANCE, G.current_battle).forces.forEach(force => {
+						for (let type = 0; type < force.troops.length; ++type) {
+							if (is_troop_type_exhausted(type))
+								action_troop_imp(type, G.current_battle, force.strength, force.from)
+						}
+					})
 				} else {
-					prompt_card(C_NAPOLEONS_MARSHALS, `No exhausted SPs to Rally.`)
+					prompt_card(C_NAPOLEONS_MARSHALS, `No exhausted SPs at S${G.current_battle} to Rally.`)
 					button_next()
 				}
 			},
-			on_troop(type) {
-				let connections = battle_rally_troop(FRANCE, G.current_battle, type)
-				push_local_undo(FRANCE, "rally", { type, num: 1, connections } )
+			on_troop(entry) {
+				let type = decode_troop_action_type(entry)
+				let strength = decode_troop_action_strength(entry)
+				let from = decode_troop_action_from(entry)
+
+				battle_rally_sp(R, G.current_battle, type, strength, from)
+				push_local_undo(FRANCE, "rally", { type, strength, from })
+
 				advance_local_state(FRANCE)
 			},
 			on_next() {
@@ -7223,26 +7290,38 @@ P.assign_losses = {
 				advance_local_state(FRANCE)
 			}
 		},
-		"fierce_fighting_fr":
-		{	//Check Russia since they need to take the hits despite it being a French event
-			eligible(player) {  return player === RUSSIA && is_battle_event_currently_active(C_FIERCE_FIGHTING_FR) },
+		// Russia execute this, since they might need to eliminate a leader
+		"fierce_fighting_fr": {
+			eligible(player) {
+				return (player === RUSSIA) && is_battle_event_currently_active(C_FIERCE_FIGHTING_FR)
+			},
 			prompt() {
-				let leaders = get_leaders_at_area(RUSSIA, G.current_battle)
-				if (leaders.length > 0) {
-					prompt_card(C_FIERCE_FIGHTING_FR, `Eliminate a leader. (${join_array_with_or(leaders.map(leader => `L${leader}`))})`)
-					for (let leader of leaders)
-						button_leader(leader)
+				if (has_friendly_leader(RUSSIA, G.current_battle)) {
+					prompt_card(C_FIERCE_FIGHTING_FR, `Eliminate a leader. (${join_array_with_or(get_leaders_at_area(RUSSIA, G.current_battle).map(leader => `L${leader}`))})`)
+					get_leaders_at_area(RUSSIA, G.current_battle).forEach(leader => action_leader(leader))
 				} else {
 					prompt_card(C_FIERCE_FIGHTING_FR, `No leader at S${G.current_battle} to eliminate.`)
 					button_next()
 				}
 			},
-			on_leader_button(leader) {
-				let connection = battle_eliminate_leader(leader)
-				push_local_undo(RUSSIA, "leader", { leader, connection })
-				log(`${get_card_log_alias(C_FIERCE_FIGHTING_FR)}: L${leader} killed!`)
+			on_leader(leader) {
+				move_leader(leader, OUT_OF_PLAY)
+				log(`${get_card_log_alias(C_FIERCE_FIGHTING_FR)}`)
+				logi(`L${leader} killed!`)
 				increase_vp(FRANCE, get_leader_vp(leader))
 
+				let strength = -1
+				let from = -1
+				get_player_battle_data(RUSSIA, G.current_battle).forces.forEach(force => {
+					if (set_has(force.leaders, leader)) {
+						strength = force.strength
+						from = force.from
+						set_delete(force.leaders, leader)
+						return
+					}
+				})
+
+				push_local_undo(RUSSIA, "leader", { leader, strength, from })
 				advance_local_state(RUSSIA)
 			},
 			on_next() {
@@ -7250,24 +7329,37 @@ P.assign_losses = {
 				advance_local_state(RUSSIA)
 			}
 		},
-		"infantry_squares":
-		{
-			eligible(player) { return (player === RUSSIA && is_battle_event_currently_active(C_INFANTRY_SQUARES_FR)) || (player === FRANCE && is_battle_event_currently_active(C_INFANTRY_SQUARES_RU)) },
+		// Common handling for both French & Russian Infantry Squares cards since they yield the same effect
+		"infantry_squares": {
+			eligible(player) {
+				return (player === RUSSIA && is_battle_event_currently_active(C_INFANTRY_SQUARES_FR))
+				|| (player === FRANCE && is_battle_event_currently_active(C_INFANTRY_SQUARES_RU))
+			},
 			prompt() {
 				let card = (R === RUSSIA) ? C_INFANTRY_SQUARES_FR : C_INFANTRY_SQUARES_RU
-				if (count_num_cavalry(FRANCE, G.current_battle) > 0) {
-					prompt_card(card, "Assign a loss to a Cavalry SP.")
-					action_troop(FRESH_CAVALRY)
+
+				if (count_num_cavalry(R, G.current_battle) > 0) {
+					prompt_card(card, `Assign a loss to a Cavalry SP.`)
+					get_player_battle_data(R, G.current_battle).forces.forEach(force => {
+						if (force.troops[FRESH_CAVALRY] > 0)
+							action_troop_imp(FRESH_CAVALRY, G.current_battle, force.strength, force.from)
+					})
 				} else {
 					prompt_card(card, `No Cavalry SPs at S${G.current_battle}.`)
 					button_next()
 				}
 			},
-			on_troop(type) {
-				L.has_assigned_cavalry_loss[R] = true
-				let connections = battle_exhaust_troop(R, G.current_battle, type) //First hit is always an exhaustion
-				push_local_undo(R, "exhaust", { type, num: 1, connections })
+			on_troop(entry) {
+				push_undo()
+				let type = decode_troop_action_type(entry)
+				let strength = decode_troop_action_strength(entry)
+				let from = decode_troop_action_from(entry)
+
+				// First battle loss is always an exhaustion
+				battle_exhaust_sp(R, G.current_battle, type, strength, from)
 				++L.count[R]
+
+				push_local_undo(R, "exhaust", { type, strength, from })
 				advance_local_state(R)
 			},
 			on_next() {
@@ -7275,58 +7367,73 @@ P.assign_losses = {
 				advance_local_state(R)
 			}
 		},
-		"assign_losses_main":
-		{
-			eligible() { return true },
+		"assign_losses_main": {
+			eligible(_) {
+				return true
+			},
 			prompt() {
-				if (L.losses[R] > L.count[R]) {
-					if (count_num_fresh_sps(R, G.current_battle) > 0) {
-						if (L.count[R] % 3 === 2 && (count_num_cavalry(R, G.current_battle) > 0) && !L.has_assigned_cavalry_loss[R]) {
-							prompt(`Assign a loss to a fresh Cavalry SP.`)
-							action_troop(FRESH_CAVALRY)
-						} else if (L.count[R] % 2 === 0) {
-							prompt(`Select an SP to exhaust.`)
-							for (let type of get_all_fresh_sp_types(R, G.current_battle)) {
-								action_troop(type)
+				if (L.losses[R] > L.count[R] && has_fresh_sp(R, G.current_battle)) {
+					// At least 1 in 3 losses must be to a fresh Cavalry SP, if possible
+					if (
+						L.count[R] % 3 === 2
+						&& count_num_cavalry(R, G.current_battle) > 0
+						&& !L.has_assigned_cavalry_loss[R]
+					) {
+						prompt(`Assign a loss to a fresh Cavalry SP.`)
+						get_player_battle_data(R, G.current_battle).forces.forEach(force => {
+							if (force.troops[FRESH_CAVALRY] > 0)
+								action_troop_imp(FRESH_CAVALRY, G.current_battle, force.strength, force.from)
+						})
+					}
+					// Players must alternate between exhausting and eliminating a fresh SP, starting with exhausting
+					else {
+						if (L.count[R] % 2 === 0)
+							prompt(`Select a fresh SP to exhaust.`)
+						else
+							prompt(`Select a fresh SP to eliminate.`)
+						get_player_battle_data(R, G.current_battle).forces.forEach(force => {
+							for (let type = 0; type < force.troops.length; ++type) {
+								if (is_troop_type_fresh(type) && force.troops[type] > 0)
+									action_troop_imp(type, G.current_battle, force.strength, force.from)
 							}
-						} else {
-							prompt(`Select an SP to eliminate.`)
-							for (let type of get_all_fresh_sp_types(R, G.current_battle)) {
-								action_troop(type)
-							}
-						}
-					} else {
-						if (has_exhausted_sp(R, G.current_battle) && has_fresh_sp(enemy(R), G.current_battle)) {
-							prompt(`No more fresh SPs: Eliminate all exhausted SPs at S${G.current_battle}.`)
-							button("eliminate")
-						} else {
-							prompt(`Assign losses: All done.`)
-							button_done()
-						}
+						})
 					}
 				} else {
-					if ((count_num_fresh_sps(R, G.current_battle) === 0 && has_exhausted_sp(R, G.current_battle)) && has_fresh_sp(enemy(R), G.current_battle)) {
-						prompt(`No more fresh SPs: Eliminate all exhausted SPs at S${G.current_battle}.`)
+					// A stack consisting solely of exhausted SPs is eliminated if in an area with fresh enemy SPs.
+					// Since losses are taken simultaneously, we check whether the enemy would have a fresh SP after assigning losses.
+					if (
+						has_friendly_troop(R, G.current_battle)
+						&& !would_be_eliminated_after_battle(enemy(R), G.current_battle, L.losses[enemy[R]] - L.count[enemy[R]])
+					) {
+						prompt(`No more fresh SPs: Eliminate all SPs at S${G.current_battle}.`)
 						button("eliminate")
 					} else {
-						prompt("Assign losses: All done.")
-						button_done()
+						prompt(`Assign losses: All done.`)
+						button_confirm()
 					}
 				}
 			},
-			on_troop(type) {
-				//1 in every 3 losses taken must come from a cavalry SP, if possible (the possible part is handled in prompt())
-				if (type === FRESH_CAVALRY) L.has_assigned_cavalry_loss[R] = true
-				if (L.count[R] % 3 === 0) L.has_assigned_cavalry_loss[R] = false
+			on_troop(entry) {
+				let type = decode_troop_action_type(entry)
+				let strength = decode_troop_action_strength(entry)
+				let from = decode_troop_action_from(entry)
+
+				if (type === FRESH_CAVALRY)
+					L.has_assigned_cavalry_loss[R] = true
+
+				// Reset flag after every three losses
+				if (L.count[R] % 3 === 0)
+					L.has_assigned_cavalry_loss[R] = false
 
 				if (L.count[R] % 2 === 0) {
-					let connections = battle_exhaust_troop(R, G.current_battle, type)
-					push_local_undo(R, "exhaust", { type, num: 1, connections })
+					battle_exhaust_sp(R, G.current_battle, type, strength, from)
+					push_local_undo(R, "exhaust", { type, strength, from })
+					// Stoic Infantry: Track how many Russian infantry were eliminated
 					if (is_battle_event_currently_active(C_STOIC_INFANTRY) && R === RUSSIA && is_infantry(type))
 						map_get(G.persistent_events, C_STOIC_INFANTRY, null).num_exhausted_infantry++
 				} else {
-					let connections = battle_eliminate_troop(R, G.current_battle, type)
-					push_local_undo(R, "eliminate", { type, num: 1, connections })
+					battle_eliminate_sp(R, G.current_battle, type, strength, from)
+					push_local_undo(R, "eliminate", { type, strength, from})
 				}
 
 				++L.count[R]
@@ -7344,7 +7451,7 @@ P.assign_losses = {
 				//log(`${ROLES[R]} has no more fresh SPs.`)
 				//log(`${ROLES[R]} eliminated!`)
 			},
-			on_done() {
+			on_confirm() {
 				set_delete(G.active, R)
 				if (G.active.length === 0) {
 					for (let who = RUSSIA; who <= FRANCE; ++who) {
@@ -7360,68 +7467,71 @@ P.assign_losses = {
 			},
 		},
 	},
-	prompt() {
+	prompt() 		{
 		this.states[L.state[R]].prompt()
 		button_undo(L.undo[R].length > 0)
 	},
-	undo() { //Pop from the (local) undo stack, then reconstruct the previous state based on the previous action and supporting info
-		let previous_action = L.undo[R].pop()
-		L.state[R] = previous_action.state
+	// Pop from the local undo stack, then reconstruct the old state
+	undo() {
+		let undo = L.undo[R].pop()
 		let battle_data = get_player_battle_data(R, G.current_battle)
 
-		switch(previous_action.action) {
-		case "next": return
+		// Rewind local state, if necessary
+		if (L.state[R] !== undo.state)
+			L.state[R] = undo.state
+
+		// Apply action-specific rules to reconstruct the old state
+		switch(undo.action) {
+		case "next":
+			return
+		// Undoes 'Fierce Fighting' elimination of a Russian leader.
 		case "leader":
-			move_leader(previous_action.info.leader, G.current_battle)
-			set_add(battle_data.forces[previous_action.info.connection].leaders, previous_action.info.leader)
-			//You can only add XOR remove at the end of the log (deleting the two leader killed lines)
+			move_leader(undo.info.leader, G.current_battle)
+			set_add(
+				battle_data.forces.find((force) => force.strength === undo.info.strength && force.from === undo.info.from).leaders,
+				undo.info.leader
+			)
+			// Delete leader killed lines
 			G.log.pop()
 			G.log.pop()
-			G.vp -= get_leader_vp(previous_action.info.leader)
+			G.log.pop()
+			G.vp -= get_leader_vp(undo.info.leader)
 			return
 		case "rally":
-			exhaust_troop(R, G.current_battle, previous_action.info.type - 1, previous_action.info.num)
-			map_for_each(previous_action.info.connections, (ix, amount) => {
-				battle_data.forces[ix].troops[previous_action.info.type] += amount
-				battle_data.forces[ix].troops[previous_action.info.type - 1] -= amount
-			})
-			return
-		case "eliminate":
-			if (R === RUSSIA) add_troop(R, G.current_battle, previous_action.info.type, previous_action.info.num)
-			else move_troop(R, FRENCH_CASUALTIES, G.current_battle, previous_action.info.type, previous_action.info.num)
-			decrement_eliminated(R, G.current_battle, previous_action.info.num)
-			map_for_each(previous_action.info.connections, (ix, amount) => {
-				battle_data.forces[ix].troops[previous_action.info.type] += amount
-			})
-			--L.count[R]
+			battle_exhaust_sp(R, G.current_battle, undo.info.type - 1, undo.info.strength, undo.info.from)
 			return
 		case "exhaust":
-			rally_troop(R, G.current_battle, previous_action.info.type + 1, previous_action.info.num)
-			map_for_each(previous_action.info.connections, (ix, amount) => {
-				battle_data.forces[ix].troops[previous_action.info.type] += amount
-				battle_data.forces[ix].troops[previous_action.info.type + 1] -= amount
-			})
+			battle_rally_sp(R, G.current_battle, undo.info.type + 1, undo.info.strength, undo.info.from)
+			--L.count[R]
+			return
+		case "eliminate":
+			battle_add_sp(R, G.current_battle, undo.info.type, undo.info.strength, undo.info.from)
 			--L.count[R]
 			return
 		case "eliminate_all":
-			map_for_each(previous_action.info.eliminated_by_type, (type, connections) => {
-				let count =  map_get(previous_action.info.counts, type)
-				if (R === RUSSIA) add_troop(R, G.current_battle, type, count)
-				else move_troop(R, FRENCH_CASUALTIES, G.current_battle, type, count)
+			map_for_each(undo.info.eliminated_by_type, (type, connections) => {
+				let count =  map_get(undo.info.counts, type)
+
+				if (R === RUSSIA)
+					add_troop(R, G.current_battle, type, count)
+				else
+					move_troop(R, FRENCH_CASUALTIES, G.current_battle, type, count)
+
 				decrement_eliminated(R, G.current_battle, count)
 				map_for_each(connections, (ix, amount) => {
 					battle_data.forces[ix].troops[type] += amount
 				})
 			})
 			return
-		default: throw new Error(`Unknown action: ${previous_action.action}`)
+		default:
+			throw new Error(`Unknown action: ${undo.action}`)
 		}
 	},
-	troop(type) { this.states[L.state[R]].on_troop(type) },
-	eliminate() { this.states[L.state[R]].on_eliminate() },
-	next() { this.states[L.state[R]].on_next() },
-	leader_button(leader) { this.states[L.state[R]].on_leader_button(leader) },
-	done() { this.states[L.state[R]].on_done() },
+	next() 		{ this.states[L.state[R]].on_next() },
+	eliminate() 	{ this.states[L.state[R]].on_eliminate() },
+	troop(entry) 	{ this.states[L.state[R]].on_troop(entry) },
+	leader(leader) 	{ this.states[L.state[R]].on_leader(leader) },
+	confirm()		{ this.states[L.state[R]].on_confirm() },
 }
 
 //TODO: Stoic Infantry: Immediately rally first two exhausted RU SPs
@@ -7609,8 +7719,10 @@ P.assign_pursuit_losses = {
 			button("eliminate")
 		} else {
 			prompt(`Pursuit: Eliminate ${L.difference} SPs at S${G.current_battle}.`)
-			for (let type of get_troop_types_at_area(G.active, G.current_battle))
-				action_troop(type)
+			get_player_battle_data(R, G.current_battle).forces.forEach(force => {
+				for (let type = 0; type < force.troops.length; ++type)
+					action_troop_imp(type, G.current_battle, force.strength, force.from)
+			})
 		}
 	},
 	eliminate() {
@@ -7624,10 +7736,16 @@ P.assign_pursuit_losses = {
 
 		L.has_finished = true
 	},
-	troop(type) {
+	troop(entry) {
 		push_undo()
-		battle_eliminate_troop(G.active, G.current_battle, type)
-		if (--L.difference === 0) L.has_finished = true
+		let type = decode_troop_action_type(entry)
+		let strength = decode_troop_action_strength(entry)
+		let from = decode_troop_action_from(entry)
+
+		battle_eliminate_sp(G.active, G.current_battle, type, strength, from)
+
+		if (--L.difference === 0)
+			L.has_finished = true
 	},
 	done() {
 		log()
@@ -7681,6 +7799,8 @@ P.end_battle = script(`
 			log(ROLES[L.winner] + " captured S" + G.current_battle + "!")
 			increase_vp(L.winner, get_area_vp(G.current_battle))
 		}
+		G.played_cards[RUSSIA] = []
+		G.played_cards[FRANCE] = []
 		map_delete(G.battles, G.current_battle)
 		G.active = get_who_has_initiative()
 		map_clear(G.moved)

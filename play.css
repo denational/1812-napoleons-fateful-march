@@ -405,6 +405,10 @@ body.hide-pieces .troop { display: none }
 		drop-shadow(1px 0 0 yellow)
 }
 
+.connection_stack > * {
+	z-index: 5;
+}
+
 .troop > .half_strength_ru, .troop > .half_strength_fr {
 	position: absolute;
 	bottom: 30px;
