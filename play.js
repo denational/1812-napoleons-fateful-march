@@ -870,6 +870,7 @@ function on_update() {
 	action_button("play", "Play")
 	action_button("done", "Done")
 	action_button("move", "Move")
+	action_button("evade", "Evade")
 	action_button("next", "Next")
 	action_button("draw", "Draw")
 	action_button("discard", "Discard")
@@ -1022,10 +1023,15 @@ function update_leaders() {
 			if (has_battle(location)) {
 				for (let force of get_player_battle_data(get_leader_owner(leader), location).forces) {
 					if (set_has(force.leaders, leader)) {
-						if (force.from === location) {
-							populate("area_stack", get_leader_location(leader), "leader", leader)
+						if (V.move && V.move.type === EVADE && V.move.leaders && set_has(V.move.leaders, leader)) {
+							update_position("move", 0, move_offset_x(location), move_offset_y(location))
+							populate("move", 0, "leader", leader)
 						} else {
-							populate("connection_stack", find_connection(location, force.from), "leader", leader)
+							if (force.from === location) {
+								populate("area_stack", get_leader_location(leader), "leader", leader)
+							} else {
+								populate("connection_stack", find_connection(location, force.from), "leader", leader)
+							}
 						}
 					}
 				}
@@ -1071,35 +1077,62 @@ function update_troops() {
 				// Attacker: All SPs are populated on connections.
 				// Defender: Only SPs that entered the area after the battle was first declared.
 
+
+
 				for (let force of get_player_battle_data(player, area).forces) {
 					if (force.troops[type] > 0) {
-						// Update the exhaustion status of the corresponding troop counter
-						update_troop_exhaustion(get_used(player, type), is_fresh(type) ? FRESH : EXHAUSTED)
+						let num_moving = 0
 
-						// Defending forces which were in the area before the battle started have their 'from' set to the area itself
-						if (force.from === area) {
-							if (R === player || (R !== player && get_seniormost_leader_on_connection(player, area, area) === -1))
-								populate_troop(player, type, "area_stack", area)
+						if (V.move && V.move.type === EVADE && V.move.sps && map_has(V.move.sps, force.from) && map_has(map_get(V.move.sps, force.from), force.strength)) {
+							if (map_get(map_get(V.move.sps, force.from), force.strength)[type] > 0) {
+								update_position("move", 0, move_offset_x(area), move_offset_y(area))
+								update_troop_exhaustion(get_used(player, type), is_fresh(type) ? FRESH : EXHAUSTED)
 
-							lookup_troop(get_used(player, type)).my_area = area
-							lookup_troop(get_used(player, type)).my_from = area
-						} else {
-							if (R === player || (R !== player && get_seniormost_leader_on_connection(player, force.from, area) === -1))
-								populate_troop(player, type, "connection_stack", find_connection(force.from, area))
+								if (R === player || (R !== player && G.move.leaders.length === 0))
+									populate_troop(player, type, "move", 0)
 
-							lookup_troop(get_used(player, type)).my_area = area
-							lookup_troop(get_used(player, type)).my_from = force.from
+								lookup_troop(get_used(player, type)).my_area = area
+								lookup_troop(get_used(player, type)).my_from = force.from
+								lookup_troop(get_used(player, type)).am_moving = 1
+
+								num_moving += map_get(map_get(V.move.sps, force.from), force.strength)[type]
+								if (force.strength === HALF_STRENGTH)
+									populate_half_strength(player, get_used(player, type))
+								if (!map_has(troop_nums, get_used(player, type)))
+									map_set(troop_nums, get_used(player, type), map_get(map_get(V.move.sps, force.from), force.strength)[type])
+								incr_used(player, type)
+							}
 						}
 
-						if (force.strength === HALF_STRENGTH && (is_battle_attacker(player, area) && has_bridge(force.from, area)))
-							populate_half_strength(player, get_used(player, type), 2)
-						else if ((force.strength === HALF_STRENGTH || (is_battle_attacker(player, area) && has_bridge(force.from, area))))
-							populate_half_strength(player, get_used(player, type))
+						if (force.troops[type] > num_moving) {
+							// Update the exhaustion status of the corresponding troop counter
+							update_troop_exhaustion(get_used(player, type), is_fresh(type) ? FRESH : EXHAUSTED)
 
-						if (!map_has(troop_nums, get_used(player, type)))
-							map_set(troop_nums, get_used(player, type), force.troops[type])
+							// Defending forces which were in the area before the battle started have their 'from' set to the area itself
+							if (force.from === area) {
+								if (R === player || (R !== player && get_seniormost_leader_on_connection(player, area, area) === -1))
+									populate_troop(player, type, "area_stack", area)
 
-						incr_used(player, type)
+								lookup_troop(get_used(player, type)).my_area = area
+								lookup_troop(get_used(player, type)).my_from = area
+							} else {
+								if (R === player || (R !== player && get_seniormost_leader_on_connection(player, force.from, area) === -1))
+									populate_troop(player, type, "connection_stack", find_connection(force.from, area))
+
+								lookup_troop(get_used(player, type)).my_area = area
+								lookup_troop(get_used(player, type)).my_from = force.from
+							}
+
+							if (force.strength === HALF_STRENGTH && (is_battle_attacker(player, area) && has_bridge(force.from, area)))
+								populate_half_strength(player, get_used(player, type), 2)
+							else if ((force.strength === HALF_STRENGTH || (is_battle_attacker(player, area) && has_bridge(force.from, area))))
+								populate_half_strength(player, get_used(player, type))
+
+							if (!map_has(troop_nums, get_used(player, type)))
+								map_set(troop_nums, get_used(player, type), force.troops[type] - num_moving)
+
+							incr_used(player, type)
+						}
 					}
 				}
 			} else {
@@ -1125,7 +1158,7 @@ function update_troops() {
 					}
 				}
 
-				if (V.move, V.move.sps) {
+				if (V.move && V.move.sps) {
 					if (V.move.path && V.move.path.length === 1 && V.move.path[V.move.path.length - 1] === area && V.move.sps[type] > 0) {
 						update_position("move", 0, move_offset_x(area), move_offset_y(area))
 						update_troop_exhaustion(get_used(player, type), is_fresh(type) ? FRESH : EXHAUSTED)

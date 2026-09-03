@@ -5435,36 +5435,33 @@ function get_evade_sps(who, area) {
 	return evade_sps
 }
 
-// TODO: Improve UI
-// This state is likely the most unintuitive in the entire game, because of the degree of specificity needed to pick the right SPs.
-// MAYBE: Making troops clickable pieces might improve UI
 P.select_evade_force = {
 	_begin() {
-		// Leaders & troops eligible for evade
-		// Schwarzenberg is the only leader who can choose to join the Unexpected Retreat
-		if (is_event_active(C_UNEXPECTED_RETREAT))
-			L.leaders = get_leader_location(L_SCHWARZENBERG) === L.area ? [L_SCHWARZENBERG] : []
-		else
+		// Leaders & SPs eligible for Evade
+		// Schwarzenberg is the only leader who can join 'Unexpected Retreat'
+		if (is_event_active(C_UNEXPECTED_RETREAT)) {
+			L.leaders = []
+			if (get_leader_location(L_SCHWARZENBERG) === L.area)
+				set_add(L.leaders, L_SCHWARZENBERG)
+		} else {
 			L.leaders = get_leaders_at_area(G.active, L.area)
-		L.sps = get_evade_sps(G.active, L.area)
+		}
+		L.sps = get_evade_sps(G.acive, L.area)
 
-		// Running count of total number of SPs selected
+		// Running count of the number of SPs selected (it's not efficient to run a map_for_each for every count)
 		L.num_sps_selected = 0
 
 		G.move = {
-			// Leaders part of the evade
+			type: EVADE,
+			// Leaders part of the Evade
 			leaders: [],
 			// Nested map of troops that can evade.
 			// First keyed by area of origin, then keyed by move type.
 			// For attackers, area of origin is important as it can influence their retreat options after battle.
 			// It has to be this intricate since connections influences where the force could retreat after battle & move type determines battle strength.
 			sps: [],
-			// Evade destination (selected in previous state)
 			destination: L.destination,
 		}
-
-		L.selected_from = -1
-		L.selected_strength = -2
 	},
 	prompt() {
 		// Selecting a force: unlimited with a leader, max. 4 without
@@ -5472,99 +5469,57 @@ P.select_evade_force = {
 
 		prompt(`Select leaders and SPs to evade from S${L.area}.`)
 
-		if (L.selected_from === -1) {
-			prompt(`Evade: You may select SPs from specific connections, or select all SPs.`)
+		for (let leader of L.leaders)
+			action_leader(leader)
 
-			map_keys(L.sps).forEach((from) => {
-				if (from === L.area)
-					action_area(L.area)
-				else
-					action_connection(from, L.area)
+		map_for_each(L.sps, (from, forces) => {
+			map_for_each(forces, (strength, sps) => {
+				for (let type = 0; type <= sps.length; ++type)
+					if (sps[type] > 0)
+						action_troop_imp(type, L.area, strength, from)
 			})
-
-			if ((has_friendly_leader(G.active, L.area) || count_num_sps(G.active, L.area) <= 4)
-				&& (G.move.leaders.length < L.leaders.length || L.num_sps_selected < max_sps_selectable)
-			) {
-				button("select_all")
-			}
-
-			button_confirm(L.num_sps_selected > 0)
-		} else {
-			if (L.selected_strength === -2) {
-				prompt(`Select a move type of SPs to select from S${L.area}.`)
-				for (let i = 0; i < map_get(L.sps, L.selected_from, null).length; i += 2)
-					action("move_type", map_get(L.sps, L.selected_from, null)[i])
-				button_done()
-			} else {
-				for (let leader of L.leaders)
-					if (!set_has(G.move.leaders, leader))
-						button_leader(leader)
-
-				let troops = map_get(map_get(L.sps, L.selected_from, null), L.selected_strength, null)
-
-				for (let type = 0; type < NUM_TROOP_TYPES; ++type) {
-					if (troops[type] > 0
-						&& L.num_sps_selected < max_sps_selectable
-						&& troops[type] > map_get(map_get(G.move.sps, L.selected_from, null), L.selected_strength, null)[type]
-					) {
-						action("add_troop", type)
-					}
-
-					if (map_get(map_get(G.move.sps, L.selected_from, null), L.selected_strength, null)[type] > 0)
-						action("remove_troop", type)
-				}
-
-				button_next()
-			}
-		}
-	},
-	area(area) {
-		if (L.selected_from === -1) {
-			L.selected_from = area
-			if (!map_has(G.move.sps, area))
-				map_set(G.move.sps, area, [])
-			map_keys(map_get(L.sps, L.selected_from, [])).forEach((strength) => {
-				if (!map_has(map_get(G.move.sps, L.selected_from, null), strength))
-					map_set(map_get(G.move.sps, area, null), strength, Array(NUM_TROOP_TYPES).fill(0))
-			})
-			L.selected_strength = -2
-		}
-	},
-	connection(id) {
-		L.selected_from = get_other_area(id, L.area)
-		if (!map_has(G.move.sps, L.selected_from))
-			map_set(G.move.sps, L.selected_from, [])
-		map_keys(map_get(L.sps, L.selected_from, [])).forEach((strength) => {
-			if (!map_has(map_get(G.move.sps, L.selected_from, null), strength))
-				map_set(map_get(G.move.sps, L.selected_from, null), strength, Array(NUM_TROOP_TYPES).fill(0))
 		})
-		L.selected_strength = -2
+
+		map_for_each(G.move.sps, (from, forces) => {
+			map_for_each(forces, (strength, sps) => {
+				for (let type = 0; type < sps.length; ++type)
+					if (sps[type] > 0)
+						action_troop_imp(type, L.area, strength, from, 1)
+			})
+		})
+
+		if ((has_friendly_leader(G.active, L.area) || count_num_sps(G.active, L.area) <= 4)
+				&& (G.move.leaders.length < L.leaders.length || L.num_sps_selected < max_sps_selectable)
+		) {
+			button("select_all")
+		}
+
+		button("evade", L.num_sps_selected > 0)
 	},
-	leader_button(leader) {
+	leader(leader) {
 		push_undo()
 		set_toggle(G.move.leaders, leader)
 	},
-	move_type(strength) {
+	troop(entry) {
 		push_undo()
-		L.selected_strength = strength
-	},
-	add_troop(type) {
-		push_undo()
-		++map_get(map_get(G.move.sps, L.selected_from, null), L.selected_strength, null)[type]
-		++L.num_sps_selected
-	},
-	remove_troop(type) {
-		push_undo()
-		--map_get(map_get(G.move.sps, L.selected_from, null), L.selected_strength, null)[type]
-		--L.num_sps_selected
-	},
-	next() {
-		push_undo()
-		L.selected_strength = -2
-	},
-	done() {
-		push_undo()
-		L.selected_from = -1
+		let type = decode_troop_action_type(entry)
+		let strength = decode_troop_action_strength(entry)
+		let from = decode_troop_action_from(entry)
+		let moving = decode_troop_action_moving(entry)
+
+		if (!map_has(G.move.sps, from))
+			map_set(G.move.sps, from, [])
+
+		if (!map_has(map_get(G.move.sps, from), strength))
+			map_set(map_get(G.move.sps, from), strength, Array(NUM_TROOP_TYPES).fill(0))
+
+		if (!moving) {
+			++map_get(map_get(G.move.sps, from), strength)[type]
+			++L.num_sps_selected
+		} else {
+			--map_get(map_get(G.move.sps, from), strength)[type]
+			--L.num_sps_selected
+		}
 	},
 	select_all() {
 		push_undo()
@@ -5578,12 +5533,13 @@ P.select_evade_force = {
 			})
 			map_set(G.move.sps, from, copy)
 		})
+
 		if (is_event_active(C_UNEXPECTED_RETREAT))
 			L.num_sps_selected = count_num_sps_of_type(FRANCE, FRESH_AUSTRIAN_INFANTRY, L.area) + count_num_sps_of_type(FRANCE, EXHAUSTED_AUSTRIAN_INFANTRY, L.area)
 		else
 			L.num_sps_selected = count_num_sps(G.active, L.area)
 	},
-	confirm() {
+	evade() {
 		push_undo()
 
 		log(`Evaded from S${L.area}`)
@@ -5704,29 +5660,30 @@ P.evade_pursuit_exhaustion = {
 				button_confirm()
 			} else {
 				prompt(`Lost pursuit: Assign one exhaustion to any evading SP.`)
-				get_evading_sp_types().filter(type => is_troop_type_fresh(type)).forEach(action_troop)
+				map_for_each(G.move.sps, (from, forces) => {
+					map_for_each(forces, (strength, sps) => {
+						for (let type = 0; type < sps.length; ++type)
+							if (sps[type] > 0)
+								action_troop_imp(type, L.area, strength, from, 1)
+					})
+				})
 			}
 		} else {
 			prompt(`Assign pursuit losses: All done.`)
 			button_done()
 		}
 	},
-	troop(type) {
+	troop(entry) {
 		push_undo()
+		let type = decode_troop_action_type(entry)
+		let strength = decode_troop_action_strength(entry)
+		let from = decode_troop_action_from(entry)
+
 		battle_exhaust_troop(L.evader, L.area, type)
 		L.has_assigned_exhaustion = true
 
-		L.count = 1
-		map_for_each(G.move.sps, (from, forces) => {
-			map_for_each(forces, (strength, sps) => {
-				if (sps[type] > 0) {
-					if (L.count-- > 0) {
-						--sps[type]
-						++sps[type + 1]
-					}
-				}
-			})
-		})
+		map_get(map_get(G.move.sps, from), strength)[type]--
+		map_get(map_get(G.move.sps, from), strength)[type + 1]++
 	},
 	next() {
 		push_undo()
@@ -5832,6 +5789,8 @@ P.evade = function() {
 	log()
 	log(`Evaded to S${G.move.destination}.`)
 	log()
+
+	G.move = {}
 
 	end()
 }

@@ -181,8 +181,6 @@ function find_troop(argument) {
 			&& troop.my_area === area
 			&& troop.my_from === from
 		) {
-			console.log(troop)
-			console.log([move, player, type, strength, area, from])
 			return troop.my_id
 		}
 	}
