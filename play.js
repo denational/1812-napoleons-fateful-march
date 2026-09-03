@@ -510,8 +510,6 @@ class Troop extends Thing {
 		super(element, action, id)
 
 		this.my_player = -1
-		// Set to fresh version by default -- see update_troop_exhaustion
-		this.is_exhausted = false
 		this.my_type = type
 		this.my_strength = FULL_STRENGTH
 		this.my_area = -1
@@ -584,7 +582,6 @@ function update_troop_exhaustion(id, state) {
 	if (!troop)
 		throw new Error (`Troop ${id} not found!`)
 	update_keyword("troop", id, state)
-	troop.is_exhausted = (state === EXHAUSTED)
 	if (is_exhausted(troop.my_type) && state === FRESH || is_fresh(troop.my_type) && state === EXHAUSTED)
 		troop.my_type = toggle_troop_type_exhaustion(troop.my_type)
 }
@@ -663,7 +660,7 @@ function on_init() {
 			.tooltip(`${process_area_name(get_area_name(area))} (${get_area_zone(area)})`)
 
 		// Where leaders & SPs are populated
-		define_stack("area_stack", area, layout[get_area_name(area)], -20, -20, 0, -58, 0, 36, 1, 4)
+		define_stack("area_stack", area, layout[get_area_name(area)], -15, -15, 0, -58, 0, 36, 1, 10)
 		// Where we populate orders
 		define_stack("orders_stack", area, translate_right(layout[get_area_name(area)], 52), 0, -100, 0, -125)
 	}
@@ -681,7 +678,7 @@ function on_init() {
 
 		// Where leaders & SPs are populated
 		// Same as area stack
-		define_stack("connection_stack", connection, layout[`Connection${connection}`], -20, -20, 0, -58, 0, 36, 1, 4,)
+		define_stack("connection_stack", connection, layout[`Connection${connection}`], -15, -15, 0, -58, 0, 36, 1, 6)
 	}
 
 	/* ORDERS */
@@ -749,8 +746,8 @@ function on_update() {
 	num_devastated = 0
 
 	update_tracks()
-	update_leaders()
 	update_troops()
+	update_leaders()
 	update_depots()
 	update_devastation()
 	update_orders()
@@ -759,9 +756,18 @@ function on_update() {
 		populate("hand", 0, "card", c)
 	}
 
-	if (V.played_cards && V.played_cards[R])
-		for (let c of V.played_cards[R])
-			populate("table", 0, "card", c)
+	if (V.played_cards && V.played_cards[R]) {
+		if (V.played_cards[R].length === 0) {
+			update_panel_show("table", 0, false)
+		} else {
+			for (let c of V.played_cards[R])
+				populate("table", 0, "card", c)
+		}
+	}
+
+	update_panel_show("leaders", RUSSIA, false)
+	update_panel_show("leaders", FRANCE, false)
+
 
 	for (let leader = 0; leader <= 13; ++leader) {
 		action_button_with_argument(`leader_button`, leader, leaders[leader].log_name)
@@ -982,7 +988,7 @@ function get_seniormost_leader_on_connection(who, from, to)  {
 }
 
 function update_leaders() {
-	for (let leader = 0; leader < V.leaders.length; ++leader) {
+	for (let leader = V.leaders.length - 1; leader >= 0; --leader) {
 		let location = get_leader_location(leader)
 		switch(location) {
 		case OUT_OF_PLAY:
@@ -999,28 +1005,15 @@ function update_leaders() {
 				for (let force of get_player_battle_data(get_leader_owner(leader), location).forces) {
 					if (set_has(force.leaders, leader)) {
 						if (force.from === location) {
-							if (get_seniormost_leader_on_connection(get_leader_owner(leader), location, location) === leader) {
-								populate("area_stack", get_leader_location(leader), "leader", leader)
-								populate("leaders", get_leader_owner(leader), "leader_board", leader)
-							} else {
-								populate("subordinate_leaders", get_seniormost_leader_on_connection(get_leader_owner(leader), force.from, location), "leader", leader)
-							}
+							populate("area_stack", get_leader_location(leader), "leader", leader)
 						} else {
-							if (get_seniormost_leader_on_connection(get_leader_owner(leader), force.from, location) === leader) {
-								populate("connection_stack", find_connection(location, force.from), "leader", leader)
-								populate("leaders", get_leader_owner(leader), "leader_board", leader)
-							} else {
-								populate("subordinate_leaders", get_seniormost_leader_on_connection(get_leader_owner(leader), force.from, location), "leader", leader)
-							}
+							populate("connection_stack", find_connection(location, force.from), "leader", leader)
 						}
 					}
 				}
 			} else {
-				if (is_seniormost_leader(leader, get_leader_location(leader))) {
+				if (R === get_leader_owner(leader) || (R !== get_leader_owner(leader) && is_seniormost_leader(leader, location)))
 					populate("area_stack", get_leader_location(leader), "leader", leader)
-					populate("leaders", get_leader_owner(leader), "leader_board", leader)
-				} else
-					populate("subordinate_leaders", get_seniormost_leader(get_leader_owner(leader), get_leader_location(leader)), "leader", leader)
 			}
 		}
 	}
@@ -1063,17 +1056,13 @@ function update_troops() {
 
 						// Defending forces which were in the area before the battle started have their 'from' set to the area itself
 						if (force.from === area) {
-							if (get_seniormost_leader_on_connection(player, area, area) > -1)
-								populate_troop(player, type, get_sp_bucket(type), get_seniormost_leader_on_connection(player, area, area))
-							else
+							if (R === player || (R !== player && get_seniormost_leader_on_connection(player, area, area) === -1))
 								populate_troop(player, type, "area_stack", area)
 
 							lookup_troop(get_used(player, type)).my_area = area
 							lookup_troop(get_used(player, type)).my_from = area
 						} else {
-							if (get_seniormost_leader_on_connection(player, force.from, area) > -1)
-								populate_troop(player, type, get_sp_bucket(type), get_seniormost_leader_on_connection(player, force.from, area))
-							else
+							if (R === player || (R !== player && get_seniormost_leader_on_connection(player, force.from, area) === -1))
 								populate_troop(player, type, "connection_stack", find_connection(force.from, area))
 
 							lookup_troop(get_used(player, type)).my_area = area
@@ -1099,11 +1088,8 @@ function update_troops() {
 						if (force.faction === player && force.troops[type] > 0 && force.strength === HALF_STRENGTH) {
 							update_troop_exhaustion(get_used(player, type), is_fresh(type) ? FRESH : EXHAUSTED)
 
-							if (has_friendly_leader(player, area))
-								populate_troop(player, type, get_sp_bucket(type), get_seniormost_leader(player, area))
-							else
+							if (R === player || (R !== player && !has_friendly_leader(player, area)))
 								populate_troop(player, type, "area_stack", area)
-
 
 							lookup_troop(get_used(player, type)).my_area = area
 							lookup_troop(get_used(player, type)).my_from = POOL
@@ -1120,14 +1106,12 @@ function update_troops() {
 				if (num > num_moved) {
 					update_troop_exhaustion(get_used(player, type), is_fresh(type) ? FRESH : EXHAUSTED)
 
-					if (has_friendly_leader(player, area)) {
-						populate_troop(player, type, get_sp_bucket(type), get_seniormost_leader(player, area))
-					}  else {
-						if (area === FRENCH_CASUALTIES) {
-							populate_troop(player, type, "fr_casualties", 0)
-						} else {
+					// French casualties are public
+					if (area === FRENCH_CASUALTIES) {
+						populate_troop(player, type, "fr_casualties", 0)
+					} else {
+						if (R === player || (R !== player && !has_friendly_leader(player, area)))
 							populate_troop(player, type, "area_stack", area)
-						}
 					}
 
 					lookup_troop(get_used(player, type)).my_area = area
@@ -1169,15 +1153,15 @@ function update_devastation() {
 }
 
 function update_orders() {
-	for (let order = 0; order < V.orders.length; ++order) {
-		if (V.orders[order] === POOL) {
-			populate("plan_orders", 0, "order", order + get_first_order(R))
-		} else {
-			populate("orders_stack", V.orders[order], "order", order + get_first_order(R))
-		}
-	}
-
 	if (!is_observer(R)) {
+		for (let order = 0; order < V.orders.length; ++order) {
+			if (V.orders[order] === POOL) {
+				populate("plan_orders", 0, "order", order + get_first_order(R))
+			} else {
+				populate("orders_stack", V.orders[order], "order", order + get_first_order(R))
+			}
+		}
+
 		for (let order = 0; order < V.enemy_orders.length; ++order) {
 			populate("orders_stack", V.enemy_orders[order], "order", order + get_first_order(get_opponent(R)))
 			update_keyword("order", order + get_first_order(get_opponent(R)), `hidden ${get_abbreviation(get_opponent(R))}`)

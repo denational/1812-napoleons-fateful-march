@@ -14,11 +14,11 @@
 main {background-color: slategray;}
 
 header {background-color: lightgray;}
-body.France header.your_turn {background-color: var(--france)}
 body.Russia header.your_turn {background-color: var(--russia);}
+body.France header.your_turn {background-color: var(--france);}
 
-#role_France { background-color: var(--france);}
 #role_Russia { background-color: var(--russia);}
+#role_France { background-color: var(--france);}
 
 /* MAP */
 #mapwrap {
@@ -56,7 +56,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
 #log {
 	background-color: hsl(52, 30%, 89%);
 
-	& .h1 { 
+	& .h1 {
 		background-color: hsl(200, 34%, 73%);
 		font-weight: bolder;
 		padding:2px 0;
@@ -77,13 +77,13 @@ body.Russia header.your_turn {background-color: var(--russia);}
     	font-variant-caps: small-caps;
 	}
 
-	& .h3 { 
+	& .h3 {
     	background-color: lightgray;
     	text-align: center;
 		font-variant-caps: small-caps;
 	}
 
-	& .h4 { 
+	& .h4 {
 		text-align: left;
 		background-color: lightgray;
 	}
@@ -95,9 +95,9 @@ body.Russia header.your_turn {background-color: var(--russia);}
 		font-weight: bold;
 	}
 
-	& .group.header { 
-		font-variant: small-caps; 
-		text-align: center; 
+	& .group.header {
+		font-variant: small-caps;
+		text-align: center;
 		font-style: normal;
 		padding: 4px 4px;
 	}
@@ -112,8 +112,6 @@ body.Russia header.your_turn {background-color: var(--russia);}
 
 	& .group.fr { background-color: var(--france_light); }
 	& .group.ru { background-color: var(--russia_light); }
-
-	
 
 	& .i {
 		text-indent: 14px;
@@ -134,8 +132,8 @@ body.Russia header.your_turn {background-color: var(--russia);}
 
 	& .card-tip {
 		font-variant-caps: small-caps;
-		padding: 0 4px; 
-		border-radius: 2px; 
+		padding: 0 4px;
+		border-radius: 2px;
 	}
 
 	& .card-tip.fr { background-color: var(--france_light) }
@@ -144,7 +142,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
  }
 
 .tip:hover, .card-tip:hover, .area-tip:hover {
-    cursor: pointer; 
+    cursor: pointer;
     text-decoration: underline;
 }
 
@@ -177,14 +175,10 @@ body.Russia header.your_turn {background-color: var(--russia);}
 
 /* ORDER PLANNING MINIBOARD */
 #plan_orders {
-	width: 750px;
-	height: 500px;
+	width: 2500px;
+	height: 150px;
 	justify-self: center;
 	/*background-image: url(pieces/retreat_from_moscow.jpg);*/
-}
-
-#plan_orders .panel-head {
-	background-color: #0005;
 }
 
 /* SPACES */
@@ -227,7 +221,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	min-height: 350px;
 }
 
-.piece {
+.piece, .troop {
 		position: absolute;
 		background-size: cover;
 		background-repeat: no-repeat;
@@ -255,6 +249,10 @@ body.Russia header.your_turn {background-color: var(--russia);}
 		drop-shadow(0 2px 0 yellow)
 		drop-shadow(-2px 0 0 yellow)
 		drop-shadow(2px 0 0 yellow)
+}
+
+.stack > .piece.leader {
+	position: absolute;
 }
 
 .piece.leader.Alexander {background-image: url(pieces/leader_Alexander.png);}
@@ -293,13 +291,6 @@ body.Russia header.your_turn {background-color: var(--russia);}
 .subordinate_special {
     top: 225px;
     z-index: 1;
-}
-
-.leader_board > * > .piece.guard, 
-.leader_board > * > .piece.cossack, 
-.leader_board > * > .piece.infantry, 
-.leader_board > * > .piece.cavalry {
-	position: relative;
 }
 
 .subordinate_cavalry {
@@ -389,13 +380,24 @@ body.Russia header.your_turn {background-color: var(--russia);}
 .piece.order.hidden.fr { background-image: url(pieces/fr\ order\ back.png);}
 
 /* TROOPS */
-.piece.infantry, .piece.cavalry, .piece.cossack, .piece.guard {
+body.hide-pieces .troop { display: none }
+
+.troop {
 	width: 67px;
 	height: 67px;
 	position: relative;
+	background-size: contain;
 }
 
-.piece > .half_strength_ru, .piece > .half_strength_fr {
+.troop.action {
+	filter:
+		drop-shadow(0 -2px 0 yellow)
+		drop-shadow(0 2px 0 yellow)
+		drop-shadow(-2px 0 0 yellow)
+		drop-shadow(2px 0 0 yellow)
+}
+
+.troop > .half_strength_ru, .troop > .half_strength_fr {
 	position: absolute;
 	bottom: 30px;
 	left: 20px;
@@ -414,36 +416,31 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	align-items: center;
 }
 
-.stack > .piece.infantry, 
-.stack > .piece.cavalry, 
-.stack > .piece.cossack, 
-.stack > .piece.guard {
+.stack > .troop {
 	position: absolute;
 }
 
-.layout > .piece {
+.layout > .troop {
 	position: relative;
 }
+.troop.infantry.ru.fresh { background-image: url(pieces/fresh-infantry_ru.png);}
+.troop.infantry.ru.exhausted { background-image: url(pieces/exhausted-infantry_ru.png);}
+.troop.infantry.fr.fresh { background-image: url(pieces/fresh-infantry_fr.png);}
+.troop.infantry.fr.exhausted { background-image: url(pieces/exhausted-infantry_fr.png);}
+.troop.infantry.pr.fresh { background-image: url(pieces/fresh-infantry_pr.png);}
+.troop.infantry.pr.exhausted { background-image: url(pieces/exhausted-infantry_pr.png);}
+.troop.infantry.au.fresh { background-image: url(pieces/fresh-infantry_au.png);}
+.troop.infantry.au.exhausted { background-image: url(pieces/exhausted-infantry_au.png);}
 
-.piece.infantry.fr.fresh { background-image: url(pieces/fresh-infantry_fr.png);}
-.piece.infantry.ru.fresh { background-image: url(pieces/fresh-infantry_ru.png);}
-.piece.infantry.pr.fresh { background-image: url(pieces/fresh-infantry_pr.png);}
-.piece.infantry.au.fresh { background-image: url(pieces/fresh-infantry_au.png);}
-.piece.infantry.fr.exhausted { background-image: url(pieces/exhausted-infantry_fr.png);}
-.piece.infantry.ru.exhausted { background-image: url(pieces/exhausted-infantry_ru.png);}
-.piece.infantry.pr.exhausted { background-image: url(pieces/exhausted-infantry_pr.png);}
-.piece.infantry.au.exhausted { background-image: url(pieces/exhausted-infantry_au.png);}
+.troop.cavalry.ru.fresh { background-image: url(pieces/fresh-cavalry_ru.png);}
+.troop.cavalry.ru.exhausted { background-image: url(pieces/exhausted-cavalry_ru.png);}
+.troop.cavalry.fr.fresh { background-image: url(pieces/fresh-cavalry_fr.png);}
+.troop.cavalry.fr.exhausted { background-image: url(pieces/exhausted-cavalry_fr.png);}
 
-.piece.cavalry.fr.fresh { background-image: url(pieces/fresh-cavalry_fr.png);}
-.piece.cavalry.ru.fresh { background-image: url(pieces/fresh-cavalry_ru.png);}
-.piece.cavalry.fr.exhausted { background-image: url(pieces/exhausted-cavalry_fr.png);}
-.piece.cavalry.ru.exhausted { background-image: url(pieces/exhausted-cavalry_ru.png);}
-
-.piece.cossack.fresh {background-image: url(pieces/fresh-cossack.png);}
-.piece.cossack.exhausted {background-image: url(pieces/exhausted-cossack.png);}
-
-.piece.guard.fresh {background-image: url(pieces/fresh-guard.png);}
-.piece.guard.exhausted { background-image: url(pieces/exhausted-guard.png);}
+.troop.cossack.ru.fresh { background-image: url(pieces/fresh-cossack.png);}
+.troop.cossack.ru.exhausted { background-image: url(pieces/exhausted-cossack.png);}
+.troop.guard.fr.fresh { background-image: url(pieces/fresh-guard.png);}
+.troop.guard.fr.exhausted { background-image: url(pieces/exhausted-guard.png);}
 
 /* TRACKS */
 .marker {
@@ -517,7 +514,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
 .marker.depot.ru { background-image: url(pieces/green_cube.svg);}
 .marker.depot.fr { background-image: url(pieces/blue_cube.svg);}
 
-.attrition_checked { 
+.attrition_checked {
 	width: 67px;
 	height: 67px;
 	background-size: cover;
@@ -525,7 +522,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
 	pointer-events: auto;
 }
 
-.half_strength_ru, .half_strength_fr { 
+.half_strength_ru, .half_strength_fr {
 	width: 50px;
 	height: 50px;
 	background-size: cover;
@@ -539,7 +536,7 @@ body.Russia header.your_turn {background-color: var(--russia);}
 .card {
     background-size: 110%;
 	background-repeat: no-repeat;
-	background-position: -4px -10px; 
+	background-position: -4px -10px;
 	background-color: transparent;
 	width: 250px;
 	height: 365px;

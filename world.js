@@ -115,16 +115,16 @@ const world = {
 // Holds all the code & constants necessary to decode the special 'troop' action
 // Held separate from play.js since these code segments modify the operation of world.js
 
-const ACTION_TROOP_PLAYER_MASK = 1 << 19
-const ACTION_TROOP_TYPE_MASK = 491520
-const ACTION_TROOP_STRENGTH_MASK = 1 << 14
-const ACTION_TROOP_AREA_MASK = 16256
-const ACTION_TROOP_FROM_MASK = 127
+const ACTION_TROOP_PLAYER_MASK = 1 << 21
+const ACTION_TROOP_TYPE_MASK = 1966080
+const ACTION_TROOP_STRENGTH_MASK = 1 << 16
+const ACTION_TROOP_AREA_MASK = 65280
+const ACTION_TROOP_FROM_MASK = 255
 
-const ACTION_TROOP_PLAYER_SHIFT = 19
-const ACTION_TROOP_TYPE_SHIFT = 15
-const ACTION_TROOP_STRENGTH_SHIFT = 14
-const ACTION_TROOP_AREA_SHIFT = 7
+const ACTION_TROOP_PLAYER_SHIFT = 21
+const ACTION_TROOP_TYPE_SHIFT = 17
+const ACTION_TROOP_STRENGTH_SHIFT = 16
+const ACTION_TROOP_AREA_SHIFT = 8
 const ACTION_TROOP_FROM_SHIFT = 0
 
 function decode_troop_action_player(entry) {

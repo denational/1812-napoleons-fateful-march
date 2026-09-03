@@ -2884,9 +2884,11 @@ P.draw_card_to_hand = {
 					} else if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count > 0) {
 						prompt(`Select an SP to ${get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice}.`)
 						if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "exhaust") {
-							get_all_fresh_sp_types(FRANCE, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area).forEach(action_troop)
+							for (let type of get_all_fresh_sp_types(FRANCE, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area))
+								action_troop_imp(type, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area)
 						} else {
-							get_all_exhausted_sp_types(FRANCE, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area).forEach(action_troop)
+							for (let type of get_all_exhausted_sp_types(FRANCE, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area))
+								action_troop_imp(type, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area)
 						}
 					}
 				} else {
@@ -3102,7 +3104,7 @@ P.draw_card_to_hand = {
 						if (has_exhausted_sp(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)) {
 							prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, `Rally an exhausted SP at S${get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area}.`)
 							for (let type of get_all_exhausted_sp_types(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area))
-								action_troop(type)
+								action_troop_imp(type, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)
 						} else {
 							prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, `No exhausted SPs at S${get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area} to rally.`)
 							button_next()
@@ -3944,14 +3946,14 @@ P.change_orders = {
 
 		L.leaders_who_can_use_abilities = [[L_KUTUZOV, L_DE_TOLLY, L_BAGRATION, L_CHICHAGOV], [L_NAPOLEON, L_DAVOUT, L_SCHWARZENBERG]]
 
-		//Undo
+		// Undo
 		L.leaders_who_have_used_abilities = [[], []]
 		L.switches = [[], []]
 		L.removed_orders = [[], []]
 		L.placed_orders = [[], []]
 		L.discarded_card = [-1, -1]
 		L.napoleon_action = -1
-		L.log = [[], []] //Cache of all logging, sorted by player (all done at the end of the state)
+		L.log = [[], []] // Cache of all logging, sorted by player (all done at the end of the state)
 
 		// For rewinding in case RU #7 Indecision is played
 		L.napoleon_change = {
@@ -3989,16 +3991,16 @@ P.change_orders = {
 			case L_CHICHAGOV:
 				this.prompt_discard_card_to_place(FORCED_MARCH)
 				break
-			case L_NAPOLEON: //Handled independently since he can do a mixture of both types of 'switch orders'
+			case L_NAPOLEON: // Handled independently since he can do a mixture of both types of 'switch orders'
 				if (L.step[R] === -1) {
 					prompt_leader(L_NAPOLEON, `Change an order at S${get_leader_location(L_NAPOLEON)} to any non-Dummy order.`)
 					for (let order of get_orders_at_area(R, get_leader_location(L_NAPOLEON))) {
-						//If Napoleon can switch OUT of the current order, generate actions on all the orders of the current order type at Napoleon's location
+						// If Napoleon can switch OUT of the current order, generate actions on all the orders of the current order type at Napoleon's location
 						if ((has_order_of_type(FRANCE, L.current_order_type, get_leader_location(L_NAPOLEON)) && has_switchable_order_in_pool(FRANCE, L.current_order_type))) {
 							if (get_order_type(order) === L.current_order_type)
 								action_order(order)
 						}
-						//If there is an order of the current order type in the pool and a non-dummy order in Napoleon's location, he can switch INTO the current order type
+						// If there is an order of the current order type in the pool and a non-dummy order in Napoleon's location, he can switch INTO the current order type
 						if ((has_non_dummy_order_at_area(FRANCE, get_leader_location(L_NAPOLEON)) && has_order_of_type(FRANCE, L.current_order_type, POOL))) {
 							if (get_order_type(order) !== DUMMY_ORDER && get_order_type(order) !== L.current_order_type)
 								action_order(order)
@@ -4067,7 +4069,7 @@ P.change_orders = {
 			L.placed_orders[R].push(order)
 			this.push_log(`>Discarded a card to place ${get_order_name(order)}.`)
 			break
-		case L_NAPOLEON: //The one unique case, so involves more bespoke code compared to the other leaders
+		case L_NAPOLEON: // The one unique case, so involves more bespoke code compared to the other leaders
 			if (L.step[R] === -1) {
 				L.napoleon_action = 1
 				if (get_order_type(order) === L.current_order_type) {
@@ -4930,7 +4932,7 @@ P.move = {
 		// If the destination is a VP area, increase VP
 		if (is_vp_area(area) && !is_friendly_controlled(G.active, area) && !has_enemy_sp(G.active, area)) {
 			vp_adjustment += G.active === RUSSIA ? (-1 * get_area_vp(area)) : get_area_vp(area)
-			log(`${ROLES[G.active]} +1 VP.`)
+			log(`${ROLES[G.active]} +${get_area_vp(area)} VP.`)
 		}
 
 		// RU #15 Pride and Hesitation: Russia gains +1 VP if any French leaders leave Moscow.
@@ -5174,13 +5176,13 @@ P.post_move_exhaustion = {
 				prompt_card(L.current_event, `Exhaust an SP in the moving force.`)
 
 				if (L.current_event === C_EXTREME_WEATHER_RU && G.move.sps[FRESH_CAVALRY] > 0) {
-					action("troop", FRESH_CAVALRY)
+					action_troop_imp(FRESH_CAVALRY, G.move.path[G.move.path.length - 1], get_move_strength(G.move.type), G.move.path[G.move.path.length - 2])
 					return
 				}
 
 				for (let type = 0; type < G.move.sps.length; ++type)
 					if (is_troop_type_fresh(type) && G.move.sps[type] > 0)
-						action("troop", type)
+						action_troop_imp(type, G.move.path[G.move.path.length - 1], get_move_strength(G.move.type), G.move.path[G.move.path.length - 2])
 			} else {
 				prompt_card(L.current_event, `No fresh SPs in the moving force.`)
 				button_confirm()
@@ -7247,7 +7249,7 @@ P.assign_losses = {
 				if (has_exhausted_sp(FRANCE, G.current_battle)) {
 					prompt_card(C_NAPOLEONS_MARSHALS, `Rally an exhausted SP.`)
 					for (let type of get_all_exhausted_sp_types(FRANCE, G.current_battle))
-						action("troop", type)
+						action_troop(type)
 				} else {
 					prompt_card(C_NAPOLEONS_MARSHALS, `No exhausted SPs to Rally.`)
 					button_next()
@@ -7297,7 +7299,7 @@ P.assign_losses = {
 				let card = (R === RUSSIA) ? C_INFANTRY_SQUARES_FR : C_INFANTRY_SQUARES_RU
 				if (count_num_cavalry(FRANCE, G.current_battle) > 0) {
 					prompt_card(card, "Assign a loss to a Cavalry SP.")
-					action("troop", FRESH_CAVALRY)
+					action_troop(FRESH_CAVALRY)
 				} else {
 					prompt_card(card, `No Cavalry SPs at S${G.current_battle}.`)
 					button_next()
@@ -7323,16 +7325,16 @@ P.assign_losses = {
 					if (count_num_fresh_sps(R, G.current_battle) > 0) {
 						if (L.count[R] % 3 === 2 && (count_num_cavalry(R, G.current_battle) > 0) && !L.has_assigned_cavalry_loss[R]) {
 							prompt(`Assign a loss to a fresh Cavalry SP.`)
-							action("troop", FRESH_CAVALRY)
+							action_troop(FRESH_CAVALRY)
 						} else if (L.count[R] % 2 === 0) {
 							prompt(`Select an SP to exhaust.`)
 							for (let type of get_all_fresh_sp_types(R, G.current_battle)) {
-								action("troop", type)
+								action_troop(type)
 							}
 						} else {
 							prompt(`Select an SP to eliminate.`)
 							for (let type of get_all_fresh_sp_types(R, G.current_battle)) {
-								action("troop", type)
+								action_troop(type)
 							}
 						}
 					} else {
@@ -7650,7 +7652,7 @@ P.assign_pursuit_losses = {
 		} else {
 			prompt(`Pursuit: Eliminate ${L.difference} SPs at S${G.current_battle}.`)
 			for (let type of get_troop_types_at_area(G.active, G.current_battle))
-				action("troop", type)
+				action_troop(type)
 		}
 	},
 	eliminate() {
@@ -8280,7 +8282,7 @@ P.do_rally = {
 				}
 				for (let type of get_troop_types_at_area(G.active, L.area)) {
 					if (is_troop_type_exhausted(type)) {
-						action("troop", type)
+						action_troop(type)
 					}
 				}
 			}
@@ -8384,7 +8386,7 @@ P.apply_cossack_raid = {
 			if (has_exhausted_sp(FRANCE, L.area)) {
 				prompt(`Eliminate 1 Exhausted SP from S${L.area}.`)
 				for (let type of get_troop_types_at_area(FRANCE, L.area)) {
-					if (is_troop_type_exhausted(type)) action("troop", type)
+					if (is_troop_type_exhausted(type)) action_troop(type)
 				}
 			} else {
 				prompt(`No exhausted SPs at S${L.area}.`)
@@ -8931,8 +8933,9 @@ P.exhaust_sp = {
 			get_all_fresh_sp_types(G.active, L.area).forEach(type => action_troop_imp(type, L.area))
 		console.log(V.actions)
 	},
-	troop(type) {
+	troop(entry) {
 		push_undo()
+		let type = decode_troop_action_type(entry)
 
 		exhaust_troop(G.active, L.area, type)
 
@@ -8981,8 +8984,9 @@ P.eliminate_2_exhausted_sps = {
 		else
 			get_all_exhausted_sp_types(G.active, L.area).forEach(action_troop)
 	},
-	troop(type) {
+	troop(entry) {
 		push_undo()
+		let type = decode_troop_action_type(entry)
 		eliminate_troop(G.active, L.area, type)
 
 		// These sections are specific to the 'Exhausting March' event (since they may mutate moved/battle entries)
@@ -12550,7 +12554,7 @@ P.poniatowskis_v_corps = {
 			prompt_card(C_PONIATOWSKIS_V_CORPS, `Rally exhausted infantry SPs in the moving force (${L.count} remaining).`)
 			for (let type of [EXHAUSTED_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY])
 				if (G.move.sps[type] > 0)
-					action("troop", type)
+					action_troop(type)
 		}
 	},
 	troop(type) {
@@ -12844,7 +12848,7 @@ P.courage_of_desperation = {
 		if (L.step === -1) {
 			if (has_exhausted_sp(G.active, G.current_battle)) {
 				prompt_card(C_COURAGE_OF_DESPERATION, "Immediately Rally 1 Exhausted SP.")
-				for (let type of get_all_exhausted_sp_types(G.active, G.current_battle)) action("troop", type)
+				for (let type of get_all_exhausted_sp_types(G.active, G.current_battle)) action_troop(type)
 			} else {
 				prompt_card(C_COURAGE_OF_DESPERATION, "No exhausted SPs to Rally.")
 				button_next()
@@ -13020,24 +13024,24 @@ function action_troop(type) 			{ action("troop", type) }
 function button_leader(leader) 			{ action("leader_button", leader) }
 
 /*
-	20 bits
+	22 bits
 	1 bit - player (RUSSIA or FRANCE)
 	4 bits - troop type (from FRESH_INFANTRY (0) to EXHAUSTED_AUSTRIAN_INFANTRY (11))
 	1 bit - strength (HALF_STRENGTH, FULL_STRENGTH)
-	7 bits - area (needs to accomodate at least until 157)
-	7 bit - area from which the SP entered (also needs to accomodate at least 157)
+	8 bits - area (needs to accomodate at least until 157)
+	8 bit - area from which the SP entered (also needs to accomodate at least 157)
 */
 
-const ACTION_TROOP_PLAYER_MASK = 1 << 19
-const ACTION_TROOP_TYPE_MASK = 491520
-const ACTION_TROOP_STRENGTH_MASK = 1 << 14
-const ACTION_TROOP_AREA_MASK = 16256
-const ACTION_TROOP_FROM_MASK = 127
+const ACTION_TROOP_PLAYER_MASK = 1 << 21
+const ACTION_TROOP_TYPE_MASK = 1966080
+const ACTION_TROOP_STRENGTH_MASK = 1 << 16
+const ACTION_TROOP_AREA_MASK = 65280
+const ACTION_TROOP_FROM_MASK = 255
 
-const ACTION_TROOP_PLAYER_SHIFT = 19
-const ACTION_TROOP_TYPE_SHIFT = 15
-const ACTION_TROOP_STRENGTH_SHIFT = 14
-const ACTION_TROOP_AREA_SHIFT = 7
+const ACTION_TROOP_PLAYER_SHIFT = 21
+const ACTION_TROOP_TYPE_SHIFT = 17
+const ACTION_TROOP_STRENGTH_SHIFT = 16
+const ACTION_TROOP_AREA_SHIFT = 8
 const ACTION_TROOP_FROM_SHIFT = 0
 
 function package_troop(player, type, strength, area, from) {
