@@ -509,6 +509,7 @@ class Troop extends Thing {
 		// We can now conveniently use all world.js functions excepting those which affect actions
 		super(element, action, id)
 
+		this.am_moving = 0
 		this.my_player = -1
 		this.my_type = type
 		this.my_strength = FULL_STRENGTH
@@ -541,13 +542,14 @@ function _on_click_troop(evt) {
 function package_troop_id(id) {
 	let troop = lookup_troop(id)
 
+	let move = troop.am_moving
 	let player = troop.my_player
 	let type = troop.my_type
 	let strength = troop.my_strength
 	let area = troop.my_area
 	let from = troop.my_from
 
-	return package_troop(player, type, strength, area, from)
+	return package_troop(player, type, strength, area, from, move)
 }
 
 function define_troop(type, id) {
@@ -587,8 +589,10 @@ function update_troop_exhaustion(id, state) {
 }
 
 function toggle_troop_type_exhaustion(type) {
-	if (is_fresh(type)) return type + 1
-	else return type - 1
+	if (is_fresh(type))
+		return type + 1
+	else
+		return type - 1
 }
 
 function populate_half_strength(player, parent_id, count = 1) {
@@ -605,6 +609,7 @@ function populate_troop(player, type, parent_action, parent_id) {
 
 	// Reset flag each render
 	lookup_troop(troop_id).my_strength = FULL_STRENGTH
+	lookup_troop(troop_id).am_moving = 0
 }
 
 
@@ -640,6 +645,16 @@ function define_troop_list(action, a, b, keywords) {
 	}
 }
 
+function move_offset_x(area) {
+	let a = layout[get_area_name(area)].slice()
+	return a[0] + 15
+}
+
+function move_offset_y(area) {
+	let a = layout[get_area_name(area)]
+	return a[1] - 15
+}
+
 function on_init() {
 	define_board("#map", 2500, 2027, [0, 0, 0, 0])
 
@@ -664,6 +679,8 @@ function on_init() {
 		// Where we populate orders
 		define_stack("orders_stack", area, translate_right(layout[get_area_name(area)], 52), 0, -100, 0, -125)
 	}
+
+	define_stack("move", 0, [0, 0, 25, 25], -15, -15, 0, -58, 0, 36, 1, 10)
 
 	define_layout("ru_pool_depots", 0, layout["Russia Pool Depots"])
 	define_layout("fr_pool_depots", 0, layout["France Pool Depots"])
@@ -768,13 +785,12 @@ function on_update() {
 	update_panel_show("leaders", RUSSIA, false)
 	update_panel_show("leaders", FRANCE, false)
 
-
 	for (let leader = 0; leader <= 13; ++leader) {
 		action_button_with_argument(`leader_button`, leader, leaders[leader].log_name)
 		if (V.move && V.move.leaders) {
-			let btn = document.getElementById("leader_button_" + leader + "_button")
-			if (btn)
-				btn.classList.toggle("button_selected", set_has(V.move.leaders, leader))
+			let counter = document.getElementById("leader piece " + get_leader_short_name(leader))
+			if (counter)
+				counter.classList.toggle("selected", set_has(V.move.leaders, leader))
 		}
 	}
 
@@ -851,7 +867,9 @@ function on_update() {
 	action_button("exhaust", "Exhaust")
 	action_button("eliminate_2", "Eliminate 2")
 
+	action_button("play", "Play")
 	action_button("done", "Done")
+	action_button("move", "Move")
 	action_button("next", "Next")
 	action_button("draw", "Draw")
 	action_button("discard", "Discard")
@@ -1012,7 +1030,11 @@ function update_leaders() {
 					}
 				}
 			} else {
-				if (R === get_leader_owner(leader) || (R !== get_leader_owner(leader) && is_seniormost_leader(leader, location)))
+				if (V.move && V.move.leaders && V.move.path && V.move.path.length === 1 && set_has(V.move.leaders, leader)) {
+					update_position("move", 0, move_offset_x(location), move_offset_y(location))
+					populate("move", 0, "leader", leader)
+				}
+				else if (R === get_leader_owner(leader) || (R !== get_leader_owner(leader) && is_seniormost_leader(leader, location)))
 					populate("area_stack", get_leader_location(leader), "leader", leader)
 			}
 		}
@@ -1100,6 +1122,28 @@ function update_troops() {
 								map_set(troop_nums, get_used(player, type), force.troops[type])
 							incr_used(player, type)
 						}
+					}
+				}
+
+				if (V.move, V.move.sps) {
+					if (V.move.path && V.move.path.length === 1 && V.move.path[V.move.path.length - 1] === area && V.move.sps[type] > 0) {
+						update_position("move", 0, move_offset_x(area), move_offset_y(area))
+						update_troop_exhaustion(get_used(player, type), is_fresh(type) ? FRESH : EXHAUSTED)
+
+						if (R === player || (R !== player && G.move.leaders.length === 0))
+							populate_troop(player, type, "move", 0)
+
+						lookup_troop(get_used(player, type)).my_area = area
+						if (G.move.path.length >= 2)
+							lookup_troop(get_used(player, type)).my_from = G.move.path[G.move.path.length - 2]
+						else
+							lookup_troop(get_used(player, type)).my_from = POOL
+						lookup_troop(get_used(player, type)).am_moving = 1
+
+						num_moved += G.move.sps[type]
+						if (!map_has(troop_nums, get_used(player, type)))
+							map_set(troop_nums, get_used(player, type), G.move.sps[type])
+						incr_used(player, type)
 					}
 				}
 

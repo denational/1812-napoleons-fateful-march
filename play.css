@@ -245,10 +245,18 @@ body.France header.your_turn {background-color: var(--france);}
 
 .piece.leader.action {
 	filter:
-		drop-shadow(0 -2px 0 yellow)
-		drop-shadow(0 2px 0 yellow)
-		drop-shadow(-2px 0 0 yellow)
-		drop-shadow(2px 0 0 yellow)
+		drop-shadow(0 -1px 0 yellow)
+		drop-shadow(0 1px 0 yellow)
+		drop-shadow(-1px 0 0 yellow)
+		drop-shadow(1px 0 0 yellow)
+}
+
+.piece.leader.selected {
+	filter:
+		drop-shadow(0 -2px 0 lightgreen)
+		drop-shadow(0 2px 0 lightgreen)
+		drop-shadow(-2px 0 0 lightgreen)
+		drop-shadow(2px 0 0 lightgreen)
 }
 
 .stack > .piece.leader {
@@ -391,10 +399,10 @@ body.hide-pieces .troop { display: none }
 
 .troop.action {
 	filter:
-		drop-shadow(0 -2px 0 yellow)
-		drop-shadow(0 2px 0 yellow)
-		drop-shadow(-2px 0 0 yellow)
-		drop-shadow(2px 0 0 yellow)
+		drop-shadow(0 -1px 0 yellow)
+		drop-shadow(0 1px 0 yellow)
+		drop-shadow(-1px 0 0 yellow)
+		drop-shadow(1px 0 0 yellow)
 }
 
 .troop > .half_strength_ru, .troop > .half_strength_fr {

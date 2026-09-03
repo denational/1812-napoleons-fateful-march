@@ -115,17 +115,23 @@ const world = {
 // Holds all the code & constants necessary to decode the special 'troop' action
 // Held separate from play.js since these code segments modify the operation of world.js
 
+const ACTION_TROOP_MOVING_MASK = 1 << 22
 const ACTION_TROOP_PLAYER_MASK = 1 << 21
 const ACTION_TROOP_TYPE_MASK = 1966080
 const ACTION_TROOP_STRENGTH_MASK = 1 << 16
 const ACTION_TROOP_AREA_MASK = 65280
 const ACTION_TROOP_FROM_MASK = 255
 
+const ACTION_TROOP_MOVING_SHIFT = 22
 const ACTION_TROOP_PLAYER_SHIFT = 21
 const ACTION_TROOP_TYPE_SHIFT = 17
 const ACTION_TROOP_STRENGTH_SHIFT = 16
 const ACTION_TROOP_AREA_SHIFT = 8
 const ACTION_TROOP_FROM_SHIFT = 0
+
+function decode_troop_action_moving(entry) {
+	return (entry & ACTION_TROOP_MOVING_MASK) >> ACTION_TROOP_MOVING_SHIFT
+}
 
 function decode_troop_action_player(entry) {
 	return (entry & ACTION_TROOP_PLAYER_MASK) >> ACTION_TROOP_PLAYER_SHIFT
@@ -147,17 +153,19 @@ function decode_troop_action_from(entry) {
 	return (entry & ACTION_TROOP_FROM_MASK) >> ACTION_TROOP_FROM_SHIFT
 }
 
-function package_troop(player, type, strength, area, from) {
+function package_troop(player, type, strength, area, from, move) {
+	let m = move << ACTION_TROOP_MOVING_SHIFT
 	let p = player << ACTION_TROOP_PLAYER_SHIFT
 	let t = type << ACTION_TROOP_TYPE_SHIFT
 	let s = strength << ACTION_TROOP_STRENGTH_SHIFT
 	let a = area << ACTION_TROOP_AREA_SHIFT
 	let f = from << ACTION_TROOP_FROM_SHIFT
 
-	return p + t + s + a + f
+	return m + p + t + s + a + f
 }
 
 function find_troop(argument) {
+	let move = decode_troop_action_moving(argument)
 	let player = decode_troop_action_player(argument)
 	let type = decode_troop_action_type(argument)
 	let strength = decode_troop_action_strength(argument)
@@ -168,10 +176,13 @@ function find_troop(argument) {
 		let troop = world.things.troop[i]
 
 		if (
-			troop.my_strength === strength
+			troop.am_moving === move
+			&& troop.my_strength === strength
 			&& troop.my_area === area
 			&& troop.my_from === from
 		) {
+			console.log(troop)
+			console.log([move, player, type, strength, area, from])
 			return troop.my_id
 		}
 	}

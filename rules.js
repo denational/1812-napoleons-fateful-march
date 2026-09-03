@@ -4564,6 +4564,21 @@ function can_alexander_be_babysitted(evade = false) {
 	return true
 }
 
+function move_prompt() {
+	let s = ` (Selected: `
+	let has_seen_leader = false
+	for (let leader of G.move.leaders)
+		if (!has_seen_leader)
+			s += `L${leader}`
+		else
+			s += `, L${leader}`
+	for (let type = 0; type < G.move.sps.length; ++type)
+		if (G.move.sps[type] > 0)
+			 s += `, ${G.move.sps[type]} ${get_troop_type_name(type)}`
+
+	return s + ")"
+}
+
 P.select_force = {
 	_begin() {
 		// L.type, L.area
@@ -4604,26 +4619,40 @@ P.select_force = {
 			else
 				prompt(`All friendly SPs at S${L.area} have previously moved.`)
 			button_pass()
-		}
-		else if (G.move.leaders.length > 0) {
-			prompt(`Select any or all leaders and SPs to move from S${L.area}.`)
 
-			// Alexander ability: Must always, if possible, stack and move with another Russian leader.
-			// No Russian leader may leave him behind alone.
-			// See can_alexander_be_babysitted() for more clarifications on this
-			if (set_has(L.movable_leaders, L_ALEXANDER) && L.movable_leaders.length > 1 && (!set_has(G.move.leaders, L_ALEXANDER) || G.move.leaders.length === 1))
-				V.prompt += ` L${L_ALEXANDER} may not be activated alone or left behind without another leader.`
+		} else {
+			let sp_limit = G.move.leaders.length > 0 ? L.max_sps_selectable : 4
 
-			// Platov ability: May only command Cavalry and Cossack SPs.
-			if (G.move.leaders.length === 1 && set_has(G.move.leaders, L_PLATOV))
-				V.prompt += ` L${L_PLATOV} may only command Cavalry and Cossack SPs.`
+			if (G.move.leaders.length > 0) {
+				prompt(`Select any or all leaders and SPs to move from S${L.area}.`)
+
+				// Alexander ability: Must always, if possible, stack and move with another Russian leader.
+				// No Russian leader may leave him behind alone.
+				// See can_alexander_be_babysitted() for more clarifications on this
+				if (set_has(L.movable_leaders, L_ALEXANDER) && L.movable_leaders.length > 1 && (!set_has(G.move.leaders, L_ALEXANDER) || G.move.leaders.length === 1))
+					V.prompt += ` L${L_ALEXANDER} may not be activated alone or left behind without another leader.`
+
+				// Platov ability: May only command Cavalry and Cossack SPs.
+				if (G.move.leaders.length === 1 && set_has(G.move.leaders, L_PLATOV))
+					V.prompt += ` L${L_PLATOV} may only command Cavalry and Cossack SPs.`
+			} else {
+				prompt(`Select up to 4 SPs (at least 1) to move from S${L.area}.`)
+			}
+
+			if (G.move.leaders.length > 0 || L.num_sps_selected > 0)
+				V.prompt += move_prompt()
 
 			// Bagration's Retreat must include Bagration!
-			if (is_event_active(C_BAGRATIONS_RETREAT) && L.area === get_leader_location(L_BAGRATION) && !set_has(G.move.leaders, L_BAGRATION))
+			if (is_event_active(C_BAGRATIONS_RETREAT) && L.area === get_leader_location(L_BAGRATION))
 				V.prompt += ` L${L_BAGRATION} must participate in ${get_card_log_alias(C_BAGRATIONS_RETREAT)}.`
 
-			for (let leader of L.movable_leaders)
-				button_leader(leader)
+			if (
+				!is_event_active(C_INFIGHTING_AND_INTRIGUE)
+				|| (is_event_active(C_INFIGHTING_AND_INTRIGUE) && get_event_keyword(C_INFIGHTING_AND_INTRIGUE, "area") === L.area && has_valid_infighting_and_intrigue_destination(G.active, L.area, L.type))
+			) {
+				for (let leader of L.movable_leaders)
+					action_leader(leader)
+			}
 
 			for (let type = 0; type < G.move.sps.length; ++type) {
 				// Platov leader ability: He may only command Cavalry and Cossack SPs
@@ -4642,54 +4671,19 @@ P.select_force = {
 					&& G.move.sps[type] < L.movable_sps[type]
 					&& L.num_sps_selected < L.max_sps_selectable
 				) {
-					action("add_troop", type)
+					action_troop_imp(type, L.area)
 				}
 
 				if (G.move.sps[type] > 0)
-					action("remove_troop", type)
+					action_troop_imp(type, L.area, FULL_STRENGTH, POOL, 1)
 			}
 
-			if (!G.move.pinned && L.movable_leaders.length > G.move.leaders.length || L.num_sps_selected < L.max_sps_selectable)
+			if (!G.move.pinned && (L.movable_leaders.length > G.move.leaders.length || L.num_sps_selected < L.max_sps_selectable) && L.max_sps_selectable <= sp_limit)
 				button("select_all")
 
-			button_done(
+			button("move",
 				L.num_sps_selected >= 1
-				&& can_alexander_be_babysitted()
-				&& ((!is_event_active(C_BAGRATIONS_RETREAT)) || (get_leader_location(L_BAGRATION) !== L.area) || set_has(G.move.leaders, L_BAGRATION))
-			)
-		}
-		else {
-			prompt(`Select up to 4 SPs (at least 1) to move from S${L.area}.`)
-
-			// Bagration's Retreat must include Bagration!
-			if (is_event_active(C_BAGRATIONS_RETREAT) && L.area === get_leader_location(L_BAGRATION))
-				V.prompt += ` L${L_BAGRATION} must participate in ${get_card_log_alias(C_BAGRATIONS_RETREAT)}.`
-
-			if (
-				!is_event_active(C_INFIGHTING_AND_INTRIGUE)
-				|| (is_event_active(C_INFIGHTING_AND_INTRIGUE) && get_event_keyword(C_INFIGHTING_AND_INTRIGUE, "area") === L.area && has_valid_infighting_and_intrigue_destination(G.active, L.area, L.type))
-			) {
-				for (let leader of L.movable_leaders)
-					button_leader(leader)
-			}
-
-			for (let type = 0; type < G.move.sps.length; ++type) {
-				if (L.movable_sps[type] > 0
-					&& G.move.sps[type] < L.movable_sps[type]
-					&& L.num_sps_selected < L.max_sps_selectable
-				) {
-					action("add_troop", type)
-				}
-
-				if (G.move.sps[type] > 0)
-					action("remove_troop", type)
-			}
-
-			if (!G.move.pinned && L.movable_leaders.length === 0 && L.num_sps_selected < L.max_sps_selectable && L.max_sps_selectable <= 4)
-				button("select_all")
-
-			button_done(
-				L.num_sps_selected >= 1
+				&& L.num_sps_selected <= sp_limit
 				&& can_alexander_be_babysitted()
 				&& ((!is_event_active(C_BAGRATIONS_RETREAT)) || (get_leader_location(L_BAGRATION) !== L.area) || set_has(G.move.leaders, L_BAGRATION))
 			)
@@ -4706,7 +4700,7 @@ P.select_force = {
 		log()
 		goto("end_order", { type: G.move.type })
 	},
-	leader_button(leader) {
+	leader(leader) {
 		push_undo()
 		set_toggle(G.move.leaders, leader)
 
@@ -4732,15 +4726,19 @@ P.select_force = {
 			}
 		}
 	},
-	add_troop(type) {
+	troop(entry) {
 		push_undo()
-		++G.move.sps[type]
-		++L.num_sps_selected
-	},
-	remove_troop(type) {
-		push_undo()
-		--G.move.sps[type]
-		--L.num_sps_selected
+		let type = decode_troop_action_type(entry)
+		let moving = decode_troop_action_moving(entry)
+
+		if (moving) {
+			--G.move.sps[type]
+			--L.num_sps_selected
+		} else {
+			++G.move.sps[type]
+			++L.num_sps_selected
+		}
+
 	},
 	select_all() {
 		push_undo()
@@ -4763,7 +4761,7 @@ P.select_force = {
 			L.num_sps_selected += L.movable_sps[type]
 		}
 	},
-	done() {
+	move() {
 		push_undo()
 		if ((L.type === MARCH) && (G.active === FRANCE) && hand_has(FRANCE, C_PONIATOWSKIS_V_CORPS))
 			goto("may_play_poniatowskis_v_corps")
@@ -5192,8 +5190,9 @@ P.post_move_exhaustion = {
 			button_done()
 		}
 	},
-	troop(type) {
+	troop(entry) {
 		push_undo()
+		let type = decode_troop_action_type(entry)
 		let destination = G.move.path[G.move.path.length - 1]
 		exhaust_troop(G.active, destination, type)
 
@@ -11791,8 +11790,10 @@ P.may_play_fast_marching = {
 	prompt() {
 		prompt(`You may play ${join_array_with_or(L.events.map(card => `${get_card_log_alias(card)}`))}.`)
 		L.events.forEach(action_card)
+		if (L.events.length === 1) button("play")
 		button_pass()
 	},
+	play() { this.card(L.events[0]) },
 	card(card) {
 		push_undo()
 		set_delete(L.events, card)
@@ -13024,7 +13025,8 @@ function action_troop(type) 			{ action("troop", type) }
 function button_leader(leader) 			{ action("leader_button", leader) }
 
 /*
-	22 bits
+	23 bits
+	1 bit - is the piece moving?
 	1 bit - player (RUSSIA or FRANCE)
 	4 bits - troop type (from FRESH_INFANTRY (0) to EXHAUSTED_AUSTRIAN_INFANTRY (11))
 	1 bit - strength (HALF_STRENGTH, FULL_STRENGTH)
@@ -13032,26 +13034,33 @@ function button_leader(leader) 			{ action("leader_button", leader) }
 	8 bit - area from which the SP entered (also needs to accomodate at least 157)
 */
 
+const ACTION_TROOP_MOVING_MASK = 1 << 22
 const ACTION_TROOP_PLAYER_MASK = 1 << 21
 const ACTION_TROOP_TYPE_MASK = 1966080
 const ACTION_TROOP_STRENGTH_MASK = 1 << 16
 const ACTION_TROOP_AREA_MASK = 65280
 const ACTION_TROOP_FROM_MASK = 255
 
+const ACTION_TROOP_MOVING_SHIFT = 22
 const ACTION_TROOP_PLAYER_SHIFT = 21
 const ACTION_TROOP_TYPE_SHIFT = 17
 const ACTION_TROOP_STRENGTH_SHIFT = 16
 const ACTION_TROOP_AREA_SHIFT = 8
 const ACTION_TROOP_FROM_SHIFT = 0
 
-function package_troop(player, type, strength, area, from) {
+function package_troop(player, type, strength, area, from, move) {
+	let m = move << ACTION_TROOP_MOVING_SHIFT
 	let p = player << ACTION_TROOP_PLAYER_SHIFT
 	let t = type << ACTION_TROOP_TYPE_SHIFT
 	let s = strength << ACTION_TROOP_STRENGTH_SHIFT
 	let a = area << ACTION_TROOP_AREA_SHIFT
 	let f = from << ACTION_TROOP_FROM_SHIFT
 
-	return p + t + s + a + f
+	return m + p + t + s + a + f
+}
+
+function decode_troop_action_moving(entry) {
+	return (entry & ACTION_TROOP_MOVING_MASK) >> ACTION_TROOP_MOVING_SHIFT
 }
 
 function decode_troop_action_player(entry) {
@@ -13074,14 +13083,14 @@ function decode_troop_action_from(entry) {
 	return (entry & ACTION_TROOP_FROM_MASK) >> ACTION_TROOP_FROM_SHIFT
 }
 
-function action_troop_imp(type, area = 0, strength = FULL_STRENGTH, from = POOL) {
+function action_troop_imp(type, area = 0, strength = FULL_STRENGTH, from = POOL, move = 0) {
 	let player
 	if (Array.isArray(G.active))
 		player = R
 	else
 		player = G.active
 
-	action("troop", package_troop(player, type, strength, area, from))
+	action("troop", package_troop(player, type, strength, area, from, move))
 }
 
 //=== LOGGING ===
