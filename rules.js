@@ -7916,60 +7916,76 @@ P.end_battle_events = {
 		G.active = []
 		if (is_battle_event_currently_active(C_STOIC_INFANTRY) && has_russian_sp(G.current_battle))
 			set_add(G.active, RUSSIA)
-		if ((is_battle_event_currently_active(C_THE_IMPERIAL_GUARD) && get_battle_loser(G.current_battle) === FRANCE)
-			|| is_battle_event_currently_active(C_MURATS_CAVALRY) || is_battle_event_currently_active(C_NEYS_III_CORPS))
+		if (
+			(is_battle_event_currently_active(C_THE_IMPERIAL_GUARD) && get_battle_loser(G.current_battle) === FRANCE)
+			|| is_battle_event_currently_active(C_MURATS_CAVALRY)
+			|| is_battle_event_currently_active(C_NEYS_III_CORPS)
+		) {
 			set_add(G.active, FRANCE)
+		}
 
+		// for 'Stoic Infantry'
+		if (set_has(G.active, RUSSIA))
+			L.num_sps_to_rally = Math.min(count_num_sps_of_type(RUSSIA, EXHAUSTED_INFANTRY, G.current_battle), Math.min(2, get_event_keyword(C_STOIC_INFANTRY, "num_exhausted_infantry", 0)))
+
+		// for 'The Imperial Guard'
+		if (is_battle_event_currently_active(C_THE_IMPERIAL_GUARD))
+			L.has_discarded = false
+
+		// Initializing local state machine
 		L.state = [null, null]
 		advance_local_state(RUSSIA)
 		advance_local_state(FRANCE)
 
-		L.num_sps_to_rally = Math.min(count_num_sps_of_type(RUSSIA, EXHAUSTED_INFANTRY, G.current_battle), Math.min(2, get_event_keyword(C_STOIC_INFANTRY, "num_exhausted_infantry", 0)))
-		L.has_discarded = false
-
+		// Local undo stack
 		L.undo = [[], []]
 	},
 	states: {
-		"stoic_infantry":
-		{
-			eligible(player) { return player === RUSSIA && is_battle_event_currently_active(C_STOIC_INFANTRY) && has_russian_sp(G.current_battle) },
+		"stoic_infantry": {
+			eligible(player) {
+				return player === RUSSIA
+				&& is_battle_event_currently_active(C_STOIC_INFANTRY)
+				&& has_russian_sp(G.current_battle)
+			},
 			prompt() {
 				if (L.num_sps_to_rally > 0) {
 					prompt_card(C_STOIC_INFANTRY, `Rally up to ${L.num_sps_to_rally} exhausted Infantry SPs.`)
-					action_troop(EXHAUSTED_INFANTRY)
+					get_player_battle_data(R, G.current_battle).forces.forEach(force => {
+						if (force.troops[EXHAUSTED_INFANTRY] > 0)
+							action_troop_imp(EXHAUSTED_INFANTRY, G.current_battle, force.strength, force.from)
+					})
 				} else {
 					prompt_card(C_STOIC_INFANTRY, "All done.")
-					button_done()
+					button_confirm()
 				}
 			},
-			on_troop(type) {
-				let connections = battle_rally_troop(RUSSIA, G.current_battle, type)
-				push_local_undo(RUSSIA, "rally", { type, num: 1, connections } )
+			on_troop(entry) {
+				let type = decode_troop_action_type(entry)
+				let strength = decode_troop_action_strength(entry)
+				let from = decode_troop_action_from(entry)
+
+				battle_rally_sp(R, G.current_battle, type, strength, from)
 				--L.num_sps_to_rally
-			},
-			on_done() {
-				set_delete(G.active, RUSSIA)
-				map_delete(G.persistent_events, C_STOIC_INFANTRY)
-				if (G.active.length === 0) {
-					log()
-					end()
-				}
+
+				push_local_undo(R, "rally", { type, strength, from })
 			}
 		},
-		"the_imperial_guard":
-		{
-			eligible(player) { return player === FRANCE && is_battle_event_currently_active(C_THE_IMPERIAL_GUARD) && get_battle_loser(G.current_battle) === FRANCE },
+		"the_imperial_guard": {
+			eligible(player) {
+				return (player === FRANCE)
+				&& (get_battle_loser(G.current_battle) === FRANCE)
+			},
 			prompt() {
 				if (!L.has_discarded) {
-					if (has_card_in_hand(FRANCE)) {
-						prompt_card(C_THE_IMPERIAL_GUARD, "Discard a random card from your hand for losing the battle.")
+					if (has_card_in_hand(R)) {
+						prompt_card(C_THE_IMPERIAL_GUARD, "Discard a random card from your hand for losing the battle. (cannot be undone)")
 						button_discard()
 					} else {
 						prompt_card(C_THE_IMPERIAL_GUARD, "No cards in hand to discard.")
 						button_next()
 					}
 				} else {
-					prompt_card(C_THE_IMPERIAL_GUARD, "Shift the VP marker 2 in Russia's favor.")
+					prompt_card(C_THE_IMPERIAL_GUARD, `Shift the VP marker two spaces in Russia's favor.`)
 					action_vp_marker()
 				}
 			},
@@ -7989,103 +8005,123 @@ P.end_battle_events = {
 				advance_local_state(R)
 			}
 		},
-		"murats_cavalry":
-		{
-			eligible(player) { return player === FRANCE && is_battle_event_currently_active(C_MURATS_CAVALRY) },
+		"murats_cavalry": {
+			eligible(player) {
+				return (player === FRANCE) && is_battle_event_currently_active(C_MURATS_CAVALRY)
+			},
 			prompt() {
 				if (count_num_sps_of_type(FRANCE, FRESH_CAVALRY, G.current_battle) > 0) {
-					prompt_card(C_MURATS_CAVALRY, "Exhaust a fresh Cavalry SP.")
-					action_troop(FRESH_CAVALRY)
+					prompt_card(C_MURATS_CAVALRY, `Exhaust a fresh Cavalry SP.`)
+					get_player_battle_data(R, G.current_battle).forces.forEach(force => {
+						if (force.troops[FRESH_CAVALRY] > 0)
+							action_troop_imp(FRESH_CAVALRY, G.current_battle, force.strength, force.from)
+					})
 				} else {
 					prompt_card(C_MURATS_CAVALRY, "No effect.")
 					button_next()
 				}
 			},
-			on_troop(type) {
-				let connections = battle_exhaust_troop(FRANCE, G.current_battle, type)
-				push_local_undo(FRANCE, "exhaust", { type, num: 1, connections })
-				advance_local_state(FRANCE)
+			on_troop(entry) {
+				let type = decode_troop_action_type(entry)
+				let strength = decode_troop_action_strength(entry)
+				let from = decode_troop_action_from(entry)
+
+				battle_exhaust_sp(R, G.current_battle, type, strength, from)
+
+				push_local_undo(R, "exhaust", { type, strength, from })
+				advance_local_state(R)
 			},
 			on_next() {
 				push_local_undo(R, "next")
 				advance_local_state(R)
 			}
 		},
-		"neys_iii_corps":
-		{
-			eligible(player) { return player === FRANCE && is_battle_event_currently_active(C_NEYS_III_CORPS) },
+		"neys_iii_corps": {
+			eligible(player) {
+				return player === FRANCE && is_battle_event_currently_active(C_NEYS_III_CORPS)
+			},
 			prompt() {
 				if (has_exhausted_sp(FRANCE, G.current_battle)) {
 					prompt_card(C_NEYS_III_CORPS, "Rally an exhausted SP.")
-					for (let type of get_all_exhausted_sp_types(FRANCE, G.current_battle))
-						action_troop(type)
+					get_player_battle_data(R, G.current_battle).forces.forEach(force => {
+						for (let type = 0; type < force.troops.length; ++type)
+							if (is_troop_type_exhausted(type))
+								action_troop_imp(type, G.current_battle, force.strength, force.from)
+					})
 				} else {
 					prompt_card(C_NEYS_III_CORPS, `No exhausted SPs at S${G.current_battle} to rally.`)
 					button_next()
 				}
 			},
-			on_troop(type) {
-				let connections = battle_rally_troop(FRANCE, G.current_battle, type)
-				push_local_undo(FRANCE, "rally", { type, num: 1, connections } )
-				advance_local_state(FRANCE)
+			on_troop(entry) {
+				let type = decode_troop_action_type(entry)
+				let strength = decode_troop_action_strength(entry)
+				let from = decode_troop_action_from(entry)
+
+				battle_rally_sp(R, G.current_battle, type, strength, from)
+
+				push_local_undo(R, "rally", { type, strength, from })
+				advance_local_state(R)
 			},
 			on_next() {
 				push_local_undo(R, "next")
 				advance_local_state(R)
 			}
 		},
-		"finish_state":
-		{
+		"finish_state": {
 			eligible() { return true },
 			prompt() {
 				prompt("Execute Events: All done.")
-				button_done()
+				button_confirm()
 			}
 		}
 	},
 	prompt() {
 		this.states[L.state[R]].prompt()
-		button_undo(L.undo[R].length > 0 && L.undo[R][L.undo[R].length - 1].action !== "discard") //Cannot undo the random discard from 'The Imperial Guard'
-		//console.log(JSON.stringify(L.undo, null, 2))
+		button_undo(
+			L.undo[R].length > 0
+			&& L.undo[R][L.undo[R].length - 1].action !== "discard"
+		)
 	},
 	undo() {
-		let previous_action = L.undo[R].pop()
-		L.state[R] = previous_action.state
-		let battle_data = get_player_battle_data(R, G.current_battle)
+		let undo = L.undo[R].pop()
 
-		switch(previous_action.action) {
-		case "next": return
+		if (undo.state !== L.state[R])
+			L.state[R] = undo.state
+
+		switch(undo.action) {
+		case "next":
+			return
 		case "rally":
-			exhaust_troop(R, G.current_battle, previous_action.info.type - 1, previous_action.info.num)
-			map_for_each(previous_action.info.connections, (ix, amount) => {
-				battle_data.forces[ix].troops[previous_action.info.type] += amount
-				battle_data.forces[ix].troops[previous_action.info.type - 1] -= amount
-			})
+			battle_exhaust_sp(R, G.current_battle, undo.type, undo.strength, undo.from)
+			if (R === RUSSIA)
+				++L.num_sps_to_rally
 			return
 		case "exhaust":
-			rally_troop(R, G.current_battle, previous_action.info.type + 1, previous_action.info.num)
-			map_for_each(previous_action.info.connections, (ix, amount) => {
-				battle_data.forces[ix].troops[previous_action.info.type] += amount
-				battle_data.forces[ix].troops[previous_action.info.type + 1] -= amount
-			})
+			battle_rally_sp(R, G.current_battle, undo.type, undo.strength, undo.from)
 			return
 		case "vp":
 			G.vp += 2 //Rewind Russia gaining 2 VP because of 'The Imperial Guard'
 			return
 		default:
-			throw new Error(`Unknown action: ${previous_action.action}`)
+			throw new Error(`Unknown action: ${undo.action}`)
 		}
 	},
-	troop(type) { this.states[L.state[R]].on_troop(type) },
-	discard() { this.states[L.state[R]].on_discard() },
-	vp() { this.states[L.state[R]].on_vp() },
-	next() { this.states[L.state[R]].on_next() },
-	done() {
+	troop(entry) 	{ this.states[L.state[R]].on_troop(entry) },
+	discard()		{ this.states[L.state[R]].on_discard() },
+	vp() 			{ this.states[L.state[R]].on_vp() },
+	next() 		{ this.states[L.state[R]].on_next() },
+	confirm() {
 		set_delete(G.active, R)
+		if (is_event_active(C_STOIC_INFANTRY))
+			map_delete(G.persistent_events, C_STOIC_INFANTRY)
 		if (G.active.length === 0) {
+			for (let entry of L.log)
+				G.log.push(entry)
+			log()
 			end()
 		}
-	},
+	}
 }
 
 function get_valid_attacker_retreat_connections(battle) {
