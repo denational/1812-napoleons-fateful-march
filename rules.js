@@ -2286,11 +2286,11 @@ P.additional_replacements = {
 						if (is_infantry(type))
 							action("troop_2x", type)
 						else
-							action_troop(type)
+							button_troop(type)
 					}
 				}
 			},
-			on_troop(type) {
+			on_troop_button(type) {
 				L.selected_type[R] = type
 				L.count[R] = is_infantry(type) ? 2 : 1
 				L.state[R] = "place_sp"
@@ -2343,10 +2343,10 @@ P.additional_replacements = {
 			end()
 		}
 	},
-	card(card)		{ this.states[L.state[R]].on_card(card) },
-	area(area)		{ this.states[L.state[R]].on_area(area) },
-	troop(type)		{ this.states[L.state[R]].on_troop(type) },
-	troop_2x(type)	{ this.states[L.state[R]].on_troop_2x(type) },
+	card(card)			{ this.states[L.state[R]].on_card(card) },
+	area(area)			{ this.states[L.state[R]].on_area(area) },
+	troop_button(type)	{ this.states[L.state[R]].on_troop_button(type) },
+	troop_2x(type)		{ this.states[L.state[R]].on_troop_2x(type) },
 }
 
 // TODO: Maybe move to data?
@@ -7068,6 +7068,9 @@ function eliminate_troop(who, area, type, num = 1) {
 	remove_troop(who, area, type, num)
 	if (who === FRANCE)
 		add_troop(FRANCE, FRENCH_CASUALTIES, is_troop_type_fresh(type) ? type : type - 1, num)
+
+	if (who === FRANCE && !has_friendly_troop(who, area) && is_vp_area(area))
+		decrease_vp(who, get_area_vp(area))
 }
 
 function count_num_sps_of_type(who, type, area) {
@@ -7200,7 +7203,10 @@ function would_be_eliminated_after_battle(player, area, losses) {
 	if (!has_fresh_sp(player, area))
 		return true
 
-	let count
+	if (losses === 0)
+		return false
+
+	let count = 0
 	let sps = get_troop_list_by_type(player, area)
 	let has_assigned_cavalry_loss = false
 
@@ -7232,7 +7238,7 @@ function would_be_eliminated_after_battle(player, area, losses) {
 		++count
 	}
 
-	return would_have_fresh_sp()
+	return !would_have_fresh_sp()
 }
 
 P.assign_losses = {
@@ -7403,6 +7409,7 @@ P.assign_losses = {
 					// Since losses are taken simultaneously, we check whether the enemy would have a fresh SP after assigning losses.
 					if (
 						has_friendly_troop(R, G.current_battle)
+						&& !has_fresh_sp(R, G.current_battle)
 						&& !would_be_eliminated_after_battle(enemy(R), G.current_battle, L.losses[enemy[R]] - L.count[enemy[R]])
 					) {
 						prompt(`No more fresh SPs: Eliminate all SPs at S${G.current_battle}.`)
@@ -8370,70 +8377,66 @@ P.battle_draw_card_to_hand = script(`
 `)
 
 //=== 10. EXECUTE RALLY ORDERS ===
-P.execute_rally = function() {
-	goto("do_rally", { area: L.area })
-}
+/*
+	TODO: Russian Rally orders in Kutuzov's area affect an additional SP.
+	if (get_leader_location(L_KUTUZOV) === L.area) {
+		call kutuzov_additional_rally { area: L.area }
+	}
+*/
+P.execute_rally = script(`
+	call do_rally { area: L.area }
+	goto end_order { type: RALLY }
+`)
 
 P.do_rally = {
 	_begin() {
-		//L.area
-		L.has_rallied = false
+		// L.area
+		L.count = 0
+		log("Rallied")
 	},
 	prompt() {
-		if (!L.has_rallied) {
-			if (!has_exhausted_sp(G.active, L.area)) {
-				prompt(`No exhausted SPs at S${L.area} to rally.`)
-				button_confirm()
-			} else {
-				if (has_friendly_depot(G.active, L.area)) {
-					prompt(`You may flip back one for your exhausted troops back to its fresh side (2 if Infantry).`)
-					for (let type of get_troop_types_at_area(G.active, L.area)) {
-						if (is_exhausted_infantry(type) && (count_num_sps_of_type(G.active, type, L.area) >= 2))
-							action("troop_2x", type)
-					}
-				} else {
-					prompt(`You may flip back one for your exhausted troops back to its fresh side.`)
-				}
-				for (let type of get_troop_types_at_area(G.active, L.area)) {
-					if (is_troop_type_exhausted(type)) {
-						action_troop(type)
-					}
+		if (!has_exhausted_sp(G.active, L.area)) {
+			prompt(`No ${L.count > 0 ? "more" : ""} exhausted SPs at S${L.area} to Rally.`)
+			button_confirm()
+		} else {
+			prompt(`You may flip back one of your exhausted SPs back to its fresh side.`)
+			if (has_friendly_depot(G.active, L.area) && count_num_exhausted_infantry(G.active, L.area) >= 2)
+				add_to_prompt(` (2 if Infantry)`)
+
+			for (let type of get_all_exhausted_sp_types(G.active, L.area)) {
+				// In a Depot town after rallying one exhausted Infantry
+				if (
+					L.count === 0
+					|| (L.count === 1 && is_infantry(type))
+				) {
+					action_troop_imp(type, L.area)
 				}
 			}
-		} else {
-			prompt(`Execute Rally order: All done.`)
-			button_done()
 		}
 	},
-	troop(type) {
+	troop(entry) {
 		push_undo()
+		let type = decode_troop_action_type(entry)
 		rally_troop(G.active, L.area, type)
-		log("Rallied")
-		logi(`1 ${get_troop_type_name(type)}`)
-		L.has_rallied = true
-	},
-	troop_2x(type) {
-		push_undo()
-		rally_troop(G.active, L.area, type, 2)
-		log("Rallied")
-		logi(`2 ${get_troop_type_name(type)}`)
-		L.has_rallied = true
+		log_only(G.active, `>1 ${get_troop_type_name(type)}`)
+		log_only(enemy(G.active), `>1 Exh. SP`)
+
+		if (L.count === 0 && has_friendly_depot(G.active, L.area) && is_infantry(type))
+			++L.count
+		else
+			end()
 	},
 	confirm() {
 		push_undo()
-		log("No exhausted SPs to Rally.")
-		goto("end_order", { type: RALLY })
-	},
-	done() {
-		push_undo()
-		goto("end_order", { type: RALLY })
+		if (L.count === 0)
+			logi("Nothing")
+		end()
 	}
-
 }
 
 //=== 11. EXECUTE COSSACK RAID ORDERS ===
 P.execute_cossack_raid = function() {
-	goto("do_cossack_raid", { area: L.area })
+	goto("select_cossack_raid_target", { area: L.area })
 }
 
 function count_num_cossack(area) {
@@ -8449,90 +8452,93 @@ function has_french_order(area) {
 	return get_orders_at_area(FRANCE, area).length > 0
 }
 
-P.do_cossack_raid = {
-	_begin() {
-		//L.area
-		L.has_raided = false
-	},
+P.select_cossack_raid_target = {
+	// L.area
 	prompt() {
-		if (!L.has_raided) {
-			prompt(`Select a target for the Cossack Raid (Cannot be undone).`)
-			for (let area of get_all_adjacent_areas(L.area)) {
-				if (has_french_order(area) || has_friendly_troop(FRANCE, area)) {
-					action_area(area)
-				}
-			}
-		} else {
-			prompt(`Cossack Raid: All done.`)
-			button_done()
+		prompt(`Select a target for the Cossack Raid. (cannot be undone)`)
+		for (let area of get_all_adjacent_areas(L.area)) {
+			if (has_french_order(area) || has_friendly_troop(FRANCE, area))
+				action_area(area)
 		}
 	},
 	area(area) {
-		push_undo()
-		G.active = FRANCE
-		L.has_raided = true
 		log(`Targeted S${area}:`)
-		goto("apply_cossack_raid", {area})
-	},
-	done() {
-		push_undo()
-		log()
-		end()
+		goto("apply_cossack_raid", { area })
 	}
 }
 
-P.apply_cossack_raid = {
+P.apply_cossack_raid = script(`
+	set G.active FRANCE
+	call remove_all_forage_orders { area: L.area }
+	call eliminate_1_exhausted { area: L.area }
+	call apply_cossack_raid_done
+`)
+
+P.remove_all_forage_orders = {
 	_begin() {
-		//L.area
+		logi("Removed")
 		L.orders_to_remove = get_orders_at_area(FRANCE, L.area).filter(order => get_order_type(order) === FORAGE)
-		L.step = -1
 	},
 	prompt() {
-		if (L.step === -1) {
-			if (L.orders_to_remove.length > 0) {
-				prompt(`Remove all Forage orders from S${L.area}.`)
-				for (let order of L.orders_to_remove) action_order(order)
-			} else {
-				prompt(`No Forage orders at S${L.area}.`)
-				button_next()
-			}
-		} else if (L.step === 0) {
-			if (has_exhausted_sp(FRANCE, L.area)) {
-				prompt(`Eliminate 1 Exhausted SP from S${L.area}.`)
-				for (let type of get_troop_types_at_area(FRANCE, L.area)) {
-					if (is_troop_type_exhausted(type)) action_troop(type)
-				}
-			} else {
-				prompt(`No exhausted SPs at S${L.area}.`)
-				button_next()
-			}
+		if (L.orders_to_remove.length > 0) {
+			prompt(`Remove all Forage orders at S${L.area}.`)
+			L.orders_to_remove.forEach(action_order)
 		} else {
-			prompt("Apply Cossack Raid: All done (Cannot be undone).")
-			button_done()
+			prompt(`No Forage orders at S${L.area}.`)
+			button_next()
 		}
 	},
 	order(order) {
 		push_undo()
+		log(`<1 Forage`)
 		remove_order(order)
 		set_delete(L.orders_to_remove, order)
-		if (L.orders_to_remove.length === 0) ++L.step
-	},
-	troop(type) {
-		push_undo()
-		eliminate_troop(FRANCE, L.area, type)
-		logi("Eliminated")
-		log_only(RUSSIA, `<1 Exh. SP`)
-		log_only(FRANCE, `<1 ${get_troop_type_name(type)}`)
-		if (!is_friendly_controlled(FRANCE, L.area) && is_vp_area(L.area))
-			decrease_vp(FRANCE, get_area_vp(L.area))
-		++L.step
+		if (L.orders_to_remove.length === 0)
+			end()
 	},
 	next() {
-		if (L.step === -1) log(`>No Forage orders.`)
-		else log(`>No Exh. SPs.`)
-		++L.step
+		push_undo()
+		log(`<Nothing`)
+		end()
+	}
+}
+
+// TODO: Unify with other elimination states
+P.eliminate_1_exhausted = {
+	_begin() {
+		logi("Eliminated")
 	},
-	done() {
+	prompt() {
+		if (has_exhausted_sp(G.active, L.area)) {
+			prompt(`Eliminate 1 exhausted SP at S${L.area}.`)
+			for (let type of get_all_exhausted_sp_types(G.active, L.area))
+				action_troop_imp(type, L.area)
+		} else {
+			prompt(`No exhausted SPs at S${L.area}.`)
+			button_next()
+		}
+	},
+	troop(entry) {
+		push_undo()
+		let type = decode_troop_action_type(entry)
+		eliminate_troop(G.active, L.area, type)
+		log_only(G.active, `<1 ${get_troop_type_name(type)}`)
+		log_only(enemy(G.active), `<1 Exh. SP`)
+		end()
+	},
+	next() {
+		push_undo()
+		log("<Nothing")
+		end()
+	}
+}
+
+P.apply_cossack_raid_done = {
+	prompt() {
+		prompt(`Apply Cossack Raid: All done.`)
+		button_confirm()
+	},
+	confirm() {
 		G.active = RUSSIA
 		goto("end_order", { type: COSSACK_RAID })
 	}
@@ -8571,6 +8577,7 @@ P.do_place_depot = {
 			prompt(`S${L.area} cannot trace a path of 4 or less road connections to another friendly depot.`)
 			button_confirm()
 		}
+
 		// The fuzzer loves to pull out all depots on map: This will wipe out all troops on map with attrition!
 		if (!globalThis.RTT_FUZZER)
 			for (let depot = get_first_depot(G.active); depot <= get_last_depot(G.active); ++depot)
@@ -8601,17 +8608,17 @@ P.do_place_depot = {
 
 // === ATTRITION ===
 /*
-    Events
-    RUSSIA
-    RU #21 Overstretched Logistics		Beginning	- FR must EITHER: remove a depot or add 1 to attrition distance this turn
-    RU #30 Devastated Landscape			Beginning	- Both sides remove all 'Forage' orders. Double effect of Devastation markers this turn.
-    RU #44 Disease & Starvation			Beginning	- RU may eliminate up to 4 exhausted French SPs from any areas where Devastation is 2+.
-    RU #46 Devastated Countryside		Must-Play	- Effect of Devastation markers is 2x this turn.
-    RU #49 Cossack Patrols				Beginning	- In all FR areas adjacent to Cossack SPs, France must remove 1 Exhausted SP per such French area and remove all Forage orders.
+    	Events
+    	RUSSIA
+    	RU #21 Overstretched Logistics		Beginning	- FR must EITHER: remove a depot or add 1 to attrition distance this turn
+    	RU #30 Devastated Landscape			Beginning	- Both sides remove all 'Forage' orders. Double effect of Devastation markers this turn.
+    	RU #44 Disease & Starvation			Beginning	- RU may eliminate up to 4 exhausted French SPs from any areas where Devastation is 2+.
+    	RU #46 Devastated Countryside			Must-Play	- Effect of Devastation markers is 2x this turn.
+    	RU #49 Cossack Patrols				Beginning	- In all FR areas adjacent to Cossack SPs, France must remove 1 Exhausted SP per such French area and remove all Forage orders.
 
-    FRANCE
-    FR #45 Much Needed Victuals			Beginning	- FR must remove a Depot marker - do not check Attrition there and immediately rally 2 exhausted infantry there
-    FR #48 Napoléon Returns to Paris	End			- Permanently remove Napoléon from the game at no VP cost
+    	FRANCE
+    	FR #45 Much Needed Victuals			Beginning	- FR must remove a Depot marker - do not check Attrition there and immediately rally 2 exhausted infantry there
+    	FR #48 Napoléon Returns to Paris		End		- Permanently remove Napoléon from the game at no VP cost
 
 	Leader abilities
 	Murat		+1 to Modified Size in his area (applies even if not seniormost leader)
@@ -8993,6 +9000,7 @@ function must_assign_cavalry_attrition_loss() {
 	return G.attrition_data.num_sps_affected % 3 === 2 && !G.attrition_data.has_assigned_cavalry_loss && has_cavalry_or_cossack_in_area(G.active, L.area)
 }
 
+// TODO: Maybe have a single state to assign attrition losses? (to reduce clicking)
 P.assign_attrition_losses = {
 	prompt() {
 		prompt(`Assign attrition losses: ${G.attrition_data.num_losses_remaining} remaining.`)
@@ -9041,11 +9049,14 @@ P.exhaust_sp = {
 	// L.area
 	prompt() {
 		prompt(`Exhaust 1 fresh SP at S${L.area}.`)
-		if (must_assign_cavalry_attrition_loss() && (count_num_sps_of_type(G.active, FRESH_CAVALRY, L.area) > 0 || count_num_sps_of_type(G.active, FRESH_COSSACK, L.area) > 0))
-			get_all_fresh_sp_types(G.active, L.area).filter(type => is_cavalry(type) || is_cossack(type)).forEach(type => action_troop_imp(type, L.area))
-		else
+		if (must_assign_cavalry_attrition_loss() && (count_num_sps_of_type(G.active, FRESH_CAVALRY, L.area) > 0 || count_num_sps_of_type(G.active, FRESH_COSSACK, L.area) > 0)) {
+			for (let type of get_all_fresh_sp_types(G.active, L.area)) {
+				if (is_cavalry(type) || is_cossack(type))
+					action_troop_imp(type, L.area)
+			}
+		} else {
 			get_all_fresh_sp_types(G.active, L.area).forEach(type => action_troop_imp(type, L.area))
-		console.log(V.actions)
+		}
 	},
 	troop(entry) {
 		push_undo()
@@ -9054,6 +9065,7 @@ P.exhaust_sp = {
 		exhaust_troop(G.active, L.area, type)
 
 		// These sections are specific to the 'Exhausting March' event (since they may mutate moved/battle entries)
+		// NOTE: This is a rules mistake, I will need to fix these events later (only moving SPs can take losses)
 		if (is_event_active(C_EXHAUSTING_MARCH_1) || is_event_active(C_EXHAUSTING_MARCH_2)) {
 			if (has_battle(L.area)) {
 				let battle_data = get_player_battle_data(G.active, L.area)
@@ -9093,10 +9105,14 @@ P.eliminate_2_exhausted_sps = {
 	},
 	prompt() {
 		prompt(`Eliminate ${L.count} SPs at S${L.area}.`)
-		if (must_assign_cavalry_attrition_loss() && (count_num_sps_of_type(G.active, EXHAUSTED_CAVALRY, L.area) > 0 || count_num_sps_of_type(G.active, EXHAUSTED_COSSACK, L.area) > 0))
-			get_all_exhausted_sp_types(G.active, L.area).filter(type => is_cavalry(type) || is_cossack(type)).forEach(action_troop)
-		else
-			get_all_exhausted_sp_types(G.active, L.area).forEach(action_troop)
+		if (must_assign_cavalry_attrition_loss() && (count_num_sps_of_type(G.active, EXHAUSTED_CAVALRY, L.area) > 0 || count_num_sps_of_type(G.active, EXHAUSTED_COSSACK, L.area) > 0)) {
+			for (let type of get_all_exhausted_sp_types(G.active, L.area)) {
+				if (is_cavalry(type) || is_cossack(type))
+					action_troop_imp(type, L.area)
+			}
+		} else {
+			get_all_exhausted_sp_types(G.active, L.area).forEach(type => action_troop_imp(type, L.area))
+		}
 	},
 	troop(entry) {
 		push_undo()
@@ -9154,8 +9170,8 @@ P.increase_devastation = {
 			action_area(get_current_attrition_area())
 		} else {
 			prompt(`Devastation at S${L.area} cannot be increased further.`)
-			button_confirm()
 		}
+		button_confirm()
 	},
 	area(_) {
 		this.confirm()
@@ -9168,7 +9184,8 @@ P.increase_devastation = {
 
 		log(`Devastation at S${L.area} increased to ${get_devastation(L.area)}.`)
 
-		if (raw_devastation > 3
+		if (
+			raw_devastation > 3
 			&& G.attrition_data.num_cancels_remaining === 0
 			&& has_friendly_troop(G.active, L.area)
 		) {
@@ -10096,58 +10113,52 @@ function calculate_outflanking_strength(area) {
 P.garrison_troops = {
 	_begin() {
 		L.units_moved = 0
+		L.areas = get_areas_with_sps(RUSSIA).filter(area => !has_friendly_leader(RUSSIA, area) && is_area_in_supply(RUSSIA, area))
 		L.selected_area = -1
-		L.selected_sp_type = -1
+		L.selected_type = -1
 	},
-	inactive: "disband minor garrisons",
 	prompt() {
-		if (L.selected_area === -1) {
-			let areas = get_areas_with_sps(RUSSIA).filter(area => !has_friendly_leader(RUSSIA, area) && is_area_in_supply(RUSSIA, area))
-
-			if (L.units_moved < 5 && areas.length > 0) {
-				prompt_card(C_GARRISON_TROOPS, `Select an area with Russian SPs and without a leader.`)
-				for (let area of get_areas_with_sps(RUSSIA))
-					if (!has_friendly_leader(RUSSIA, area) && is_area_in_supply(RUSSIA, area))
-						action_area(area)
+		if (L.units_moved < 5) {
+			if (L.selected_type === -1) {
+				prompt_card(C_GARRISON_TROOPS, `Select an SP to move.`)
+				for (let area of L.areas) {
+					for (let type of get_troop_types_at_area(G.active, area))
+						action_troop_imp(type, area)
+				}
 				button_pass()
 			} else {
-				prompt_card(C_GARRISON_TROOPS, "All done.")
-				button_done()
+				prompt(`Select a destination for the ${get_troop_type_name(L.selected_type)} SP.`)
+				for (let area of get_locations_with_leader(RUSSIA)) {
+					if (does_path_exist(RUSSIA, L.selected_area, area))
+						action_area(area)
+				}
+				// A human can undo and select another area
+				if (globalThis.RTT_FUZZER)
+					button_pass()
 			}
-		} else if (L.selected_sp_type === -1) {
-			prompt_card(C_GARRISON_TROOPS, `Select an SP to move from S${L.selected_area}.`)
-			get_troop_types_at_area(RUSSIA, L.selected_area).forEach(type => action_troop(type))
 		} else {
-			prompt_card(C_GARRISON_TROOPS, `Select a destination for ${get_troop_type_name(L.selected_sp_type)} at S${L.selected_area}.`)
-			// NOTE: Might be expensive, think about better ways later
-			for (let area of get_locations_with_leader(RUSSIA))
-				if (does_path_exist(RUSSIA, L.selected_area, area))
-					action_area(area)
-
-			// A human can undo and select another area
-			if (globalThis.RTT_FUZZER) button_pass()
+			prompt_card(C_GARRISON_TROOPS, "All done.")
+			button_confirm()
 		}
+	},
+	troop(entry) {
+		push_undo()
+		L.selected_area = decode_troop_action_area(entry)
+		L.selected_type = decode_troop_action_type(entry)
 	},
 	area(area) {
 		push_undo()
-		if (L.selected_area === -1) {
-			L.selected_area = area
-		} else {
-			move_troop(RUSSIA, L.selected_area, area, L.selected_sp_type, 1)
-			log(`Moved from S${L.selected_area}`)
-			logi(`1 ${get_troop_type_name(L.selected_sp_type)}`)
-			logi(`to S${area}`)
+		move_troop(G.active, L.selected_area, area, L.selected_type, 1)
 
-			L.selected_area = -1
-			L.selected_sp_type = -1
-			++L.units_moved
-		}
+		log(`Moved from S${L.selected_area}`)
+		logi(`1 ${get_troop_type_name(L.selected_type)}`)
+		logi(`to S${area}`)
+
+		L.selected_area = -1
+		L.selected_type = -1
+		++L.units_moved
 	},
-	troop(type) {
-		push_undo()
-		L.selected_sp_type = type
-	},
-	done() { end() },
+	confirm() { end() },
 	pass() { end() }
 }
 
@@ -12631,6 +12642,7 @@ P.may_play_poniatowskis_v_corps = {
 	prompt() {
 		if (hand_has(FRANCE, C_PONIATOWSKIS_V_CORPS)) {
 			prompt(`You may play ${get_card_log_alias(C_PONIATOWSKIS_V_CORPS)}.`)
+			button("play")
 			action_card(C_PONIATOWSKIS_V_CORPS)
 			button_pass()
 		} else {
@@ -12638,7 +12650,8 @@ P.may_play_poniatowskis_v_corps = {
 			button_pass()
 		}
 	},
-	card(card) {
+	play() { this.card() },
+	card(_) {
 		push_undo()
 		goto("poniatowskis_v_corps")
 	},
@@ -12648,53 +12661,56 @@ P.may_play_poniatowskis_v_corps = {
 	}
 }
 
-
 P.poniatowskis_v_corps = {
 	_begin() {
-		//G.move
-		L.has_exhausted_infantry_sp = [EXHAUSTED_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY].some(type => G.move.sps[type] > 0)
-		L.count = 0
-		for (let type of [EXHAUSTED_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY])
-			L.count += G.move.sps[type]
-		L.has_rallied = false
 		card_box_begin(C_PONIATOWSKIS_V_CORPS)
+		L.has_exhausted_infantry_sp = [EXHAUSTED_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY].some(type => G.move.sps[type] > 0)
+		L.count = Math.min(2, count_num_sps_of_type(EXHAUSTED_INFANTRY) + count_num_sps_of_type(EXHAUSTED_PRUSSIAN_INFANTRY) + count_num_sps_of_type(EXHAUSTED_AUSTRIAN_INFANTRY))
+		L.has_rallied = false
+
+		log("Rallied")
+		logi(`S${G.move.path[G.move.path.length -1]}`)
 	},
 	prompt() {
 		if (!L.has_exhausted_infantry_sp) {
-			prompt_card(C_PONIATOWSKIS_V_CORPS, "No exhausted infantry in the moving force to rally.")
+			prompt_card(C_PONIATOWSKIS_V_CORPS, "No exhausted Infantry in the moving force.")
 			button_pass()
-		} else if (L.count === 0) {
-			prompt_card(C_PONIATOWSKIS_V_CORPS, "All done.")
-			button_done()
+		} else if (L.count > 0) {
+			prompt_card(C_PONIATOWSKIS_V_CORPS, `Rally exhausted Infantry in the moving force: ${L.count} remaining.`)
+			for (let type = 0; type < G.move.sps.length; ++type) {
+				if (is_exhausted_infantry(type) && G.move.sps[type] > 0)
+					action_troop_imp(type, G.move.path[G.move.path.length - 1], FULL_STRENGTH, POOL, 1)
+			}
 		} else {
-			prompt_card(C_PONIATOWSKIS_V_CORPS, `Rally exhausted infantry SPs in the moving force (${L.count} remaining).`)
-			for (let type of [EXHAUSTED_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY])
-				if (G.move.sps[type] > 0)
-					action_troop(type)
+			prompt_card(C_PONIATOWSKIS_V_CORPS, `All done.`)
+			button_confirm()
 		}
 	},
-	troop(type) {
+	troop(entry) {
 		push_undo()
-		rally_troop(G.active, G.move.path[G.move.path.length - 1], type)
-		--G.move.sps[type]
-		++G.move.sps[type - 1]
-		log("Rallied")
-		logi(`S${G.move.path[G.move.path.length -1]}`)
-		log("<1 Exh. Infantry")
+		let type = decode_troop_action_type(entry)
+		let area = decode_troop_action_area(entry)
+
+		rally_troop(G.active, area, type)
+		G.move.sps[type]--
+		G.move.sps[type - 1]++
+
+
+		log(`<1 ${get_troop_type_name(type)}`)
 		--L.count
 	},
 	pass() {
 		push_undo()
-		log("No exhausted SPs to rally.")
-		card_box_end()
-		discard_or_remove_card(C_PONIATOWSKIS_V_CORPS)
+		logi("<Nothing")
 		goto("move")
 	},
-	done() {
+	confirm() {
 		push_undo()
+		goto("move")
+	},
+	_end() {
 		card_box_end()
 		discard_or_remove_card(C_PONIATOWSKIS_V_CORPS)
-		goto("move")
 	}
 }
 
@@ -12963,8 +12979,13 @@ P.courage_of_desperation = {
 	prompt() {
 		if (L.step === -1) {
 			if (has_exhausted_sp(G.active, G.current_battle)) {
-				prompt_card(C_COURAGE_OF_DESPERATION, "Immediately Rally 1 Exhausted SP.")
-				for (let type of get_all_exhausted_sp_types(G.active, G.current_battle)) action_troop(type)
+				prompt_card(C_COURAGE_OF_DESPERATION, `Immediately Rally 1 exhausted SP.`)
+				get_player_battle_data(G.active, G.current_battle).forces.forEach(force => {
+					for (let type = 0; type < force.troops.length; ++type) {
+						if (is_troop_type_exhausted(type))
+							action_troop_imp(type, G.current_battle, force.strength, force.from)
+					}
+				})
 			} else {
 				prompt_card(C_COURAGE_OF_DESPERATION, "No exhausted SPs to Rally.")
 				button_next()
@@ -12974,9 +12995,13 @@ P.courage_of_desperation = {
 			button_confirm()
 		}
 	},
-	troop(type) {
+	troop(entry) {
 		push_undo()
-		battle_rally_troop(G.active, G.current_battle, type)
+		let type = decode_troop_action_type(entry)
+		let strength = decode_troop_action_strength(entry)
+		let from = decode_troop_action_from(entry)
+
+		battle_rally_sp(G.active, G.current_battle, type, strength, from)
 		log("Rallied")
 		log_only(FRANCE, `1 ${get_troop_type_name(type)}`)
 		log_only(RUSSIA, `1 Exh. French SP`)
@@ -13121,23 +13146,23 @@ function join_array_with_or(array) {
 
 //=== ACTION/BUTTON WRAPPER FUNCTIONS ===
 function button_draw(enabled = true) 	{ button("draw", enabled) }
-function button_discard(enabled = true) { button("discard", enabled) }
+function button_discard(enabled = true) 	{ button("discard", enabled) }
 function button_pass(enabled = true) 	{ button("pass", enabled) }
 function button_next(enabled = true) 	{ button("next", enabled) }
 function button_done(enabled = true) 	{ button("done", enabled) }
-function button_confirm(enabled = true) { button("confirm", enabled) }
+function button_confirm(enabled = true) 	{ button("confirm", enabled) }
 function button_undo(enabled = true) 	{ button("undo", enabled) }
 function button_roll(enabled = true) 	{ button("roll", enabled) }
-function action_card(c) 				{ action("card", c) }
-function action_area(area) 				{ action("area", area) }
+function action_card(c) 			{ action("card", c) }
+function action_area(area) 			{ action("area", area) }
 function action_initiative_marker() 	{ action("initiative", 0) }
-function action_leader(leader) 			{ action("leader", leader) }
-function action_vp_marker()				{ action("vp", 0) }
+function action_leader(leader) 		{ action("leader", leader) }
+function action_vp_marker()			{ action("vp", 0) }
 function action_order(order) 			{ action("order", order) }
 function action_depot(depot) 			{ action("depot", depot) }
 function action_connection(from, to) 	{ action("connection", find_connection(from, to)) }
-function action_troop(type) 			{ action("troop", type) }
-function button_leader(leader) 			{ action("leader_button", leader) }
+function button_troop(type) 			{ action("troop_button", type) }
+function button_leader(leader) 		{ action("leader_button", leader) }
 
 /*
 	23 bits

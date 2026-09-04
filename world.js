@@ -176,7 +176,9 @@ function find_troop(argument) {
 		let troop = world.things.troop[i]
 
 		if (
-			troop.am_moving === move
+			troop.my_player === player
+			&& troop.my_type === type
+			&& troop.am_moving === move
 			&& troop.my_strength === strength
 			&& troop.my_area === area
 			&& troop.my_from === from

@@ -11,7 +11,7 @@
 	--france_light: hsl(199, 36%, 79%);
 }
 
-main {background-color: slategray;}
+main {background-color: hsl(44, 28%, 82%);}
 
 header {background-color: lightgray;}
 body.Russia header.your_turn {background-color: var(--russia);}
@@ -210,6 +210,7 @@ body.France header.your_turn {background-color: var(--france);}
 
 .panel-head {
 	text-align: center;
+	background-color: hsl(80, 6%, 63%);
 }
 
 .panel-body {

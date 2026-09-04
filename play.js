@@ -410,7 +410,7 @@ function get_first_counter(player, type) {
 		return first_ru_cossack
 	} else if (type === FRESH_GUARD || type === EXHAUSTED_GUARD) {
 		return first_fr_guard
-	} else if (type === FRESH_PRUSSIAN_INFANTRY || type === FRESH_AUSTRIAN_INFANTRY) {
+	} else if (type === FRESH_PRUSSIAN_INFANTRY || type === EXHAUSTED_PRUSSIAN_INFANTRY) {
 		return first_fr_pr_inf
 	} else if (type === FRESH_AUSTRIAN_INFANTRY || type === EXHAUSTED_AUSTRIAN_INFANTRY) {
 		return first_fr_au_inf
@@ -428,7 +428,7 @@ function get_last_counter(player, type) {
 		return last_ru_cossack
 	} else if (type === FRESH_GUARD || type === EXHAUSTED_GUARD) {
 		return last_fr_guard
-	} else if (type === FRESH_PRUSSIAN_INFANTRY || type === FRESH_AUSTRIAN_INFANTRY) {
+	} else if (type === FRESH_PRUSSIAN_INFANTRY || type === EXHAUSTED_PRUSSIAN_INFANTRY) {
 		return last_fr_pr_inf
 	} else if (type === FRESH_AUSTRIAN_INFANTRY || type === EXHAUSTED_AUSTRIAN_INFANTRY) {
 		return last_fr_au_inf
@@ -800,18 +800,18 @@ function on_update() {
 			populate("area_stack", area, "attrition_checked", marker++)
 	}
 
-	action_button_with_argument("troop", FRESH_INFANTRY, "Infantry")
-	action_button_with_argument("troop", EXHAUSTED_INFANTRY, "Exh. Infantry")
-	action_button_with_argument("troop", FRESH_CAVALRY, "Cavalry")
-	action_button_with_argument("troop", EXHAUSTED_CAVALRY, "Exh. Cavalry")
-	action_button_with_argument("troop", FRESH_COSSACK, "Cossack")
-	action_button_with_argument("troop", EXHAUSTED_COSSACK, "Exh. Cossack")
-	action_button_with_argument("troop", FRESH_GUARD, "Guard")
-	action_button_with_argument("troop", EXHAUSTED_GUARD, "Exh. Guard")
-	action_button_with_argument("troop", FRESH_PRUSSIAN_INFANTRY, "Pr. Infantry")
-	action_button_with_argument("troop", EXHAUSTED_PRUSSIAN_INFANTRY, "Exh. Pr. Infantry")
-	action_button_with_argument("troop", FRESH_AUSTRIAN_INFANTRY, "Au. Infantry")
-	action_button_with_argument("troop", EXHAUSTED_AUSTRIAN_INFANTRY, "Exh. Au. Infantry")
+	action_button_with_argument("troop_button", FRESH_INFANTRY, "Infantry")
+	action_button_with_argument("troop_button", EXHAUSTED_INFANTRY, "Exh. Infantry")
+	action_button_with_argument("troop_button", FRESH_CAVALRY, "Cavalry")
+	action_button_with_argument("troop_button", EXHAUSTED_CAVALRY, "Exh. Cavalry")
+	action_button_with_argument("troop_button", FRESH_COSSACK, "Cossack")
+	action_button_with_argument("troop_button", EXHAUSTED_COSSACK, "Exh. Cossack")
+	action_button_with_argument("troop_button", FRESH_GUARD, "Guard")
+	action_button_with_argument("troop_button", EXHAUSTED_GUARD, "Exh. Guard")
+	action_button_with_argument("troop_button", FRESH_PRUSSIAN_INFANTRY, "Pr. Infantry")
+	action_button_with_argument("troop_button", EXHAUSTED_PRUSSIAN_INFANTRY, "Exh. Pr. Infantry")
+	action_button_with_argument("troop_button", FRESH_AUSTRIAN_INFANTRY, "Au. Infantry")
+	action_button_with_argument("troop_button", EXHAUSTED_AUSTRIAN_INFANTRY, "Exh. Au. Infantry")
 
 	action_button_with_argument("troop_2x", FRESH_INFANTRY, "2x Infantry")
 	action_button_with_argument("troop_2x", FRESH_PRUSSIAN_INFANTRY, "2x Pr. Infantry")
@@ -1147,7 +1147,7 @@ function update_troops() {
 								populate_troop(player, type, "area_stack", area)
 
 							lookup_troop(get_used(player, type)).my_area = area
-							lookup_troop(get_used(player, type)).my_from = POOL
+							lookup_troop(get_used(player, type)).my_from = force.from ?? POOL
 
 							num_moved += force.troops[type]
 							populate_half_strength(player, get_used(player, type))
