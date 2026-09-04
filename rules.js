@@ -2296,7 +2296,7 @@ P.additional_replacements = {
 				L.state[R] = "place_sp"
 			},
 			on_troop_2x(type) {
-				this.on_troop(type)
+				this.on_troop_button(type)
 			}
 		},
 		"place_sp":
@@ -4747,6 +4747,7 @@ P.select_force = {
 				set_add(G.move.leaders, leader)
 		}
 
+		L.num_sps_selected = 0
 		for (let type = 0; type < G.move.sps.length; ++type) {
 			// If Platov is the only leader at the area, don't select SPs that are not Cavalry or Cossack
 			if ((L.movable_leaders.length === 1 && set_has(G.move.leaders, L_PLATOV)) && (!is_cavalry(type) && !is_cossack(type))) {
@@ -5446,7 +5447,7 @@ P.select_evade_force = {
 		} else {
 			L.leaders = get_leaders_at_area(G.active, L.area)
 		}
-		L.sps = get_evade_sps(G.acive, L.area)
+		L.sps = get_evade_sps(G.active, L.area)
 
 		// Running count of the number of SPs selected (it's not efficient to run a map_for_each for every count)
 		L.num_sps_selected = 0
@@ -5474,9 +5475,14 @@ P.select_evade_force = {
 
 		map_for_each(L.sps, (from, forces) => {
 			map_for_each(forces, (strength, sps) => {
-				for (let type = 0; type <= sps.length; ++type)
-					if (sps[type] > 0)
-						action_troop_imp(type, L.area, strength, from)
+				for (let type = 0; type <= sps.length; ++type) {
+					if (sps[type] > 0) {
+						if (map_has(G.move.sps, from) && map_has(map_get(G.move.sps, from), strength) && map_get(map_get(G.move.sps, from), strength)[type] >= sps[type])
+							continue
+						else
+							action_troop_imp(type, L.area, strength, from)
+					}
+				}
 			})
 		})
 
@@ -5663,7 +5669,7 @@ P.evade_pursuit_exhaustion = {
 				map_for_each(G.move.sps, (from, forces) => {
 					map_for_each(forces, (strength, sps) => {
 						for (let type = 0; type < sps.length; ++type)
-							if (sps[type] > 0)
+							if (is_troop_type_fresh(type) && sps[type] > 0)
 								action_troop_imp(type, L.area, strength, from, 1)
 					})
 				})
@@ -8123,8 +8129,6 @@ P.end_battle_events = {
 		if (is_event_active(C_STOIC_INFANTRY))
 			map_delete(G.persistent_events, C_STOIC_INFANTRY)
 		if (G.active.length === 0) {
-			for (let entry of L.log)
-				G.log.push(entry)
 			log()
 			end()
 		}
@@ -8395,7 +8399,10 @@ P.do_rally = {
 		log("Rallied")
 	},
 	prompt() {
-		if (!has_exhausted_sp(G.active, L.area)) {
+		if (
+			!has_exhausted_sp(G.active, L.area)
+			|| (L.count === 1 && !get_all_exhausted_sp_types(G.active, L.area).some(type => is_infantry(type)))
+		) {
 			prompt(`No ${L.count > 0 ? "more" : ""} exhausted SPs at S${L.area} to Rally.`)
 			button_confirm()
 		} else {
@@ -11332,14 +11339,16 @@ P.disease_and_starvation_select_losses = {
 	prompt() {
 		if (L.count > 0) {
 			prompt_card(C_DISEASE_AND_STARVATION, `Eliminate ${L.count} exhausted SPs at S${L.area}.`)
-			get_all_exhausted_sp_types(G.active, L.area).forEach(action_troop)
+			for (let type of get_all_exhausted_sp_types(G.active, L.area))
+				action_troop_imp(type, L.area)
 		} else {
 			prompt_card(C_DISEASE_AND_STARVATION, "All done.")
 			button_confirm()
 		}
 	},
-	troop(type) {
+	troop(entry) {
 		push_undo()
+		let type = decode_troop_action_type(entry)
 		eliminate_troop(G.active, L.area, type)
 		if (!map_has(L.eliminated, type))
 			map_set(L.eliminated, type, 1)
@@ -11580,7 +11589,8 @@ P.do_cossack_patrols = {
 				L.areas.forEach(action_area)
 			} else if (!L.has_eliminated_sp && has_exhausted_sp(G.active, L.selected_area)) {
 				prompt_card(C_COSSACK_PATROLS, `Eliminate 1 Exhausted SP at S${L.selected_area}.`)
-				get_all_exhausted_sp_types(G.active, L.selected_area).forEach(action_troop)
+				for (let type of get_all_exhausted_sp_types(G.active, L.selected_area))
+					action_troop_imp(type, L.selected_area)
 			} else {
 				prompt_card(C_COSSACK_PATROLS, `Remove Forage orders from S${L.selected_area}.`)
 				get_orders_at_area(G.active, L.selected_area).filter(order => get_order_type(order) === FORAGE).forEach(action_order)
@@ -11595,8 +11605,9 @@ P.do_cossack_patrols = {
 		L.selected_area = area
 		log(`>S${area}`)
 	},
-	troop(type) {
+	troop(entry) {
 		push_undo()
+		let type = decode_troop_action_type(entry)
 		eliminate_troop(G.active, L.selected_area, type)
 		log_only(RUSSIA, `<1 Exh. SP`)
 		log_only(FRANCE, `<1 ${get_troop_type_name(type)}`)
@@ -12750,7 +12761,8 @@ P.much_needed_victuals = {
 			}
 		} else if (L.num_sps_rallied < 2 && count_num_exhausted_infantry(FRANCE, L.selected_area) > 0) {
 			prompt(`Rally ${2 - L.num_sps_rallied} exhausted Infantry at S${L.selected_area}.`)
-			get_all_exhausted_sp_types(FRANCE, L.selected_area).filter(is_infantry).forEach(action_troop)
+			for (let type of get_all_exhausted_sp_types(FRANCE, L.selected_area))
+				action_troop_imp(type, L.selected_area)
 		} else {
 			prompt_card(C_MUCH_NEEDED_VICTUALS, `Attrition will not be checked at S${L.selected_area}`)
 			button_confirm()
@@ -12768,8 +12780,9 @@ P.much_needed_victuals = {
 		push_undo()
 		end()
 	},
-	troop(type) {
+	troop(entry) {
 		push_undo()
+		let type = decode_troop_action_type(entry)
 		rally_troop(FRANCE, L.selected_area, type)
 		logi(`1 ${get_troop_type_name(type)}`)
 		++L.num_sps_rallied
@@ -12942,7 +12955,8 @@ P.apply_tough_rearguard = {
 		if (!L.has_exhausted_sp) {
 			if (has_fresh_sp(G.active, L.area)) {
 				prompt_card(C_TOUGH_REARGUARD, `Exhaust an SP at S${L.area}.`)
-				get_all_fresh_sp_types(G.active, L.area).forEach(action_troop)
+				for (let type of get_all_fresh_sp_types(G.active, L.area))
+					action_troop_imp(type, L.area)
 			} else {
 				prompt_card(C_TOUGH_REARGUARD, `No fresh SPs to exhaust.`)
 				button_confirm()
@@ -12952,8 +12966,9 @@ P.apply_tough_rearguard = {
 			button_done()
 		}
 	},
-	troop(type) {
+	troop(entry) {
 		push_undo()
+		let type = decode_troop_action_type(entry)
 		exhaust_troop(G.active, L.area, type)
 		logi("Exhausted")
 		log_only(RUSSIA, `<1 Russian ${get_troop_type_name(type)}`)
