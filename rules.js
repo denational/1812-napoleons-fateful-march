@@ -10,21 +10,17 @@ const RUSSIA = 0
 const FRANCE = 1
 const ROLES = ["Russia", "France"]
 
-//Framework global variables
+// Framework global variables
 var G, L, V, R, P = {}
-//Could play event checks
+// Could play event checks
 var E = {}
 
 //=== CONSTANTS ===
-const NONE = -1 //Default value for logging
+// Default value for logging
+const NONE = -1
 
 /* CARDS */
 const cards = data.cards
-
-const first_russia_card = 0
-const last_russia_card = 53
-const first_france_card = 54
-const last_fr_card = 107
 
 const C_DUMMY_RU = 0
 const C_WELL_DISCIPLINED_RETREAT = 1
@@ -2070,10 +2066,10 @@ P.setup_hand = {
 	},
 	done() {
 		set_delete(G.active, R)
-		if (G.active.length === 0) { //Scenario 5 special rule
-			if (L.scenario === BATTLE_OF_SMOLENSK_CAMPAIGN_START) {
+		if (G.active.length === 0) {
+			// Scenario 5 special rule: Holy Mother Russia is placed on top of the Russian deck
+			if (L.scenario === BATTLE_OF_SMOLENSK_CAMPAIGN_START)
 				place_card_at_the_top_of_the_deck(C_HOLY_MOTHER_RUSSIA_RU)
-			}
 			goto("main")
 		}
 	}
@@ -2249,36 +2245,36 @@ function could_receive_sp(who, type) {
 P.additional_replacements = {
 	_begin() {
 		log_h2("Additional Replacements")
-
 		G.active = [RUSSIA, FRANCE]
 
 		L.state = [null, null]
-		for (let who = RUSSIA; who <= FRANCE; ++who)
-			L.state[who] = has_card_in_hand(who) ? "discard_card" : "all_done"
+		for (let player = RUSSIA; player <= FRANCE; ++player)
+			L.state[player] = has_card_in_hand(player) ? "discard_card" : "all_done"
 
-		L.num_cards_discarded = [0, 0]
-		L.has_discarded_card = [false, false]
+		L.discarded = [[], []]
 		L.selected_type = [-1, -1]
 		L.count = [0, 0]
+
+		L.reinforced = [[], []]
+		L.undo = [[], []]
 	},
 	states: {
-		"discard_card":
-		{
+		"discard_card": {
 			prompt() {
 				prompt(`You may discard a card to gain additional replacements, or pass.`)
-				get_non_dummy_cards_in_hand(R).forEach(card => action_card(card))
+				for (let card of get_non_dummy_cards_in_hand(R))
+					action_card(card)
 				button_pass()
 			},
 			on_card(card) {
+				push_local_undo(R, "discard", { card })
+				L.discarded[R].push(card)
 				remove_card_from_hand(R, card)
 				set_add(get_discard(R), card)
-				++L.num_cards_discarded[R]
-
 				L.state[R] = "select_reinforcement_sp"
-			},
+			}
 		},
-		"select_reinforcement_sp":
-		{
+		"select_reinforcement_sp": {
 			prompt() {
 				prompt(`Select an SP type to reinforce.`)
 				for (let type = 0; type < NUM_TROOP_TYPES; ++type) {
@@ -2291,6 +2287,7 @@ P.additional_replacements = {
 				}
 			},
 			on_troop_button(type) {
+				push_local_undo(R, "select_reinforcement_type")
 				L.selected_type[R] = type
 				L.count[R] = is_infantry(type) ? 2 : 1
 				L.state[R] = "place_sp"
@@ -2299,26 +2296,28 @@ P.additional_replacements = {
 				this.on_troop_button(type)
 			}
 		},
-		"place_sp":
-		{
+		"place_sp": {
 			prompt() {
-				prompt(`Select a location to place ${get_troop_type_name(L.selected_type[R])}. (${L.count[R]} remaining).`)
-				for (let area = FIRST_AREA; area <= LAST_AREA; ++area)
-					if (has_friendly_leader(R, area) || (is_key_city(area) && is_friendly_controlled(area)) || has_friendly_depot(R, area))
-						if (is_area_in_supply(R, area))
-							action_area(area)
+				prompt(`Select an area to place ${get_troop_type_name(L.selected_type[R])}. (${L.count[R]} remaining)`)
+				filter_areas(area => {
+					return (has_friendly_leader(R, area) || is_key_city(area) || has_friendly_depot(R, area))
+					&& is_area_in_supply(R, area)
+					&& is_friendly_controlled(R, area)
+				}).forEach(action_area)
 			},
 			on_area(area) {
+				push_local_undo(R, "place_sp", { area, type: L.selected_type[R] })
+				L.reinforced[R].push({area, type: L.selected_type[R]})
 				add_troop(R, area, L.selected_type[R], 1)
-				if (--L.count[R] === 0)
+				if (--L.count[R] === 0) {
 					if (has_card_in_hand(R))
 						L.state[R] = "discard_card"
 					else
 						L.state[R] = "all_done"
+				}
 			}
 		},
-		"all_done":
-		{
+		"all_done": {
 			prompt() {
 				prompt(`Receive additional reinforcements: All done.`)
 				button_done()
@@ -2327,18 +2326,46 @@ P.additional_replacements = {
 	},
 	prompt() {
 		this.states[L.state[R]].prompt()
+		button_undo(L.undo[R].length > 0)
 	},
-	pass() {
-		this.done()
+	undo() {
+		let undo = L.undo[R].pop()
+
+		if (L.state[R] !== undo.state)
+			L.state[R] = undo.state
+
+		switch(undo.action) {
+		case "discard":
+			L.discarded[R].pop()
+			add_to_hand(R, undo.info.card)
+			set_delete(get_discard(R), undo.info.card)
+			return
+		case "select_reinforcement_type":
+			L.selected_type[R] = -1
+			L.count[R] = 0
+			return
+		case "place_sp":
+			remove_troop(R, undo.info.area, undo.info.type, 1)
+			++L.count[R]
+			return
+		}
 	},
+	pass() { this.done() },
 	done() {
 		set_delete(G.active, R)
 		if (G.active.length === 0) {
-			for (let who = RUSSIA; who <= FRANCE; ++who)
-				if (L.num_cards_discarded[who] > 0)
-					log(`${ROLES[who]} discarded ${L.num_cards_discarded[who]} cards.`)
-				else
-					log(`${ROLES[who]} did not discard cards.`)
+			for (let player = RUSSIA; player <= FRANCE; ++player) {
+				log_only(player, `${ROLES[enemy(player)]} discarded ${L.discarded[enemy(player)].length} cards.`)
+				if (L.reinforced[player].length > 0) {
+					log_only(player, `Discarded`)
+					L.discarded[player].forEach(card => log_only(player, `>${get_card_log_alias(card)}`))
+					log_only(player, `Reinforced`)
+					for (let entry of L.reinforced[player]) {
+						log_only(player, `>S${entry.area}`)
+						log_only(player, `<1 ${get_troop_type_name(entry.type)}`)
+					}
+				}
+			}
 			log()
 			end()
 		}
@@ -2405,6 +2432,7 @@ P.select_new_cards = {
 		} else {
 			prompt(`Confirm selection of ${get_card_log_alias(L.selected_card[R])}.`)
 			button_confirm()
+			button_undo()
 		}
 	},
 	combine() {
@@ -2414,6 +2442,9 @@ P.select_new_cards = {
 	},
 	card_button(card) {
 		L.selected_card[R] = card
+	},
+	undo() {
+		L.selected_card[R] = -1
 	},
 	confirm() {
 		set_delete(G.active, R)
@@ -11710,7 +11741,7 @@ P.hard_marching_2 = function() { goto("hard_marching", {card: C_HARD_MARCHING_2}
 
 P.hard_marching = {
 	_begin() {
-		//L.card
+		// L.card
 		L.step = -1
 	},
 	inactive: "demonstrate its military prowess",
@@ -12207,8 +12238,8 @@ function get_areas_with_french_orders() {
 E.confusing_orders = function() { return is_leader_in_battle(L_KUTUZOV, G.current_battle) }
 
 // FR #22: Poor Communications
-//RULES MODIFICATION: Now the player selects a space and a random order is removed from it (as opposed to selecting an order).
-//This is to prevent information leak about the identity of the order.
+// RULES MODIFICATION: Now the player selects a space and a random order is removed from it (as opposed to selecting an order).
+// This is to prevent information leak about the identity of the order.
 P.poor_communications = {
 	_begin() {
 		L.selected_area = -1
@@ -12339,7 +12370,8 @@ P.good_leadership = {
 		} else if (L.step === 2) {
 			prompt_card(C_GOOD_LEADERSHIP, "You may immediately move a leader from any area to any other area.")
 			for (let leader = get_first_leader(FRANCE); leader <= get_last_leader(FRANCE); ++leader) {
-				if (is_leader_on_map(leader)) action_leader(leader)
+				if (is_leader_on_map(leader))
+					action_leader(leader)
 			}
 			button_pass()
 		} else if (L.step === 3) {
@@ -13248,7 +13280,7 @@ function action_troop_imp(type, area = 0, strength = FULL_STRENGTH, from = POOL,
 	action("troop", package_troop(player, type, strength, area, from, move))
 }
 
-//=== LOGGING ===
+// === LOGGING ===
 function get_abbreviation(who) {
 	return (who === RUSSIA) ? "ru" : ((who === FRANCE) ? "fr" : "na")
 }
@@ -13333,7 +13365,7 @@ function log_roll(roll) { //Uses fallback white die defined in world.js
 	log(`W${roll}`)
 }
 
-//=== COMMON FRAMEWORK - DO NOT EDIT ===
+// === COMMON FRAMEWORK - DO NOT EDIT ===
 function log(s) {
 	if (s === undefined) {
 		if (G.log.length > 0 && G.log[G.log.length - 1] !== "")
