@@ -1250,7 +1250,7 @@ function remove_troop(who, area, type, num) {
 	if (entry !== null) {
 		let remaining_troop_count = decode_troop_entry_num(entry)
 		if (remaining_troop_count < num) {
-			throw new Error(`Need to remove ${num} troops of ${who} ${type} at ${area}. Only ${remaining_troop_count} found.`)
+			throw new Error(`Need to remove ${num} ${ROLES[who]} ${get_troop_type_name(type)} at ${get_area_name(area)}. Only ${remaining_troop_count} found.`)
 		}
 
 		set_delete(get_area_troop_set(area), entry)
@@ -4644,8 +4644,6 @@ P.select_force = {
 		}
 	},
 	prompt() {
-		print(G.move)
-
 		if (L.max_sps_selectable === 0) {
 			if (G.move.pinned)
 				prompt(`All friendly SPs at S${L.area} are pinned.`)
@@ -5701,7 +5699,7 @@ P.evade_pursuit_exhaustion = {
 		L.has_assigned_exhaustion = false
 	},
 	prompt() {
-		if (!has_fresh_sp(G.active, L.area) && has_fresh_sp(enemy(G.active), L.area)) {
+		if (!has_fresh_sp(G.active, L.area)) {
 			prompt(`No more fresh SPs at S${L.area}.`)
 			button_next()
 		} else if (!L.has_assigned_exhaustion) {
@@ -5730,7 +5728,7 @@ P.evade_pursuit_exhaustion = {
 		let strength = decode_troop_action_strength(entry)
 		let from = decode_troop_action_from(entry)
 
-		battle_exhaust_troop(L.evader, L.area, type)
+		battle_exhaust_sp(L.evader, L.area, type, strength, from)
 		L.has_assigned_exhaustion = true
 
 		map_get(map_get(G.move.sps, from), strength)[type]--
@@ -5780,9 +5778,9 @@ P.eliminate_all_sps = {
 		log(`Eliminated all SPs at S${L.area}.`)
 		L.count = count_num_sps(G.active, L.area)
 		for (let type of get_troop_types_at_area(G.active, L.area))
-			eliminate_troop(G.active, L.area, type)
+			eliminate_troop(G.active, L.area, type, count_num_sps_of_type(G.active, type, L.area))
 		L.has_eliminated_sps = true
-		if (G.phase === EVADE)
+		if (G.phase === TURN_PHASES.findIndex(phase => phase === EVADE))
 			map_delete(G.battles, L.area)
 	},
 	leader(leader) {
@@ -5795,6 +5793,8 @@ P.eliminate_all_sps = {
 		push_undo()
 		L.has_shifted_vp = true
 		decrease_vp(G.active, L.count)
+		if (Math.abs(G.vp) >= 20)
+			sudden_death()
 	},
 	done() {
 		push_undo()
@@ -6480,6 +6480,7 @@ P.resolve_battles = {
 	confirm() {
 		push_undo()
 		log("No battles to execute this turn.")
+		map_clear(G.moved)
 		log()
 		end()
 	},
@@ -7174,30 +7175,6 @@ function battle_add_sp(who, area, type, strength, from, num = 1) {
 	force.troops[type] += num
 }
 
-function battle_exhaust_troop(who, area, type, num = 1) {
-	exhaust_troop(who, area, type, num)
-
-	let battle_data = get_player_battle_data(who, area)
-	let connections_rallied = [] //To undo onto same connections, just for the heck of it
-
-	let count = 0
-	for (let i = 0; i < battle_data.forces.length; ++i) {
-		let entry = battle_data.forces[i]
-
-		let num_available = Math.min(num - count, entry.troops[type])
-		entry.troops[type + 1] += Math.min(num, num_available)
-		entry.troops[type] -= Math.min(num, num_available)
-
-		if (!map_has(connections_rallied, i) && num_available > 0)
-			map_set(connections_rallied, i, 0)
-		map_increment(connections_rallied, i, num_available)
-
-		if ((count += num_available) >= num) break
-	}
-
-	return connections_rallied
-}
-
 function battle_eliminate_troop(who, area, type, num = 1) {
 	eliminate_troop(who, area, type, num)
 	increment_eliminated(who, area, num)
@@ -7314,12 +7291,8 @@ P.assign_losses = {
 				let strength = decode_troop_action_strength(entry)
 				let from = decode_troop_action_from(entry)
 
-				console.log(get_area_troop_set(G.current_battle).map(entry => [decode_troop_entry_who(entry), decode_troop_entry_type(entry), decode_troop_entry_num(entry)]))
-
 				battle_rally_sp(R, G.current_battle, type, strength, from)
 				push_local_undo(FRANCE, "rally", { type, strength, from })
-
-				console.log(get_area_troop_set(G.current_battle).map(entry => [decode_troop_entry_who(entry), decode_troop_entry_type(entry), decode_troop_entry_num(entry)]))
 
 				advance_local_state(FRANCE)
 			},
@@ -9174,26 +9147,6 @@ P.exhaust_sp = {
 
 		exhaust_troop(G.active, L.area, type)
 
-		// These sections are specific to the 'Exhausting March' event (since they may mutate moved/battle entries)
-		// NOTE: This is a rules mistake, I will need to fix these events later (only moving SPs can take losses)
-		if (is_event_active(C_EXHAUSTING_MARCH_1) || is_event_active(C_EXHAUSTING_MARCH_2)) {
-			if (has_battle(L.area)) {
-				let battle_data = get_player_battle_data(G.active, L.area)
-
-				let force = battle_data.forces.find(force => force.from === G.move.path[G.move.path.length - 2] && force.strength === get_move_strength(G.move.type))
-				force.troops[type]--
-				force.troops[type + 1]++
-			}
-
-			if (map_has(G.moved, L.area) && map_get(G.moved, L.area).some(force => force.faction === G.active)) {
-				let force = map_get(G.moved, L.area).find(force => force.faction === G.active && force.from === G.move.path[G.move.path.length - 2] && force.strength === get_move_strength(G.move.type))
-
-				force.troops[type]--
-				force.troops[type + 1]++
-			}
-		}
-
-
 		if (is_cavalry(type) || is_cossack(type))
 			G.attrition_data.has_assigned_cavalry_loss = true
 		if (++G.attrition_data.num_sps_affected % 3 === 0)
@@ -9227,23 +9180,8 @@ P.eliminate_2_exhausted_sps = {
 	troop(entry) {
 		push_undo()
 		let type = decode_troop_action_type(entry)
+
 		eliminate_troop(G.active, L.area, type)
-
-		// These sections are specific to the 'Exhausting March' event (since they may mutate moved/battle entries)
-		if (is_event_active(C_EXHAUSTING_MARCH_1) || is_event_active(C_EXHAUSTING_MARCH_2)) {
-			if (has_battle(L.area)) {
-				let battle_data = get_player_battle_data(G.active, L.area)
-
-				let force = battle_data.forces.find(force => force.from === G.move.path[G.move.path.length - 2] && force.strength === get_move_strength(G.move.type))
-				force.troops[type]--
-			}
-
-			if (map_has(G.moved, L.area) && map_get(G.moved, L.area).some(force => force.faction === G.active)) {
-				let force = map_get(G.moved, L.area).find(force => force.faction === G.active && force.from === G.move.path[G.move.path.length - 2] && force.strength === get_move_strength(G.move.type))
-
-				force.troops[type]--
-			}
-		}
 
 		if (is_cavalry(type) || is_cossack(type))
 			G.attrition_data.has_assigned_cavalry_loss = true
@@ -9254,15 +9192,6 @@ P.eliminate_2_exhausted_sps = {
 			map_set(G.attrition_data.previously_eliminated, type, 1)
 		else
 			map_increment(G.attrition_data.previously_eliminated, type)
-
-		// If the area is no longer controlled by the active player, apply VP penalties as appropriate
-		if (is_event_active(C_EXHAUSTING_MARCH_1) || is_event_active(C_EXHAUSTING_MARCH_2)) {
-			if (!has_friendly_troop(G.active, L.area) && is_vp_area(L.area))
-				decrease_vp(G.active, get_area_vp(L.area))
-		} else {
-			if (!is_friendly_controlled(G.active, L.area) && is_vp_area(L.area))
-				decrease_vp(G.active, get_area_vp(L.area))
-		}
 
 		if (--L.count === 0) {
 			if (!has_friendly_troop(G.active, L.area) && has_friendly_leader(G.active, L.area))
@@ -10857,7 +10786,9 @@ P.exhausting_march = {
 		G.attrition_data.area = G.move.path[G.move.path.length - 1]
 		G.attrition_data.num_losses_remaining = L.num_losses
 		G.active = FRANCE
-		call("assign_attrition_losses", { area: G.move.path[G.move.path.length - 1] })
+		// TODO: Add Exhausting March losses
+		this.done()
+		//call("assign_attrition_losses", { area: G.move.path[G.move.path.length - 1] })
 	},
 	_resume() {
 		log_attrition()

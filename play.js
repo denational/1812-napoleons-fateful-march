@@ -670,6 +670,8 @@ function on_init() {
 	define_panel("#ru_leaders", "leaders", RUSSIA)
 	define_panel("#fr_leaders", "leaders", FRANCE)
 
+	define_html_thing("#vp_display", "vp_display", 0)
+
 	/* AREAS */
 	for (let area = FIRST_AREA; area <= LAST_AREA; ++area) {
 		// For actions & populating static markers (devastation, depots)
@@ -771,17 +773,29 @@ function on_update() {
 	update_devastation()
 	update_orders()
 
+	if (V.vp > 0) {
+		document.getElementById("vp_display").innerHTML = `<b>VP:</b> France ${V.vp}`
+	} else if (V.vp < 0) {
+		document.getElementById("vp_display").innerHTML = `<b>VP:</b> Russia ${Math.abs(V.vp)}`
+	} else {
+		document.getElementById("vp_display").innerHTML = `<b>VP:</b> ${V.vp}`
+	}
+
+	if (V.initiative > 0) {
+		document.getElementById("vp_display").innerHTML += `<br><b>Initiative:</b> France ${V.initiative}`
+	} else {
+		document.getElementById("vp_display").innerHTML += `<br><b>Initiative:</b> Russia ${Math.abs(V.initiative)}`
+	}
+
 	for (let c of V.current_hand) {
 		populate("hand", 0, "card", c)
 	}
 
-	if (V.played_cards && V.played_cards[R]) {
-		if (V.played_cards[R].length === 0) {
-			update_panel_show("table", 0, false)
-		} else {
+	if (V.played_cards) {
+		update_panel_show("table", 0, V.played_cards[R].length > 0)
+		if (V.played_cards[R].length > 0)
 			for (let c of V.played_cards[R])
 				populate("table", 0, "card", c)
-		}
 	}
 
 	update_panel_show("leaders", RUSSIA, false)

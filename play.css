@@ -151,6 +151,19 @@ body.France header.your_turn {background-color: var(--france);}
 	font-style: italic;
 }
 
+/* SIDEBAR VP & INITIATIVE DISPLAYS */
+#vp_display {
+	height: 35px;
+	border-right: 1px solid black;
+	border-bottom: 1px solid black;
+	background-color: wheat;
+	padding: 4px;
+	font-style: italic;
+    font-size: 12px;
+    line-height: 18px;
+	font-family: var(--font-small);
+}
+
 /* DICE */
 .dice.battle_fr, .dice.battle_ru {
 	background-size: contain;
@@ -437,6 +450,7 @@ body.hide-pieces .troop { display: none }
 .layout > .troop {
 	position: relative;
 }
+
 .troop.infantry.ru.fresh { background-image: url(pieces/fresh-infantry_ru.png);}
 .troop.infantry.ru.exhausted { background-image: url(pieces/exhausted-infantry_ru.png);}
 .troop.infantry.fr.fresh { background-image: url(pieces/fresh-infantry_fr.png);}
