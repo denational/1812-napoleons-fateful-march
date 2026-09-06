@@ -5012,9 +5012,7 @@ P.move = {
 			L.confirm_battle = true
 			L.current_area = area
 		} else {
-			move_formation(G.move.leaders, G.move.sps, G.move.path[G.move.path.length - 1], area)
-			G.move.path.push(area)
-			L.move_allowance = Math.max(--L.move_allowance, 0)
+			conduct_movement(G.move.path[G.move.path.length - 1], area)
 
 			if (is_vp_area(L.current_area) && !is_friendly_controlled(G.active, L.current_area)) {
 				log(`S${L.current_area} abandoned!`)
@@ -5053,46 +5051,92 @@ P.move = {
 	confirm() {
 		push_undo()
 		let previous_area = G.move.path[G.move.path.length - 1]
-		move_formation(G.move.leaders, G.move.sps, previous_area, L.current_area)
-		G.move.path.push(L.current_area)
+		conduct_movement(previous_area, L.current_area)
 
 		if (is_vp_area(previous_area) && !is_friendly_controlled(G.active, previous_area)) {
 			log(`S${previous_area} abandoned!`)
 			decrease_vp(G.active, get_area_vp(previous_area))
 		}
 
-		if (!has_battle(L.current_area))
-			log(`Battle declared at S${L.current_area}.`)
-
-		if (!has_battle(L.current_area) && !map_has(G.moved, L.current_area)) {
-			add_attacker_to_battle(G.active, previous_area, L.current_area, G.move.type, G.move.leaders.slice(), G.move.sps.slice())
-			add_defender_to_battle(enemy(G.active), L.current_area, L.current_area, -1, get_leaders_at_area(enemy(G.active), L.current_area), get_troop_list_by_type(enemy(G.active), L.current_area))
-
-		} else if (!has_battle(L.current_area) && map_has(G.moved, L.current_area)) {
-			add_attacker_to_battle(G.active, previous_area, L.current_area, G.move.type, G.move.leaders.slice(), G.move.sps.slice())
-
-			let leaders = get_leaders_at_area(enemy(G.active), L.current_area)
-			let troops = get_troop_list_by_type(enemy(G.active), L.current_area)
-			for (let entry of map_get(G.moved, L.current_area, null)) {
-				if (entry.faction === enemy(G.active)) {
-					add_defender_to_battle(enemy(G.active), L.current_area, L.current_area, get_strength_move(entry.strength), entry.leaders, entry.troops)
-					for (let leader of entry.leaders)
-						set_delete(leaders, leader)
-					for (let type = 0; type < troops.length; ++type)
-						troops[type] -= entry.troops[type]
-				}
-			}
-			if (troops.some(type => type > 0) || leaders.length > 0)
-				add_defender_to_battle(enemy(G.active), L.current_area, L.current_area, -1, leaders, troops)
-		} else if (has_battle(L.current_area) && (get_battle_attacker(L.current_area) === G.active)) {
-			add_attacker_to_battle(G.active, previous_area, L.current_area, G.move.type, G.move.leaders.slice(), G.move.sps.slice())
-		} else if (has_battle(L.current_area) && (get_battle_defender(L.current_area) === G.active)) {
-			add_defender_to_battle(G.active, previous_area, L.current_area, G.move.type, G.move.leaders.slice(), G.move.sps.slice())
+		if (Math.abs(G.vp) < 20) {
+			mark_already_moved(G.active, G.move.path, G.move.type, G.move.leaders, G.move.sps)
+			goto("post_move_exhaustion")
+		} else {
+			sudden_death()
 		}
+	}
+}
 
-		mark_already_moved(G.active, G.move.path, G.move.type, G.move.leaders, G.move.sps)
+function conduct_movement(from, to) {
+	move_formation(G.move.leaders, G.move.sps, from, to)
+	G.move.path.push(to)
+	L.move_allowance = Math.max(L.move_allowance - 1, 0)
 
-		goto("post_move_exhaustion")
+	// Remove SPs from the battle in the origin area, if any.
+	if (has_battle(from)) {
+		if (!has_friendly_troop(G.active, from)) {
+			map_delete(G.battles, from)
+		} else {
+			// Only defenders who started the turn in the area would be eligible to move.
+			get_player_battle_data(G.active, from).forces.forEach(force => {
+				if (force.from === from && force.strength === FULL_STRENGTH) {
+					for (let type = 0; type < force.troops.length; ++type) {
+						if (force.troops[type] > 0)
+							force.troops[type] -= G.move.sps[type]
+					}
+				}
+			})
+		}
+	}
+
+	// Add SPs to a battle in the target area, if it has enemy SPs.
+	if (has_enemy_sp(G.active, to)) {
+		if (!has_battle(to))
+			log(`Battle declared at S${to}.`)
+
+		if (!has_battle(to)) {
+			// Since no SPs from the attacking side are already present, we just add them as a single force.
+			add_attacker_to_battle(G.active, from, to, G.move.type, G.move.leaders.slice(), G.move.sps.slice())
+
+			// If all the defending SPs would fight at full strength, add them all as a single force.
+			if (!map_has(G.moved, to) || map_get(G.moved, to).every(force => force.strength === FULL_STRENGTH)) {
+				add_defender_to_battle(enemy(G.active), to, to, NONE, get_leaders_at_area(enemy(G.active), to), get_troop_list_by_type(enemy(G.active), to))
+			} else {
+				let leaders_at_area = get_leaders_at_area(enemy(G.active), to)
+				let sps_at_area = get_troop_list_by_type(enemy(G.active), to)
+
+				// Add all Forced March SPs in the destination as a separate force.
+				// They still count as having originating the to destination area, since the battle is declared after those SPs moved.
+				map_get(G.moved, to).forEach(force => {
+					if (
+						force.faction === enemy(G.active)
+						&& force.strength === HALF_STRENGTH
+					) {
+						add_defender_to_battle(enemy(G.active), to, to, FORCED_MARCH, force.leaders.slice(), force.troops.slice())
+
+						for (let leader of force.leaders)
+							set_delete(leaders_at_area, leader)
+
+						for (let type = 0; type < force.troops.length; ++type) {
+							if (force.troops[type] > 0)
+								sps_at_area[type] -= force.troops[type]
+						}
+					}
+				})
+
+				// If any SPs or leaders who haven't yet been added to the battle, add them now at full strength.
+				// March orders are not tracked for battle purposes, since they fight identically to SPs that did not move.
+				if (leaders_at_area.length > 0 || sps_at_area.some(type => type > 0))
+					add_defender_to_battle(G.active, to, to, NONE, leaders_at_area.slice(), sps_at_area.slice())
+			}
+		}
+		// If reinforcing an existing battle, simply add them in as a separate force.
+		else {
+			if (is_battle_attacker(G.active, to))
+				add_attacker_to_battle(G.active, from, to, G.move.type, G.move.leaders.slice(), G.move.sps.slice())
+			else
+				add_defender_to_battle(G.active, from, to, G.move.type, G.move.leaders.slice(), G.move.sps.slice())
+		}
 	}
 }
 
