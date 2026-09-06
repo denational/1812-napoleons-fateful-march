@@ -2884,7 +2884,7 @@ P.draw_card_to_hand = {
 						prompt(`Assign attrition losses: ${get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining} remaining.`)
 						let any_action = false
 
-						if (get_devastated_areas_with_french_troops().some(area => has_exhausted_sp(FRANCE, area))) {
+						if (get_devastated_areas_with_french_troops().some(area => has_fresh_sp(FRANCE, area))) {
 							button("exhaust")
 							any_action = true
 						}
@@ -4644,6 +4644,8 @@ P.select_force = {
 		}
 	},
 	prompt() {
+		print(G.move)
+
 		if (L.max_sps_selectable === 0) {
 			if (G.move.pinned)
 				prompt(`All friendly SPs at S${L.area} are pinned.`)
@@ -4692,7 +4694,12 @@ P.select_force = {
 						continue
 				}
 
-				if (is_event_active(C_INFIGHTING_AND_INTRIGUE) && get_event_keyword(C_INFIGHTING_AND_INTRIGUE, "area") === L.area && type !== FRESH_CAVALRY && type !== FRESH_COSSACK) {
+				if (
+					G.move.leaders.length > 0
+					&& is_event_active(C_INFIGHTING_AND_INTRIGUE)
+					&& get_event_keyword(C_INFIGHTING_AND_INTRIGUE, "area") === L.area
+					&& type !== FRESH_CAVALRY && type !== FRESH_COSSACK
+				) {
 					let dist = L.type === FORCED_MARCH ? 2 : 1
 					if (get_distance_to_closest_infighting_and_intrigue_destination(G.active, L.area, L.type) > dist)
 						continue
@@ -4773,9 +4780,16 @@ P.select_force = {
 	},
 	select_all() {
 		push_undo()
-		for (let leader of L.movable_leaders) {
-			if (!set_has(G.move.leaders, leader))
-				set_add(G.move.leaders, leader)
+
+		if (
+			!is_event_active(C_INFIGHTING_AND_INTRIGUE)
+			|| get_event_keyword(C_INFIGHTING_AND_INTRIGUE, "area") !== L.area
+			|| has_valid_infighting_and_intrigue_destination(G.active, L.area, L.type)
+		) {
+			for (let leader of L.movable_leaders) {
+				if (!set_has(G.move.leaders, leader))
+					set_add(G.move.leaders, leader)
+			}
 		}
 
 		L.num_sps_selected = 0
@@ -4783,7 +4797,7 @@ P.select_force = {
 			// If Platov is the only leader at the area, don't select SPs that are not Cavalry or Cossack
 			if ((L.movable_leaders.length === 1 && set_has(G.move.leaders, L_PLATOV)) && (!is_cavalry(type) && !is_cossack(type))) {
 				continue
-			} else if (is_event_active(C_INFIGHTING_AND_INTRIGUE)) {
+			} else if (is_event_active(C_INFIGHTING_AND_INTRIGUE) && G.move.leaders.length > 0) {
 				let dist = L.type === FORCED_MARCH ? 2 : 1
 				if (get_distance_to_closest_infighting_and_intrigue_destination(G.active, L.area, L.type) > dist && (type !== FRESH_CAVALRY && type !== FRESH_COSSACK))
 					continue
@@ -4847,7 +4861,7 @@ function get_movable_areas_in_radius(source, radius, callback = function(area) {
 		for (let adj of get_all_adjacent_areas(current)) {
 			if (!can_enter_area(G.active, adj)) continue
 
-			if (map_get(distance, current, null) < radius && !map_has(distance, adj) && callback(adj))
+			if (map_get(distance, current, null) < radius && !map_has(distance, adj) && can_enter_area(G.active, adj) && callback(adj))
 				set_add(areas, adj)
 
 			if (!queue.includes(adj) && !map_has(distance, adj)) {
@@ -4903,7 +4917,7 @@ function get_move_destinations(current_area, allowance) {
 		return get_all_adjacent_areas(current_area).filter(area => !get_connections_used_by_attacker(current_area).includes(area))
 	}
 	else {
-		return get_all_adjacent_areas(current_area)
+		return get_all_adjacent_areas(current_area).filter(area => can_enter_area(G.active, area))
 	}
 }
 
@@ -5768,7 +5782,8 @@ P.eliminate_all_sps = {
 		for (let type of get_troop_types_at_area(G.active, L.area))
 			eliminate_troop(G.active, L.area, type)
 		L.has_eliminated_sps = true
-		map_delete(G.battles, L.area)
+		if (G.phase === EVADE)
+			map_delete(G.battles, L.area)
 	},
 	leader(leader) {
 		push_undo()
@@ -7159,30 +7174,6 @@ function battle_add_sp(who, area, type, strength, from, num = 1) {
 	force.troops[type] += num
 }
 
-function battle_rally_troop(who, area, type, num = 1) {
-	rally_troop(who, area, type, num)
-
-	let battle_data = get_player_battle_data(who, area)
-	let connections_rallied = [] //To undo onto same connections, just for the heck of it
-
-	let count = 0
-	for (let i = 0; i < battle_data.forces.length; ++i) {
-		let entry = battle_data.forces[i]
-
-		let num_available = Math.min(num - count, entry.troops[type])
-		entry.troops[type - 1] += Math.min(num, num_available)
-		entry.troops[type] -= Math.min(num, num_available)
-
-		if (!map_has(connections_rallied, i) && num_available > 0)
-			map_set(connections_rallied, i, 0)
-		map_increment(connections_rallied, i, num_available)
-
-		if ((count += num_available) >= num) break
-	}
-
-	return connections_rallied
-}
-
 function battle_exhaust_troop(who, area, type, num = 1) {
 	exhaust_troop(who, area, type, num)
 
@@ -7323,8 +7314,12 @@ P.assign_losses = {
 				let strength = decode_troop_action_strength(entry)
 				let from = decode_troop_action_from(entry)
 
+				console.log(get_area_troop_set(G.current_battle).map(entry => [decode_troop_entry_who(entry), decode_troop_entry_type(entry), decode_troop_entry_num(entry)]))
+
 				battle_rally_sp(R, G.current_battle, type, strength, from)
 				push_local_undo(FRANCE, "rally", { type, strength, from })
+
+				console.log(get_area_troop_set(G.current_battle).map(entry => [decode_troop_entry_who(entry), decode_troop_entry_type(entry), decode_troop_entry_num(entry)]))
 
 				advance_local_state(FRANCE)
 			},
@@ -7845,7 +7840,9 @@ P.end_battle = script(`
 		}
 		G.played_cards[RUSSIA] = []
 		G.played_cards[FRANCE] = []
-		map_delete(G.battles, G.current_battle)
+		if (map_has(G.battles, G.current_battle)) {
+			map_delete(G.battles, G.current_battle)
+		}
 		G.active = get_who_has_initiative()
 		map_clear(G.moved)
 	}
@@ -8154,7 +8151,7 @@ P.end_battle_events = {
 	troop(entry) 	{ this.states[L.state[R]].on_troop(entry) },
 	discard()		{ this.states[L.state[R]].on_discard() },
 	vp() 			{ this.states[L.state[R]].on_vp() },
-	next() 		{ this.states[L.state[R]].on_next() },
+	next() 			{ this.states[L.state[R]].on_next() },
 	confirm() {
 		set_delete(G.active, R)
 		if (is_event_active(C_STOIC_INFANTRY))
@@ -8189,160 +8186,235 @@ function has_retreat_destination(who, area) {
 	return get_valid_retreat_destinations(who, area).length > 0
 }
 
-/*
-//TODO: Handling with no retreat areas
-//TODO: Alexander & Platov ability enforcement (will do after finishing battle events)
-
 P.retreat = script(`
 	log "%Retreat"
 	set G.active L.loser
 	while (has_friendly_troop(L.loser, G.current_battle)) {
-		call select_retreat_destination	{ loser: L.loser }
-		call select_retreat_force { area: L.$ }
+		call select_retreat_destination
+		if (has_friendly_troop(G.active, G.current_battle)) {
+			call select_retreat_force { destination: L.$ }
+			call do_retreat { destination: L.$ }
+		}
 	}
 `)
 
 P.select_retreat_destination = {
 	_begin() {
-		if (has_retreat_destination(L.loser, G.current_battle)) {
-			L.has_valid_retreat_destination = true
-			L.retreat_destinations = get_valid_retreat_destinations(G.active, L.area)
-		} else {
-			L.has_valid_retreat_destination = false
-			log(`No valid retreat destinations.`)
-			L.retreat_destinations = get_valid_retreat_destinations(G.active, L.area, true)
-		}
+		L.has_valid_retreat_destination = has_retreat_destination(G.active, G.current_battle)
+		L.retreat_destinations = get_valid_retreat_destinations(G.active, G.current_battle, !L.has_valid_retreat_destination)
 	},
 	prompt() {
-		prompt(`Select a destination to retreat. (${join_array_with_or(L.retreat_destinations.map(area => `S${area}`))})`)
+		prompt(`Select a destination to retreat from S${G.current_battle}.`)
 		L.retreat_destinations.forEach(action_area)
 	},
 	area(area) {
 		push_undo()
-		end(area)
+		L.L.$ = area
+		if (!L.has_valid_retreat_destination)
+			goto("exhaust_half_sps")
+		else
+			end()
 	}
 }
 
-P.select_retreat_force = {
+P.exhaust_half_sps = {
 	_begin() {
-		G.move = {
-			leaders: [],
-			sps: Array(NUM_TROOP_TYPES).fill(0)
-		}
-	}
-}
-*/
-
-// WARNING: Placeholder retreat state without leader abilities so that test games progress
-P.retreat = {
-	_begin() {
-		//L.loser
-		log_h5("Retreat")
-		G.active = L.loser
-		L.retreat_destinations = get_valid_retreat_destinations(L.loser, G.current_battle)
-
-		L.retreat = {
-			total_num: 0,
-			leaders: [],
-			troops: Array(NUM_TROOP_TYPES).fill(0),
-		}
-
-		L.selected_area = -1
-		L.has_retreated = false
+		L.num_sps_to_exhaust = Math.ceil(count_num_sps(G.active, G.current_battle) / 2)
 	},
 	prompt() {
-		if (L.selected_area === -1) {
-			prompt(`Select a retreat destination. (${join_array_with_or(L.retreat_destinations.map(area => `S${area}`))})`)
-			for (let area of L.retreat_destinations)
-				action_area(area)
-		} else if (!L.has_retreated) {
-			prompt(`Select a force to retreat from S${G.current_battle}.`)
-
-			for (let leader of get_leaders_at_area(G.active, G.current_battle))
-				if (!set_has(L.retreat.leaders, leader))
-					button_leader(leader)
-
-			for (let type of get_troop_types_at_area(G.active, G.current_battle)) {
-				if (count_num_sps_of_type(G.active, type, G.current_battle) > L.retreat.troops[type]) {
-					action("add_troop", type)
-				}
-				if (L.retreat.troops[type] > 0) {
-					action("remove_troop", type)
-				}
-			}
-
-			button("select_all")
-			button_confirm(L.retreat_destinations.length > 1 || (L.retreat_destinations.length === 1 && (count_num_sps(G.active, G.current_battle) === L.retreat.total_num)))
+		if (!has_fresh_sp(G.active, G.current_battle) && has_fresh_sp(enemy(G.active), G.current_battle)) {
+			prompt(`No fresh SPs at S${G.current_battle}.`)
+			button_confirm()
+		} else if (L.num_sps_to_exhaust === 0) {
+			prompt(`Assign exhaustion — All done.`)
+			button_next()
 		} else {
-			prompt(`Retreat: All done.`)
-			button_done()
+			prompt(`No valid retreat destination: exhaust half of the SPs at S${G.current_battle}.`)
+			get_player_battle_data(G.active, G.current_battle).forces.forEach(force => {
+				for (let type = 0; type < force.troops.length; ++type)
+					action_troop_imp(type, G.current_battle, force.strength, force.from)
+			})
 		}
 	},
-	area(area) {
+	troop(entry) {
 		push_undo()
-		L.selected_area = area
-	},
-	leader_button(leader) {
-		push_undo()
-		set_toggle(L.retreat.leaders, leader)
-	},
-	add_troop(type) {
-		push_undo()
-		L.retreat.troops[type]++
-		L.retreat.total_num++
-	},
-	remove_troop(type) {
-		push_undo()
-		L.retreat.troops[type]--
-		L.retreat.total_num--
-	},
-	select_all() {
-		push_undo()
-		for (let leader of get_leaders_at_area(G.active, G.current_battle))
-			if (!set_has(L.retreat.leaders, leader)) set_add(L.retreat.leaders, leader)
-
-		L.retreat.total_num = 0
-		for (let type of get_troop_types_at_area(G.active, G.current_battle)) {
-			let count = count_num_sps_of_type(G.active, type, G.current_battle)
-			L.retreat.total_num += count
-			L.retreat.troops[type] = count
-		}
+		let type = decode_troop_action_type(entry)
+		let strength = decode_troop_action_strength(entry)
+		let from = decode_troop_action_from(entry)
+		battle_exhaust_sp(G.active, G.current_battle, type, strength, from)
+		--L.num_sps_to_exhaust
 	},
 	confirm() {
 		push_undo()
-		move_formation(L.retreat.leaders, L.retreat.troops, G.current_battle, L.selected_area)
-		set_delete(L.retreat_destinations, L.selected_area)
-		log("Retreated from S" + G.current_battle)
-		if (L.retreat.leaders.length > 0) {
-			logi(`L${L.retreat.leaders[0]}`) //Seniormost leader
-			for (let type = 0; type < L.retreat.troops.length; ++type) {
-				if (L.retreat.troops[type] > 0) {
-					log_only(G.active, "<" + L.retreat.troops[type] + " " + get_troop_type_name(type))
+		goto("eliminate_all_sps", { area: G.current_battle })
+	},
+	next() {
+		push_undo()
+		end()
+	}
+}
+
+// Structurally similar to Evade: maybe condense later
+P.select_retreat_force = {
+	_begin() {
+		L.leaders = get_leaders_at_area(G.active, G.current_battle)
+		L.sps = get_evade_sps(G.active, G.current_battle)
+
+		L.retreat_destinations = []
+		if (!has_enemy_sp(G.active, L.destination))
+			L.retreat_destinations = find_retreat_destinations(G.active, G.current_battle)
+
+		L.num_sps_selected = 0
+
+		G.move = {
+			type: NONE,
+			leaders: [],
+			sps: [],
+		}
+	},
+	prompt() {
+		prompt(`Select leaders and SPs to retreat from S${G.current_battle}.`)
+
+		if (G.move.leaders.length === 0 && L.num_sps_selected > 4)
+			add_to_prompt(` All SPs in the retreating force beyond the first 4 would be exhausted.`)
+
+		for (let leader of L.leaders)
+			action_leader(leader)
+
+		map_for_each(L.sps, (from, forces) => {
+			map_for_each(forces, (strength, sps) => {
+				for (let type = 0; type <= sps.length; ++type) {
+					if (sps[type] > 0) {
+						if (map_has(G.move.sps, from) && map_has(map_get(G.move.sps, from), strength) && map_get(map_get(G.move.sps, from), strength)[type] >= sps[type])
+							continue
+						else
+							action_troop_imp(type, G.current_battle, strength, from)
+					}
+				}
+			})
+		})
+
+		map_for_each(G.move.sps, (from, forces) => {
+			map_for_each(forces, (strength, sps) => {
+				for (let type = 0; type < sps.length; ++type)
+					if (sps[type] > 0)
+						action_troop_imp(type, G.current_battle, strength, from, 1)
+			})
+		})
+
+		if (L.leaders.length > G.move.leaders.length || L.num_sps_selected < count_num_sps(G.active, G.current_battle))
+			button("select_all")
+
+		if (has_enemy_sp(G.active, L.destination))
+			button("retreat", L.leaders.length === G.move.leaders.length && L.num_sps_selected === count_num_sps(G.active, G.current_battle))
+		else
+			button("retreat", L.retreat_destinations.length > 1 || L.num_sps_selected === count_num_sps(G.active, G.current_battle))
+	},
+	leader(leader) {
+		push_undo()
+		set_toggle(G.move.leaders, leader)
+	},
+	troop(entry) {
+		push_undo()
+		let type = decode_troop_action_type(entry)
+		let strength = decode_troop_action_strength(entry)
+		let from = decode_troop_action_from(entry)
+		let moving = decode_troop_action_moving(entry)
+
+		if (!map_has(G.move.sps, from))
+			map_set(G.move.sps, from, [])
+
+		if (!map_has(map_get(G.move.sps, from), strength))
+			map_set(map_get(G.move.sps, from), strength, Array(NUM_TROOP_TYPES).fill(0))
+
+		if (!moving) {
+			++map_get(map_get(G.move.sps, from), strength)[type]
+			++L.num_sps_selected
+		} else {
+			--map_get(map_get(G.move.sps, from), strength)[type]
+			--L.num_sps_selected
+		}
+	},
+	select_all() {
+		push_undo()
+		G.move.leaders = L.leaders.slice()
+		G.move.sps = []
+		map_for_each(L.sps, (from, forces) => {
+			let copy = []
+			map_for_each(forces, (strength, sps) => {
+				copy.push(strength)
+				copy.push(sps.slice())
+			})
+			map_set(G.move.sps, from, copy)
+		})
+		L.num_sps_selected = count_num_sps(G.active, G.current_battle)
+	},
+	retreat() {
+		push_undo()
+
+		log(`Retreated from S${G.current_battle}`)
+		let sp_count = get_evading_sps()
+		if (G.move.leaders.length > 0) {
+			logi(`L${get_seniormost_leader_from_list(G.active, G.move.leaders)}`) //Seniormost leader
+			for (let type = 0; type < sp_count.length; ++type) {
+				if (sp_count[type] > 0) {
+					log_only(G.active, "<" + sp_count[type] + " " + get_troop_type_name(type))
 				}
 			}
 		} else {
-			for (let type = 0; type < L.retreat.troops.length; ++type) {
-				if (L.retreat.troops[type] > 0) {
-					log("<" + L.retreat.troops[type] + " " + get_troop_type_name(type))
+			for (let type = 0; type < sp_count.length; ++type) {
+				if (sp_count[type] > 0) {
+					log(">" + sp_count[type] + " " + get_troop_type_name(type))
 				}
 			}
 		}
-		logi("to S" + L.selected_area)
-		log()
 
-		if (!has_friendly_troop(G.active, G.current_battle))
-			L.has_retreated = true
-		else {
-			L.selected_area = -1
-			L.retreat.total_num = 0
-			L.retreat.leaders.length = 0
-			L.retreat.troops = Array(NUM_TROOP_TYPES).fill(0)
-		}
-	},
-	done() {
-		log()
 		end()
 	}
+}
+
+P.do_retreat = function() {
+	let battle_data = get_player_battle_data(G.active, L.area)
+
+	logi(`to S${L.destination}`)
+
+	for (let leader of G.move.leaders)
+		move_leader(leader, L.destination)
+
+	map_for_each(G.move.sps, (origin, forces) => {
+		map_for_each(forces, (strength, sps) => {
+			for (let type = 0; type < sps.length; ++type) {
+				if (sps[type] > 0) {
+					move_troop(G.active, G.current_battle, L.destination, type, sps[type])
+					for (let entry of battle_data.forces) {
+						if (entry.from === origin && entry.strength === strength) {
+							entry.troops[type] -= sps[type]
+						}
+					}
+				}
+			}
+		})
+	})
+
+	if (has_enemy_sp(G.active, L.destination)) {
+		let troops = get_evading_sps()
+
+		if (has_battle(L.destination)) {
+			if (is_battle_attacker(G.active, L.destination))
+				add_attacker_to_battle(G.active, G.current_battle, L.destination, NONE, G.move.leaders, troops)
+			else
+				add_defender_to_battle(G.active, G.current_battle, L.destination, NONE, G.move.leaders, troops)
+			log(`Joined existing battle at S${L.destination}.`)
+		} else {
+			add_attacker_to_battle(G.active, G.current_battle, L.destination, NONE, G.move.leaders, troops)
+			log(`Battle declared at S${L.destination}.`)
+		}
+	}
+
+	G.move = {}
+
+	log()
+	end()
 }
 
 P.eliminate_leader = {
@@ -13096,6 +13168,19 @@ P.the_old_guard = {
 		push_undo()
 		if (L.step === 0) log("French losses -1.")
 		else log(`Cancels ${get_card_log_alias(C_OUTFLANKING_RU)}.`)
+		end()
+	}
+}
+
+// FR #52: Ney's Escape
+P.neys_escape = {
+	prompt() {
+		prompt_card(C_NEYS_ESCAPE, `Regardless of who wins combat, the French must retreat to ANY adjacent area without Russian SPs.`)
+		button_confirm()
+	},
+	confirm() {
+		push_undo()
+		log(`Regardless of who wins combat, the French must retreat to ANY adjacent area without Russian SPs.`)
 		end()
 	}
 }

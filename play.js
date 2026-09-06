@@ -10,6 +10,8 @@ const AUSTRIA = 3
 const ROLES = ["Russia", "France"]
 const ABBREVIATIONS = ["ru", "fr", "pr", "au"]
 
+const NONE = -1
+
 // === CONSTANTS ===
 /* AREAS */
 const areas = data.areas
@@ -675,7 +677,7 @@ function on_init() {
 			.tooltip(`${process_area_name(get_area_name(area))} (${get_area_zone(area)})`)
 
 		// Where leaders & SPs are populated
-		define_stack("area_stack", area, layout[get_area_name(area)], -15, -15, 0, -58, 0, 36, 1, 10)
+		define_stack("area_stack", area, layout[get_area_name(area)], -15, -15, 0, -58, 0, 36, 1, 60)
 		// Where we populate orders
 		define_stack("orders_stack", area, translate_right(layout[get_area_name(area)], 52), 0, -100, 0, -125)
 	}
@@ -695,7 +697,7 @@ function on_init() {
 
 		// Where leaders & SPs are populated
 		// Same as area stack
-		define_stack("connection_stack", connection, layout[`Connection${connection}`], -15, -15, 0, -58, 0, 36, 1, 6)
+		define_stack("connection_stack", connection, layout[`Connection${connection}`], -15, -15, 0, -58, 0, 36, 1, 60)
 	}
 
 	/* ORDERS */
@@ -871,6 +873,7 @@ function on_update() {
 	action_button("done", "Done")
 	action_button("move", "Move")
 	action_button("evade", "Evade")
+	action_button("retreat", "Retreat")
 	action_button("next", "Next")
 	action_button("draw", "Draw")
 	action_button("discard", "Discard")
@@ -1023,14 +1026,16 @@ function update_leaders() {
 			if (has_battle(location)) {
 				for (let force of get_player_battle_data(get_leader_owner(leader), location).forces) {
 					if (set_has(force.leaders, leader)) {
-						if (V.move && V.move.type === EVADE && V.move.leaders && set_has(V.move.leaders, leader)) {
+						if (V.move && (V.move.type === EVADE || V.move.type === NONE) && V.move.leaders && set_has(V.move.leaders, leader)) {
 							update_position("move", 0, move_offset_x(location), move_offset_y(location))
 							populate("move", 0, "leader", leader)
 						} else {
-							if (force.from === location) {
-								populate("area_stack", get_leader_location(leader), "leader", leader)
-							} else {
-								populate("connection_stack", find_connection(location, force.from), "leader", leader)
+							if (get_seniormost_leader_on_connection(get_leader_owner(leader), force.from, location) === leader) {
+								if (force.from === location) {
+									populate("area_stack", get_leader_location(leader), "leader", leader)
+								} else {
+									populate("connection_stack", find_connection(location, force.from), "leader", leader)
+								}
 							}
 						}
 					}
@@ -1083,7 +1088,7 @@ function update_troops() {
 					if (force.troops[type] > 0) {
 						let num_moving = 0
 
-						if (V.move && V.move.type === EVADE && V.move.sps && map_has(V.move.sps, force.from) && map_has(map_get(V.move.sps, force.from), force.strength)) {
+						if (V.move && (V.move.type === EVADE || V.move.type === NONE) && V.move.sps && map_has(V.move.sps, force.from) && map_has(map_get(V.move.sps, force.from), force.strength)) {
 							if (map_get(map_get(V.move.sps, force.from), force.strength)[type] > 0) {
 								update_position("move", 0, move_offset_x(area), move_offset_y(area))
 								update_troop_exhaustion(get_used(player, type), is_fresh(type) ? FRESH : EXHAUSTED)
