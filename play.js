@@ -1295,7 +1295,7 @@ function on_log(text, ix) {
 		text = text.substring(2)
 		p.className = "br"
 		return p
-	} else if (text.startsWith("HR") || text.startsWith("HF")) {
+	} else if (text.startsWith("HR") || text.startsWith("HF") || text.startsWith("ER") || text.startsWith("EF")) {
 		text = text.substring(2)
 		if (text === "") {
 			p.hidden = true
@@ -1344,7 +1344,7 @@ function on_log(text, ix) {
 		text = text.substring(1)
 		p.className = 'i'
 		break
-	case "<":
+	case "^":
 		text = text.substring(1)
 		p.className = 'ii'
 		break
