@@ -1424,44 +1424,58 @@ function on_view() {
 
 	In these states, players are shown a different prompt/actions depending on their 'local state'.
 
-	'Local states' are enumerated within the multi-active state in the relative order in which they need to be executed, e.g.:
-	P.state = {
-		states: {
-			state1: {...},
-			state2: {...}
-		}
-	}
+	'Local states' are enumerated within the multi-active state in the relative order in which they need to be executed.
+	The overall structure of each local state is mostly similar to a normal RTT state.
+	All local state methods are prefixed with "on_" for clarity.
+	The (global) state's action handler redirects to the action handler corresponding to the current player's local state.
 
-	All action handlers are written within each 'local state' for clarity, and the action handler called by the global framework simply hands over to the current state's action handler.
-	e.g.
+	Example:
 	P.my_multi_active_state = {
+		_begin() {
+			L.state = ["state1", "state1"]
+		},
 		states: {
 			state1 : {
-				prompt() { ... },
+				on_prompt() { ... },
 				on_area(area) { ... },
 			}
-		}
-		area(area) { this.states[L.state[R]].on_area(area) }
+		},
+		prompt()	{ this.states[L.state[R]].on_prompt() }
+		area(area) 	{ this.states[L.state[R]].on_area(area) }
 	}
 
 	Common functions:
 		advance_local_state(player): Advances to the next state (in enumeration order) that the player could possibly do.
+			Useful for multi-active states where local states follow a linear sequence.
+			Each local state has an on_eligible(player) method, which evaluates whether the player can perform that state.
 
-	(WIP)
+		goto_local_state(player, next_state): Sets the player's state to the target state, and calls an on_begin() method, if defined.
+			Useful for more complex multi-active states (e.g. draw_card_to_hand )
+			Mimics the goto function in the global RTT framework.
 */
 
-function advance_local_state(who) {
+function advance_local_state(player) {
 	let states = P[L.P].states
 	let keys = Object.keys(states)
-	let current_state = keys.indexOf(L.state[who])
+	let current_state = keys.indexOf(L.state[player])
 
 	try {
 		for (let i = current_state + 1; i < keys.length; ++i) {
-			if (states[keys[i]].eligible(who)) {
-				L.state[who] = keys[i]
+			if (states[keys[i]].eligible(player)) {
+				L.state[player] = keys[i]
 				return
 			}
 		}
+	} catch(x) {
+		console.error(x)
+	}
+}
+
+function goto_local_state(who, state) {
+	try {
+		P[L.P]?.states?.[L.state[who]]?.on_end?.()
+		L.state[who] = state
+		P[L.P]?.states?.[state]?.on_begin?.()
 	} catch(x) {
 		console.error(x)
 	}
@@ -2290,8 +2304,12 @@ P.additional_replacements = {
 		G.active = [RUSSIA, FRANCE]
 
 		L.state = [null, null]
-		for (let player = RUSSIA; player <= FRANCE; ++player)
-			L.state[player] = has_card_in_hand(player) ? "discard_card" : "all_done"
+		for (let player = RUSSIA; player <= FRANCE; ++player) {
+			if (has_card_in_hand(player))
+				L.state[player] = "discard_card"
+			else
+				L.state[player] = "all_done"
+		}
 
 		L.discarded = [[], []]
 		L.selected_type = [-1, -1]
@@ -2302,7 +2320,7 @@ P.additional_replacements = {
 	},
 	states: {
 		"discard_card": {
-			prompt() {
+			on_prompt() {
 				prompt(`You may discard a card to gain additional replacements, or pass.`)
 				for (let card of get_non_dummy_cards_in_hand(R))
 					action_card(card)
@@ -2313,11 +2331,11 @@ P.additional_replacements = {
 				L.discarded[R].push(card)
 				remove_card_from_hand(R, card)
 				set_add(get_discard(R), card)
-				L.state[R] = "select_reinforcement_sp"
+				goto_local_state(R, "select_reinforcement_sp")
 			}
 		},
 		"select_reinforcement_sp": {
-			prompt() {
+			on_prompt() {
 				prompt(`Select an SP type to reinforce.`)
 				for (let type = 0; type < NUM_TROOP_TYPES; ++type) {
 					if (is_troop_type_fresh(type) && could_receive_sp(R, type)) {
@@ -2332,14 +2350,14 @@ P.additional_replacements = {
 				push_local_undo(R, "select_reinforcement_type")
 				L.selected_type[R] = type
 				L.count[R] = is_infantry(type) ? 2 : 1
-				L.state[R] = "place_sp"
+				goto_local_state(R, "place_sp")
 			},
 			on_troop_2x(type) {
 				this.on_troop_button(type)
 			}
 		},
 		"place_sp": {
-			prompt() {
+			on_prompt() {
 				prompt(`Select an area to place ${get_troop_type_name(L.selected_type[R])}. (${L.count[R]} remaining)`)
 				let areas = filter_areas(area => {
 					return (has_friendly_leader(R, area) || is_key_city(area) || has_friendly_depot(R, area))
@@ -2359,21 +2377,21 @@ P.additional_replacements = {
 				add_troop(R, area, L.selected_type[R], 1)
 				if (--L.count[R] === 0) {
 					if (has_card_in_hand(R))
-						L.state[R] = "discard_card"
+						goto_local_state(R, "discard_card")
 					else
-						L.state[R] = "all_done"
+						goto_local_state(R, "all_done")
 				}
 			}
 		},
 		"all_done": {
-			prompt() {
+			on_prompt() {
 				prompt(`Receive additional reinforcements: All done.`)
 				button_done()
 			}
 		}
 	},
 	prompt() {
-		this.states[L.state[R]].prompt()
+		this.states[L.state[R]].on_prompt()
 		button_undo(L.undo[R].length > 0)
 	},
 	undo() {
@@ -2625,15 +2643,16 @@ P.end_turn = function() {
 
 function draw_a_card(player) {
 	// Reshuffle deck if empty
-	// Impossible for all practical purposes (fuzzer handling)
+	// Impossible for all practical cases (fuzzer handling)
 	if (get_deck(player).length === 0) {
 		G.deck[player] = get_discard(player).slice()
 		get_discard(player).length = 0
 		shuffle(get_deck(player))
 		log(`Reshuffled ${ROLES[player]} deck.`)
 	}
+
 	L.drawn_card[player] = draw_card(player)
-	L.state[player] = "review_drawn_card"
+	goto_local_state(player, "review_drawn_card")
 }
 
 function init_event_tracker(card) {
@@ -2657,8 +2676,10 @@ function get_event_step(card) {
 }
 
 function finish_state(player) {
-	if (--L.num_cards_to_draw[R] > 0) {
-		L.state[R] = "draw_card"
+	P[L.P]?.states?.[L.state[player]]?.on_end?.()
+
+	if (--L.num_cards_to_draw[player] > 0) {
+		L.state[player] = "draw_card"
 		return
 	}
 
@@ -2667,16 +2688,15 @@ function finish_state(player) {
 		return
 	}
 
-	if (Array.isArray(G.active)) set_delete(G.active, player)
+	if (Array.isArray(G.active))
+		set_delete(G.active, player)
 
 	if ((Array.isArray(G.active) && G.active.length === 0) || !Array.isArray(G.active)) {
-		for (let event of L.persistent_events) add_persistent_event(event)
-		if (set_has(L.persistent_events, C_HOLY_MOTHER_RUSSIA_RU)) add_event_keyword(C_HOLY_MOTHER_RUSSIA_RU, { area: get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key} )
 		end()
 	}
 }
 
-// TODO: Cleanup after fixing possible bugs: LOTS of repeated code.
+// TODO: Cleanup repeated discard/log
 P.draw_card_to_hand = {
 	_begin() {
 		// NOTE: Set G.active to whoever needs to draw a card before calling (since we don't want to define must-play events in different places)
@@ -2693,75 +2713,56 @@ P.draw_card_to_hand = {
 		L.num_cards_to_draw = L.num_cards_to_draw ?? [1, 1]
 	},
 	states: {
-		"draw_card":
-		{
-			prompt() {
+		"draw_card": {
+			on_prompt() {
 				prompt("Draw a card to your hand.")
 				button_draw()
 			},
 			on_draw() {
 				draw_a_card(R)
-			}
+			},
 		},
-		"review_drawn_card":
-		{
-			prompt() {
+		"review_drawn_card": {
+			on_prompt() {
 				prompt(`You drew ${get_card_log_alias(L.drawn_card[R])}.`)
 				button_confirm()
 			},
 			on_confirm() {
 				if (is_must_play_event(L.drawn_card[R])) {
-					L.state[R] = get_event_state_name(L.drawn_card[R])
 					set_add(L.persistent_events, L.drawn_card[R])
 					init_event_tracker(L.drawn_card[R])
-					if (L.drawn_card[R] === C_VULNERABLE_SUPPLY_LINES) {
-						get_event_data(C_VULNERABLE_SUPPLY_LINES).num_french_depots = count_num_french_depots_on_map()
-						get_event_data(C_VULNERABLE_SUPPLY_LINES).depots_to_remove = get_all_unoccupied_depots(FRANCE)
-						get_event_data(C_VULNERABLE_SUPPLY_LINES).removed_depots = [] //For undo
-						get_event_data(C_VULNERABLE_SUPPLY_LINES).discarded_card = -1
-					} else if (L.drawn_card[R] === C_CHAOTIC_FOOD_DISTRIBUTION) {
-						get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).troop_type = -1
-						get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area = -1
-						get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).removed_depot = -1
-					} else if (L.drawn_card[R] === C_CHAOS_IN_THE_REAR_AREAS) {
-						get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining = Math.min(get_devastated_areas_with_french_troops().length, 2)
-						get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = null
-						get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area = -1
-						get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count = 0
-						get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo = []
-					}
+					goto_local_state(R, get_event_state_name(L.drawn_card[R]))
 				} else {
 					finish_state(R)
 				}
-			}
+			},
 		},
-		"holy_mother_russia_ru":
-		{
-			prompt() {
+		"holy_mother_russia_ru": {
+			on_begin() {
+				get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key = -1
+			},
+			on_prompt() {
 				switch(get_event_step(C_HOLY_MOTHER_RUSSIA_RU)) {
 				case -1:
 					prompt_card(C_HOLY_MOTHER_RUSSIA_RU, "Receive two additional orders.")
 					button_next()
-					return
+					break
 				case 0:
 					if (set_has(G.active, FRANCE))
 						prompt_card(C_HOLY_MOTHER_RUSSIA_RU, "France will designate a Russian-controlled Key City after resolving their actions.")
 					else
 						prompt_card(C_HOLY_MOTHER_RUSSIA_RU, "France will designate a Russian-controlled Key City.")
 					button_confirm()
-					button_undo()
-					return
+					break
 				case 1:
 					prompt_card(C_HOLY_MOTHER_RUSSIA_RU, "Designate a Russian-controlled Key City.")
-					for (let area = FIRST_AREA; area <= LAST_AREA; ++area)
-						if (is_key_city(area) && is_ru_controlled(area))
-							action_area(area)
-					return
+					filter_areas(area => is_key_city(area) && is_ru_controlled(area)).forEach(action_area)
+					break
 				case 2:
 					prompt_card(C_HOLY_MOTHER_RUSSIA_RU, `The side controlling S${get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key} at the end of the turn gains +1 VP.`)
 					button_confirm()
-					button_undo()
 				}
+				button_undo(get_event_step(C_HOLY_MOTHER_RUSSIA_RU) === 0 || get_event_step(C_HOLY_MOTHER_RUSSIA_RU) === 2)
 			},
 			on_next() {
 				increment_event_tracker(C_HOLY_MOTHER_RUSSIA_RU)
@@ -2774,34 +2775,30 @@ P.draw_card_to_hand = {
 				if (R === RUSSIA) {
 					increment_event_tracker(C_HOLY_MOTHER_RUSSIA_RU)
 					discard_or_remove_card(C_HOLY_MOTHER_RUSSIA_RU)
+					// If France has already finished the state, bring them back in.
 					if (Array.isArray(G.active)) {
 						if (!set_has(G.active, FRANCE)) { //If France is done doing their stuff & has exited the state
 							set_add(G.active, FRANCE)
-							L.state[FRANCE] = "holy_mother_russia_ru"
+							goto_local_state(FRANCE, "holy_mother_russia_ru")
 						}
-						finish_state(RUSSIA)
 					} else {
 						G.active = FRANCE
-						L.state[FRANCE] = "holy_mother_russia_ru"
+						goto_local_state(FRANCE, "holy_mother_russia_ru")
 					}
 				} else {
 					log_must_play_event(C_HOLY_MOTHER_RUSSIA_RU, get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key)
-					if (Array.isArray(G.active)) {
-						finish_state(FRANCE)
-					} else {
-						G.active = RUSSIA
-						finish_state(RUSSIA)
-					}
 				}
+				finish_state(R)
 			},
 			on_undo() {
 				decrement_event_tracker(C_HOLY_MOTHER_RUSSIA_RU)
-				if (R === FRANCE) get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key = -1
-			}
+				if (R === FRANCE)
+					get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key = -1
+			},
 		},
-		"extreme_weather_ru": //MODIFICATION: Russia draws a card after confirming the card's effects (in order to maintain a constant flow in case another must-play is drawn)
-		{
-			prompt() {
+		"extreme_weather_ru": {
+			//MODIFICATION: Russia draws a card after confirming the card's effects (in order to maintain a constant flow in case another must-play is drawn)
+			on_prompt() {
 				switch(get_event_step(C_EXTREME_WEATHER_RU)) {
 				case -1:
 					prompt_card(C_EXTREME_WEATHER_RU, "France -2 orders this turn.")
@@ -2821,14 +2818,15 @@ P.draw_card_to_hand = {
 			on_next() { increment_event_tracker(C_EXTREME_WEATHER_RU) },
 			on_undo() { decrement_event_tracker(C_EXTREME_WEATHER_RU) },
 			on_draw() {
-				log_must_play_event(C_EXTREME_WEATHER_RU) //Handling here since another must-play could be drawn
-				discard_or_remove_card(C_EXTREME_WEATHER_RU)
 				draw_a_card(R)
-			}
+			},
+			on_end() {
+				log_must_play_event(C_EXTREME_WEATHER_RU)
+				discard_or_remove_card(C_EXTREME_WEATHER_RU)
+			},
 		},
-		"command_friction":
-		{
-			prompt() {
+		"command_friction": {
+			on_prompt() {
 				prompt_card(C_COMMAND_FRICTION, "At the beginning of the 'Place Orders' phase, FR may designate an area with more than one 1 RU leader. RU must discard a card to place orders there.")
 				button_confirm()
 			},
@@ -2836,11 +2834,10 @@ P.draw_card_to_hand = {
 				log_must_play_event(C_COMMAND_FRICTION)
 				discard_or_remove_card(C_COMMAND_FRICTION)
 				finish_state(R)
-			}
+			},
 		},
-		"poor_logistics":
-		{
-			prompt() {
+		"poor_logistics": {
+			on_prompt() {
 				prompt_card(C_POOR_LOGISTICS, "This turn, the Russians may not use 'Place Depot' orders.")
 				button_confirm()
 			},
@@ -2848,11 +2845,10 @@ P.draw_card_to_hand = {
 				log_must_play_event(C_POOR_LOGISTICS)
 				discard_or_remove_card(C_POOR_LOGISTICS)
 				finish_state(R)
-			}
+			},
 		},
-		"devastated_countryside":
-		{
-			prompt() {
+		"devastated_countryside": {
+			on_prompt() {
 				prompt_card(C_DEVASTATED_COUNTRYSIDE, "The effect of Devastation markers is doubled for both sides this turn.")
 				button_confirm()
 			},
@@ -2860,11 +2856,10 @@ P.draw_card_to_hand = {
 				log_must_play_event(C_DEVASTATED_COUNTRYSIDE)
 				discard_or_remove_card(C_DEVASTATED_COUNTRYSIDE)
 				finish_state(R)
-			}
+			},
 		},
-		"barclay_de_tolly_resigns":
-		{
-			prompt() {
+		"barclay_de_tolly_resigns": {
+			on_prompt() {
 				if (!is_leader_on_map(L_DE_TOLLY)) {
 					prompt_card(C_BARCLAY_DE_TOLLY_RESIGNS, `L${L_DE_TOLLY} is not on map – no effect.`)
 					button("confirm")
@@ -2877,20 +2872,19 @@ P.draw_card_to_hand = {
 				}
 			},
 			on_confirm() {
-				log_must_play_event(C_BARCLAY_DE_TOLLY_RESIGNS, false)
-				discard_or_remove_card(C_BARCLAY_DE_TOLLY_RESIGNS)
 				finish_state(R)
 			},
 			on_leader(leader) {
 				move_leader(leader, POOL)
-				log_must_play_event(C_BARCLAY_DE_TOLLY_RESIGNS, true)
-				discard_or_remove_card(C_BARCLAY_DE_TOLLY_RESIGNS)
 				finish_state(R)
-			}
+			},
+			on_end() {
+				log_must_play_event(C_BARCLAY_DE_TOLLY_RESIGNS, get_leader_location(L_DE_TOLLY) === POOL)
+				discard_or_remove_card(C_BARCLAY_DE_TOLLY_RESIGNS)
+			},
 		},
-		"poor_communications":
-		{
-			prompt() {
+		"poor_communications": {
+			on_prompt() {
 				prompt_card(C_POOR_COMMUNICATIONS, "At the end of the 'Place Orders' phase, RU may designate 1 placed FR order to remove.")
 				button("confirm")
 			},
@@ -2898,11 +2892,10 @@ P.draw_card_to_hand = {
 				log_must_play_event(C_POOR_COMMUNICATIONS)
 				discard_or_remove_card(C_POOR_COMMUNICATIONS)
 				finish_state(R)
-			}
+			},
 		},
-		"jerome_goes_home":
-		{
-			prompt() {
+		"jerome_goes_home": {
+			on_prompt() {
 				if (!is_leader_on_map(L_JEROME)) {
 					prompt_card(C_JEROME_GOES_HOME, `L${L_JEROME} is not on map – no effect.`)
 					button("confirm")
@@ -2912,21 +2905,26 @@ P.draw_card_to_hand = {
 				}
 			},
 			on_confirm() {
-				this.cleanup(false)
+				finish_state(R)
 			},
 			on_leader(leader) {
 				move_leader(leader, POOL)
-				this.cleanup(true)
-			},
-			cleanup(removed) {
-				log_must_play_event(C_JEROME_GOES_HOME, removed)
-				discard_or_remove_card(C_JEROME_GOES_HOME)
 				finish_state(R)
-			}
+			},
+			on_end() {
+				log_must_play_event(C_JEROME_GOES_HOME, get_leader_location(L_JEROME) === POOL)
+				discard_or_remove_card(C_JEROME_GOES_HOME)
+			},
 		},
-		"chaos_in_the_rear_areas":
-		{
-			prompt() {
+		"chaos_in_the_rear_areas": {
+			on_begin() {
+				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining 	= Math.min(get_devastated_areas_with_french_troops().length, 2)
+				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice 		= null
+				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area 	= -1
+				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count 		= 0
+				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo 			= []
+			},
+			on_prompt() {
 				if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining > 0) {
 					if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === null) {
 						prompt(`Assign attrition losses: ${get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining} remaining.`)
@@ -3036,9 +3034,14 @@ P.draw_card_to_hand = {
 				}
 			}
 		},
-		"vulnerable_supply_lines":
-		{
-			prompt() {
+		"vulnerable_supply_lines": {
+			on_begin() {
+				get_event_data(C_VULNERABLE_SUPPLY_LINES).num_french_depots = count_num_french_depots_on_map()
+				get_event_data(C_VULNERABLE_SUPPLY_LINES).depots_to_remove 	= get_all_unoccupied_depots(FRANCE)
+				get_event_data(C_VULNERABLE_SUPPLY_LINES).removed_depots 	= [] //For undo
+				get_event_data(C_VULNERABLE_SUPPLY_LINES).discarded_card 	= -1
+			},
+			on_prompt() {
 				if (get_event_data(C_VULNERABLE_SUPPLY_LINES).num_french_depots >= 4) {
 					switch(get_event_step(C_VULNERABLE_SUPPLY_LINES)) {
 					case -1:
@@ -3110,9 +3113,8 @@ P.draw_card_to_hand = {
 				}
 			}
 		},
-		"freezing_weather":
-		{
-			prompt() {
+		"freezing_weather": {
+			on_prompt() {
 				switch(get_event_step(C_FREEZING_WEATHER)) {
 				case -1:
 					prompt_card(C_FREEZING_WEATHER, "France may not use 'Place Depot' or 'Forage' orders this turn.")
@@ -3137,9 +3139,8 @@ P.draw_card_to_hand = {
 				decrement_event_tracker(C_FREEZING_WEATHER)
 			}
 		},
-		"extreme_weather_fr":
-		{
-			prompt() {
+		"extreme_weather_fr": {
+			on_prompt() {
 				switch(get_event_step(C_EXTREME_WEATHER_FR)) {
 				case -1:
 					prompt_card(C_EXTREME_WEATHER_FR, "This turn, both sides have -2 orders.")
@@ -3161,17 +3162,20 @@ P.draw_card_to_hand = {
 			on_confirm() { finish_state(R) },
 			on_undo() { decrement_event_tracker(C_EXTREME_WEATHER_FR) },
 		},
-		"logistics_collapse":
-		{
-			prompt() {
+		"logistics_collapse": {
+			on_prompt() {
 				prompt_card(C_LOGISTICS_COLLAPSE, "For the rest of the game, France must discard a card from hand to execute a 'Place Depot' order.")
 				button_confirm()
 			},
 			on_confirm() { finish_state(R) }
 		},
-		"chaotic_food_distribution":
-		{
-			prompt() {
+		"chaotic_food_distribution": {
+			on_begin() {
+				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).troop_type = -1
+				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area = -1
+				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).removed_depot = -1
+			},
+			on_prompt() {
 				if (has_depot_on_map(FRANCE)) {
 					switch(get_event_step(C_CHAOTIC_FOOD_DISTRIBUTION)) {
 					case -1:
@@ -3241,10 +3245,10 @@ P.draw_card_to_hand = {
 			}
 		},
 	},
-	prompt() 		{ this.states[L.state[R]].prompt() },
-	draw() 			{ this.states[L.state[R]].on_draw() },
+	prompt() 		{ this.states[L.state[R]].on_prompt() },
+	draw() 		{ this.states[L.state[R]].on_draw() },
 	confirm() 		{ this.states[L.state[R]].on_confirm() },
-	next() 			{ this.states[L.state[R]].on_next() },
+	next() 		{ this.states[L.state[R]].on_next() },
 	exhaust()		{ this.states[L.state[R]].on_exhaust() },
 	eliminate_2()	{ this.states[L.state[R]].on_eliminate_2() },
 	area(area) 		{ this.states[L.state[R]].on_area(area) },
@@ -3252,8 +3256,8 @@ P.draw_card_to_hand = {
 	depot(depot) 	{ this.states[L.state[R]].on_depot(depot)},
 	leader(leader) 	{ this.states[L.state[R]].on_leader(leader) },
 	troop(type) 	{ this.states[L.state[R]].on_troop(type) },
-	done() 			{ this.states[L.state[R]].on_done() },
-	undo() 			{ this.states[L.state[R]].on_undo() }
+	done() 		{ this.states[L.state[R]].on_done() },
+	undo() 		{ this.states[L.state[R]].on_undo() }
 }
 
 //=== 2. PLAY A CARD FOR ADDITIONAL ORDERS ===
@@ -7352,7 +7356,7 @@ P.assign_losses = {
 			eligible(player) {
 				return (player === FRANCE) && is_battle_event_currently_active(C_NAPOLEONS_MARSHALS)
 			},
-			prompt() {
+			on_prompt() {
 				if (has_exhausted_sp(FRANCE, G.current_battle)) {
 					prompt_card(C_NAPOLEONS_MARSHALS, `Rally an exhausted SP at S${G.current_battle}.`)
 					get_player_battle_data(FRANCE, G.current_battle).forces.forEach(force => {
@@ -7386,7 +7390,7 @@ P.assign_losses = {
 			eligible(player) {
 				return (player === RUSSIA) && is_battle_event_currently_active(C_FIERCE_FIGHTING_FR)
 			},
-			prompt() {
+			on_prompt() {
 				if (has_friendly_leader(RUSSIA, G.current_battle)) {
 					prompt_card(C_FIERCE_FIGHTING_FR, `Eliminate a leader. (${join_array_with_or(get_leaders_at_area(RUSSIA, G.current_battle).map(leader => `L${leader}`))})`)
 					get_leaders_at_area(RUSSIA, G.current_battle).forEach(leader => action_leader(leader))
@@ -7426,7 +7430,7 @@ P.assign_losses = {
 				return (player === RUSSIA && is_battle_event_currently_active(C_INFANTRY_SQUARES_FR))
 				|| (player === FRANCE && is_battle_event_currently_active(C_INFANTRY_SQUARES_RU))
 			},
-			prompt() {
+			on_prompt() {
 				let card = (R === RUSSIA) ? C_INFANTRY_SQUARES_FR : C_INFANTRY_SQUARES_RU
 
 				if (count_num_cavalry(R, G.current_battle) > 0) {
@@ -7462,7 +7466,7 @@ P.assign_losses = {
 			eligible(_) {
 				return true
 			},
-			prompt() {
+			on_prompt() {
 				if (L.losses[R] > L.count[R] && has_fresh_sp(R, G.current_battle)) {
 					// At least 1 in 3 losses must be to a fresh Cavalry SP, if possible
 					if (
@@ -7560,7 +7564,7 @@ P.assign_losses = {
 		},
 	},
 	prompt() 		{
-		this.states[L.state[R]].prompt()
+		this.states[L.state[R]].on_prompt()
 		button_undo(L.undo[R].length > 0)
 	},
 	// Pop from the local undo stack, then reconstruct the old state
@@ -8040,7 +8044,7 @@ P.end_battle_events = {
 				&& is_battle_event_currently_active(C_STOIC_INFANTRY)
 				&& has_russian_sp(G.current_battle)
 			},
-			prompt() {
+			on_prompt() {
 				if (L.num_sps_to_rally > 0) {
 					prompt_card(C_STOIC_INFANTRY, `Rally up to ${L.num_sps_to_rally} exhausted Infantry SPs.`)
 					get_player_battle_data(R, G.current_battle).forces.forEach(force => {
@@ -8068,7 +8072,7 @@ P.end_battle_events = {
 				return (player === FRANCE)
 				&& (get_battle_loser(G.current_battle) === FRANCE)
 			},
-			prompt() {
+			on_prompt() {
 				if (!L.has_discarded) {
 					if (has_card_in_hand(R)) {
 						prompt_card(C_THE_IMPERIAL_GUARD, "Discard a random card from your hand for losing the battle. (cannot be undone)")
@@ -8102,7 +8106,7 @@ P.end_battle_events = {
 			eligible(player) {
 				return (player === FRANCE) && is_battle_event_currently_active(C_MURATS_CAVALRY)
 			},
-			prompt() {
+			on_prompt() {
 				if (count_num_sps_of_type(FRANCE, FRESH_CAVALRY, G.current_battle) > 0) {
 					prompt_card(C_MURATS_CAVALRY, `Exhaust a fresh Cavalry SP.`)
 					get_player_battle_data(R, G.current_battle).forces.forEach(force => {
@@ -8133,7 +8137,7 @@ P.end_battle_events = {
 			eligible(player) {
 				return player === FRANCE && is_battle_event_currently_active(C_NEYS_III_CORPS)
 			},
-			prompt() {
+			on_prompt() {
 				if (has_exhausted_sp(FRANCE, G.current_battle)) {
 					prompt_card(C_NEYS_III_CORPS, "Rally an exhausted SP.")
 					get_player_battle_data(R, G.current_battle).forces.forEach(force => {
@@ -8163,14 +8167,14 @@ P.end_battle_events = {
 		},
 		"finish_state": {
 			eligible() { return true },
-			prompt() {
+			on_prompt() {
 				prompt("Execute Events: All done.")
 				button_confirm()
 			}
 		}
 	},
 	prompt() {
-		this.states[L.state[R]].prompt()
+		this.states[L.state[R]].on_prompt()
 		button_undo(
 			L.undo[R].length > 0
 			&& L.undo[R][L.undo[R].length - 1].action !== "discard"
