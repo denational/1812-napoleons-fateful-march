@@ -6754,29 +6754,31 @@ function is_outflanking_currently_active(who) {
 }
 
 P.do_combat_value_calculations = function() {
-	let combat_value = [0, 0]
-	//log("DEBUG INFO")
-	let attacker = get_attacker_data(G.current_battle)
+	var combat_value = [0, 0]
 
-	for (let entry = 0; entry < attacker.forces.length; ++entry) {
-		// RU #40 Delayed Forces: All French forces attacking across every connection except the designated connection fight at X0
-		if (is_battle_event_currently_active(C_DELAYED_FORCES_RU) && attacker.forces[entry].from !== get_battle_entry(G.current_battle, null).delayed_forces)
-			continue
+	const attacker = get_attacker_data(G.current_battle)
+	const attacker_who = get_battle_attacker(G.current_battle)
+	attacker.sps_unaffected_by_events = get_troop_list_by_type(attacker_who, G.current_battle)
+	attacker.forces.forEach(force => {
+		combat_value[attacker_who] += find_combat_value(attacker_who, force)
+	})
 
-		combat_value[attacker.who] += find_combat_value(attacker.who, attacker.forces[entry])
-	}
-	log(`${ROLES[attacker.who]} base: ${combat_value[attacker.who]}`)
-
-	let defender = get_defender_data(G.current_battle)
-	for (let entry = 0; entry < defender.forces.length; ++entry) {
-		combat_value[defender.who] += find_combat_value(defender.who, defender.forces[entry])
-	}
+	const defender = get_defender_data(G.current_battle)
+	const defender_who = get_battle_defender(G.current_battle)
+	defender.sps_unaffected_by_events = get_troop_list_by_type(defender_who, G.current_battle)
+	defender.forces.forEach(force => {
+		combat_value[defender_who] += find_combat_value(defender_who, force)
+	})
 
 	// RU #28: Poor Coordination
 	if (is_battle_event_currently_active(C_POOR_COORDINATION_RU)) {
 		combat_value[FRANCE] -= 3 * count_num_track_connections_used_to_enter_battle(FRANCE, G.current_battle)
 		//log(`Poor Coordination: France -${3 * count_num_track_connections_used_to_enter_battle(FRANCE, G.current_battle)}`)
 	}
+
+	// RU #34 Platov's Cossacks
+	if (is_event_active(C_PLATOVS_COSSACKS))
+		combat_value[FRANCE] -= count_num_sps_of_type(RUSSIA, FRESH_COSSACK, G.current_battle)
 
 	// FR #23: Poor Coordination
 	if (is_battle_event_currently_active(C_POOR_COORDINATION_FR)) {
@@ -6793,130 +6795,159 @@ P.do_combat_value_calculations = function() {
 		//log(`Outflanking: -${calculate_outflanking_strength(G.current_battle)}`)
 	}
 
-	log(`${ROLES[defender.who]} base: ${combat_value[defender.who]}`)
-	log()
 	L.L.$ = combat_value.slice()
 	end()
 }
 
-function find_combat_value(who, battle_data) {
+function find_combat_value(who, force) {
 	//log(`${ROLES[who]}`)
 	//logi(`S${battle_data.from}`)
 	let strength = 0
 
-	strength += get_infantry_strength(who, battle_data)
-	strength += get_cavalry_strength(who, battle_data)
-	if (who === RUSSIA) strength += get_cossack_strength(battle_data)
-	if (who === FRANCE) strength += get_guard_strength(battle_data)
-	strength += get_exhausted_strength(who, battle_data)
-
-	// RU #34 Platov's Cossacks
-	if (is_event_active(C_PLATOVS_COSSACKS) && (who === FRANCE))
-		strength -= count_num_sps_of_type(RUSSIA, FRESH_COSSACK, G.current_battle)
+	strength += get_infantry_strength(who, force)
+	strength += get_cavalry_strength(who, force)
+	if (who === RUSSIA)
+		strength += get_cossack_strength(force)
+	if (who === FRANCE)
+		strength += get_guard_strength(force)
+	strength += get_exhausted_strength(who, force)
 
 	//logi(`Total strength: ${strength}`)
 	return strength
 }
 
-// Applies effects of forced march and river crossing
-function get_modifier(who, battle_data) {
+function apply_global_strength_modifier(who, type, force_modifier, card_modifier, num_sps) {
+	let battle_data = get_player_battle_data(who, G.current_battle)
+	let strength = 0
+
+	if (battle_data.sps_unaffected_by_events[type] > 0) {
+		let count = Math.min(battle_data.sps_unaffected_by_events[type], num_sps)
+		battle_data.sps_unaffected_by_events[type] -= count
+
+		strength += (card_modifier - 1) * count * force_modifier
+	}
+
+	return strength
+}
+
+// Applies effects of Forced March and River Crossing
+function get_modifier(who, force) {
 	let modifier = 1
 
-	// Forced Marching SPs fight X0.5
-	// FR #1, FR #2 Hard Marching: France fights X1 despite forced marching.
-	if ((battle_data.strength === HALF_STRENGTH) && ((who !== FRANCE) || (!is_event_active(C_HARD_MARCHING_1) && !is_event_active(C_HARD_MARCHING_2))))
-		modifier *= 0.5
+	if (force.strength === HALF_STRENGTH) {
+		if (who !== FRANCE && !is_event_active(C_HARD_MARCHING_1) && !is_event_active(C_HARD_MARCHING_2))
+			modifier *= 0.5
+	}
 
-	// Forces that crossed a river fight X0.5
-	// FR #29 Eblé's Pontoneers: France ignores 0.5X for crossing a river.
-	if (battle_data.river_crossing && !((who === FRANCE) && (is_battle_event_currently_active(C_EBLES_PONTONEERS))))
-		modifier *= 0.5
+	if (force.river_crossing) {
+		if (who !== FRANCE && !is_battle_event_currently_active(C_EBLES_PONTONEERS))
+			modifier *= 0.5
+	}
 
 	return modifier
 }
 
-function get_infantry_strength(who, battle_data) {
-	let count = battle_data.troops[FRESH_INFANTRY]
-	let modifier = get_modifier(who, battle_data)
-	let strength = count * modifier
+function get_infantry_strength(who, force) {
+	// Ignores French-allied Austrians and Prussians for now
+	let count = force.troops[FRESH_INFANTRY]
+	// Infantry fights at X1 by default.
+	let modifier = 1 * get_modifier(who, force)
+
+	var strength = count * modifier
 
 	if (who === RUSSIA) {
-		// RU #38 Konstantine's Corps: Up to 3 Russian Infantry fight at X2
+		// RU #38 Konstantine's Corps: Up to 3 Russian Infantry fight at X2.
 		if (is_battle_event_currently_active(C_KONSTANTINES_CORPS))
-			strength += Math.min(3, count) * modifier
+			strength += apply_global_strength_modifier(who, FRESH_INFANTRY, modifier, 2, 3)
 
-		// FR #40 Inferior Gunpowder: Up to 8 Russian Infantry fight at X0.5
+		// FR #40 Inferior Gunpowder: Up to 8 Russian Infantry fight at X0.5.
 		if (is_battle_event_currently_active(C_INFERIOR_GUNPOWDER))
-			strength -= Math.min(8, count) * modifier * 0.5
+			strength += apply_global_strength_modifier(who, FRESH_INFANTRY, modifier, 0.5, 8)
 	} else {
-		// Prussians & Austrians
-		// RU #51 Unreliable Germans: allied Infantry fights X0
-		if (!is_battle_event_currently_active(C_UNRELIABLE_GERMANS))
-			strength += (battle_data.troops[FRESH_AUSTRIAN_INFANTRY] + battle_data.troops[FRESH_PRUSSIAN_INFANTRY]) * modifier
+		// Prussian and Austrian SPs
+		// RU #51 Unreliable Germans: Prussian and Austrian SPs fight at X0.
+		if (!is_battle_event_currently_active(C_UNRELIABLE_GERMANS)) {
+			strength += force.troops[FRESH_PRUSSIAN_INFANTRY]
+			strength += force.troops[FRESH_AUSTRIAN_INFANTRY]
+		}
 
-		// RU #51 Unreliable Germans: French Infantry fights X0.5
+		// RU #51 Unreliable Germans: French Infantry fights at X0.5
 		if (is_battle_event_currently_active(C_UNRELIABLE_GERMANS))
-			strength -= count * modifier * 0.5
+			strength -= 0.5 * Math.min(8, count) * modifier
 
-		// FR #26 Combined Arms: Up to 3 French Infantry SPs fight at X2
+		// FR #26: Combined Arms: Up to 3 French Infantry SPs fight at X2.
 		if (is_battle_event_currently_active(C_COMBINED_ARMS))
-			strength += Math.min(3, count) * modifier
+			strength += apply_global_strength_modifier(who, FRESH_INFANTRY, modifier, 2, 3)
 
-		// FR #28 Saint–Cyr's VI Corps: Up to 2 French Infantry SPs fight at X2
-		if ((who === FRANCE) && is_battle_event_currently_active(C_SAINT_CYRS_VI_CORPS))
-			strength += Math.min(2, count) * modifier
-
-		// FR #35 Ney's III Corps: Up to 3 French Infantry SPs fight at X2
+		// FR #35 Ney's III Corps: Up to 3 French Infantry SPs fight at X2.
 		if (is_battle_event_currently_active(C_NEYS_III_CORPS))
-			strength += Math.min(3, count) * modifier
+			strength += apply_global_strength_modifier(who, FRESH_INFANTRY, modifier, 2, 3)
 
 		// FR #36 Eugène's IV Corps: Up to 3 French Infantry SPs fight at X2
 		if (is_battle_event_currently_active(C_EUGENES_IV_CORPS))
-			strength += Math.min(3, count) * modifier
+			strength += apply_global_strength_modifier(who, FRESH_INFANTRY, modifier, 2, 3)
+
+		// FR #28: Saint-Cyr's VI Corps: Up to 2 French Infantry SPs fight at X2.
+		if (is_battle_event_currently_active(C_SAINT_CYRS_VI_CORPS))
+			strength += apply_global_strength_modifier(who, FRESH_INFANTRY, modifier, 2, 2)
 	}
 
-	//logii(`Total Infantry: ${strength}`)
 	return strength
 }
 
-function get_cavalry_strength(who, battle_data) {
-	if (who === FRANCE && is_battle_event_currently_active(C_INFANTRY_SQUARES_RU)
-	|| (who === RUSSIA && is_battle_event_currently_active(C_INFANTRY_SQUARES_FR)))
+function get_cavalry_strength(who, force) {
+	// RU #36 Infantry Squares: All French Cavalry fight at X0.
+	// FR #16 Infantry Squares: All Russian Cavalry fight at X0.
+	if (
+		who === FRANCE && is_battle_event_currently_active(C_INFANTRY_SQUARES_RU)
+		|| (who === RUSSIA && is_battle_event_currently_active(C_INFANTRY_SQUARES_FR))
+	)
 		return 0
 
-	let count = battle_data.troops[FRESH_CAVALRY]
-	let modifier = get_modifier(who, battle_data) * (is_fortress_town(G.current_battle) ? 0.5 : 1)
+	let count = force.troops[FRESH_CAVALRY]
+	let modifier
+	if (is_fortress_town(G.current_battle))
+		modifier = 0.5 * get_modifier(who, force)
+	else
+		modifier = 1 * get_modifier(who, force)
+
 	let strength = count * modifier
 
 	if (who === RUSSIA) {
-		// RU #39 Cavalry Charge: Up to 2 Russian Cavalry SPs fight at X2
+		// RU #39 Cavalry Charge: Up to 2 Russian Cavalry SPs fight at X2.
 		if (is_battle_event_currently_active(C_CAVALRY_CHARGE_RU))
-			strength += Math.min(2, count) * modifier
+			strength += apply_global_strength_modifier(who, FRESH_CAVALRY, modifier, 2, 2)
 	} else {
 		// RU #51 Unreliable Germans: French Cavalry fight at X0.5
 		if (is_battle_event_currently_active(C_UNRELIABLE_GERMANS))
-			strength *= 0.5
+			strength -= 0.5 * strength * modifier
 
-		// FR #12 Cavalry Charge: Up to 2 French Cavalry fight at X3
+		// FR #12 Cavalry Charge: Up to 2 French Cavalry fight at X3.
 		if (is_battle_event_currently_active(C_CAVALRY_CHARGE_FR))
-			strength += 2 * Math.min(2, count) * modifier
+			strength += apply_global_strength_modifier(who, FRESH_CAVALRY, modifier, 3, 2)
 
-		// FR #13 Murat's Cavalry: Up to 2 French Cavalry SPs fight at X2
+		// FR #13 Murat's Cavalry: Up to 2 French Cavalry SPs fight at X2.
 		if (is_battle_event_currently_active(C_MURATS_CAVALRY))
-			strength += Math.min(2, count) * modifier
+			strength += apply_global_strength_modifier(who, FRESH_CAVALRY, modifier, 2, 2)
 
-		// FR #26 Combined Arms: Up to 1 French Cavalry SP fights at X2
+		// FR #26 Combined Arms: Up to 1 French Cavalry SP fights at X2.
 		if (is_battle_event_currently_active(C_COMBINED_ARMS))
-			strength += Math.min(1, count) * modifier
+			strength += apply_global_strength_modifier(who, FRESH_CAVALRY, modifier, 2, 1)
 	}
 
-	//logii(`Total Cavalry: ${strength}`)
 	return strength
 }
 
-function get_cossack_strength(battle_data) {
-	let count = battle_data.troops[FRESH_COSSACK]
-	let modifier = get_modifier(RUSSIA, battle_data)
+function get_cossack_strength(force) {
+	if (
+		!is_battle_event_currently_active(C_PLATOVS_COSSACKS)
+		&& !is_battle_event_currently_active(C_CRUMBLING_COHESION)
+		&& !is_battle_event_currently_active(C_AGGRESSIVE_COSSACKS)
+	)
+		return 0
+
+	let count = force.troops[FRESH_COSSACK]
+	let modifier = get_modifier(RUSSIA, force)
 	let strength = 0
 
 	// RU #34: Platov's Cossacks: Cossacks fight at X1 instead of X0
@@ -6924,21 +6955,21 @@ function get_cossack_strength(battle_data) {
 		strength += count * modifier
 
 	// RU #50: Crumbing Cohesion: Cossacks fight at X(Russian initiative level)
-	if (is_battle_event_currently_active(C_CRUMBLING_COHESION))
+	if (is_battle_event_currently_active(C_CRUMBLING_COHESION)) {
 		if (get_who_has_initiative() === RUSSIA)
 			strength += count * modifier * get_current_initiative_level()
+	}
 
 	// RU #53: Aggressive Cossacks: Cossacks fight at X2
 	if (is_battle_event_currently_active(C_AGGRESSIVE_COSSACKS))
-		strength += count * 2 * modifier
+		strength += 2 * count * modifier
 
-	//logii(`Total Cossack: ${strength}`)
 	return strength
 }
 
-function get_guard_strength(battle_data) {
-	let count = battle_data.troops[FRESH_GUARD]
-	let modifier = get_modifier(FRANCE, battle_data)
+function get_guard_strength(force) {
+	let count = force.troops[FRESH_GUARD]
+	let modifier = get_modifier(FRANCE, force)
 	let strength = 0
 
 	if (is_battle_event_currently_active(C_THE_IMPERIAL_GUARD))
@@ -6950,16 +6981,18 @@ function get_guard_strength(battle_data) {
 	else
 		strength = 1.5 * count * modifier
 
-	//logii(`Total Guard: ${strength}`)
 	return strength
 }
 
 function get_exhausted_strength(who, battle_data) {
 	if (who === FRANCE && is_battle_event_currently_active(C_COURAGE_OF_DESPERATION)) {
 		let count = 0
-		for (let type = 0; type < battle_data.troops.length; ++type)
-			if (is_troop_type_exhausted(type)) count += battle_data.troops[type]
+		for (let type = 0; type < battle_data.troops.length; ++type) {
+			if (is_troop_type_exhausted(type))
+				count += battle_data.troops[type]
+		}
 		let modifier = get_modifier(who, battle_data)
+
 		return Math.min(4, count) * modifier
 	}
 
