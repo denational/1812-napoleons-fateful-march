@@ -139,7 +139,6 @@ body.France header.your_turn {background-color: var(--france);}
 
 	& .card-tip.fr { background-color: var(--france_light) }
 	& .card-tip.ru { background-color: var(--russia_light) }
-
  }
 
 .tip:hover, .card-tip:hover, .area-tip:hover {
@@ -151,7 +150,7 @@ body.France header.your_turn {background-color: var(--france);}
 	font-style: italic;
 }
 
-/* SIDEBAR VP & INITIATIVE DISPLAYS */
+/* SIDEBAR VP & INITIATIVE DISPLAY */
 #vp_display {
 	height: 35px;
 	border-right: 1px solid black;
@@ -187,15 +186,14 @@ body.France header.your_turn {background-color: var(--france);}
 .dice.battle_ru.d6 {background-image: url(pieces/dice/ru_battle_6.png);}
 
 
-/* ORDER PLANNING MINIBOARD */
+/* ORDERS PANEL */
 #plan_orders {
 	width: 2500px;
 	height: 150px;
 	justify-self: center;
-	/*background-image: url(pieces/retreat_from_moscow.jpg);*/
 }
 
-/* SPACES */
+/* AREAS, CONNECTIONS */
 .area, .connection {
 	box-sizing: border-box;
 	position: absolute;
@@ -206,10 +204,6 @@ body.France header.your_turn {background-color: var(--france);}
 .area.action, .connection.action {
 	border-color: yellow;
 	z-index: 20;
-}
-
-.area_stack {
-	z-index: 5;
 }
 
 /* PANELS */
@@ -248,10 +242,6 @@ body.France header.your_turn {background-color: var(--france);}
 
 
 /* LEADERS */
-.button_selected {
-	outline: 2px solid gold;
-}
-
 .piece.leader {
     width: 67px;
     height: 67px;
@@ -451,24 +441,24 @@ body.hide-pieces .troop { display: none }
 	position: relative;
 }
 
-.troop.infantry.ru.fresh { background-image: url(pieces/fresh-infantry_ru.png);}
-.troop.infantry.ru.exhausted { background-image: url(pieces/exhausted-infantry_ru.png);}
-.troop.infantry.fr.fresh { background-image: url(pieces/fresh-infantry_fr.png);}
-.troop.infantry.fr.exhausted { background-image: url(pieces/exhausted-infantry_fr.png);}
-.troop.infantry.pr.fresh { background-image: url(pieces/fresh-infantry_pr.png);}
-.troop.infantry.pr.exhausted { background-image: url(pieces/exhausted-infantry_pr.png);}
-.troop.infantry.au.fresh { background-image: url(pieces/fresh-infantry_au.png);}
-.troop.infantry.au.exhausted { background-image: url(pieces/exhausted-infantry_au.png);}
+.troop.infantry.ru.fresh 		{ background-image: url(pieces/fresh-infantry_ru.png);}
+.troop.infantry.ru.exhausted 	{ background-image: url(pieces/exhausted-infantry_ru.png);}
+.troop.infantry.fr.fresh 		{ background-image: url(pieces/fresh-infantry_fr.png);}
+.troop.infantry.fr.exhausted 	{ background-image: url(pieces/exhausted-infantry_fr.png);}
+.troop.infantry.pr.fresh 		{ background-image: url(pieces/fresh-infantry_pr.png);}
+.troop.infantry.pr.exhausted 	{ background-image: url(pieces/exhausted-infantry_pr.png);}
+.troop.infantry.au.fresh 		{ background-image: url(pieces/fresh-infantry_au.png);}
+.troop.infantry.au.exhausted 	{ background-image: url(pieces/exhausted-infantry_au.png);}
 
-.troop.cavalry.ru.fresh { background-image: url(pieces/fresh-cavalry_ru.png);}
-.troop.cavalry.ru.exhausted { background-image: url(pieces/exhausted-cavalry_ru.png);}
-.troop.cavalry.fr.fresh { background-image: url(pieces/fresh-cavalry_fr.png);}
-.troop.cavalry.fr.exhausted { background-image: url(pieces/exhausted-cavalry_fr.png);}
+.troop.cavalry.ru.fresh 		{ background-image: url(pieces/fresh-cavalry_ru.png);}
+.troop.cavalry.ru.exhausted 	{ background-image: url(pieces/exhausted-cavalry_ru.png);}
+.troop.cavalry.fr.fresh 		{ background-image: url(pieces/fresh-cavalry_fr.png);}
+.troop.cavalry.fr.exhausted 	{ background-image: url(pieces/exhausted-cavalry_fr.png);}
 
-.troop.cossack.ru.fresh { background-image: url(pieces/fresh-cossack.png);}
-.troop.cossack.ru.exhausted { background-image: url(pieces/exhausted-cossack.png);}
-.troop.guard.fr.fresh { background-image: url(pieces/fresh-guard.png);}
-.troop.guard.fr.exhausted { background-image: url(pieces/exhausted-guard.png);}
+.troop.cossack.ru.fresh 		{ background-image: url(pieces/fresh-cossack.png);}
+.troop.cossack.ru.exhausted 	{ background-image: url(pieces/exhausted-cossack.png);}
+.troop.guard.fr.fresh 			{ background-image: url(pieces/fresh-guard.png);}
+.troop.guard.fr.exhausted 		{ background-image: url(pieces/exhausted-guard.png);}
 
 /* TRACKS */
 .marker {
@@ -580,6 +570,7 @@ body.hide-pieces .troop { display: none }
 		drop-shadow(2px 0 0 yellow)
 }
 
+/* See gencardscss.js in /tools */
 .card_0{background-image: url(cards/ru/card_00.png);}
 .card_1{background-image: url(cards/ru/card_01.png);}
 .card_2{background-image: url(cards/ru/card_02.png);}

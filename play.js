@@ -679,7 +679,7 @@ function on_init() {
 			.tooltip(`${process_area_name(get_area_name(area))} (${get_area_zone(area)})`)
 
 		// Where leaders & SPs are populated
-		define_stack("area_stack", area, layout[get_area_name(area)], -15, -15, 0, -58, 0, 36, 1, 60)
+		define_stack("area_stack", area, layout[get_area_name(area)], -8, -8, 0, -58, 0, 36, 1, 60)
 		// Where we populate orders
 		define_stack("orders_stack", area, translate_right(layout[get_area_name(area)], 52), 0, -100, 0, -125)
 	}
@@ -699,7 +699,7 @@ function on_init() {
 
 		// Where leaders & SPs are populated
 		// Same as area stack
-		define_stack("connection_stack", connection, layout[`Connection${connection}`], -15, -15, 0, -58, 0, 36, 1, 60)
+		define_stack("connection_stack", connection, layout[`Connection${connection}`], -8, -8, 0, -58, 0, 36, 1, 60)
 	}
 
 	/* ORDERS */
@@ -1157,9 +1157,9 @@ function update_troops() {
 			} else {
 				let num_moved = 0
 
-				if (map_has(V.moved, area) && map_get(V.moved, area, null).some(force => force.strength === HALF_STRENGTH)) {
+				if (map_has(V.moved, area)) {
 					for (let force of map_get(V.moved, area, null)) {
-						if (force.faction === player && force.troops[type] > 0 && force.strength === HALF_STRENGTH) {
+						if (force.faction === player && force.troops[type] > 0) {
 							update_troop_exhaustion(get_used(player, type), is_fresh(type) ? FRESH : EXHAUSTED)
 
 							if (R === player || (R !== player && !has_friendly_leader(player, area)))
@@ -1169,7 +1169,9 @@ function update_troops() {
 							lookup_troop(get_used(player, type)).my_from = force.from ?? POOL
 
 							num_moved += force.troops[type]
-							populate_half_strength(player, get_used(player, type))
+							if (force.strength === HALF_STRENGTH)
+								populate_half_strength(player, get_used(player, type))
+
 							if (!map_has(troop_nums, get_used(player, type)))
 								map_set(troop_nums, get_used(player, type), force.troops[type])
 							incr_used(player, type)

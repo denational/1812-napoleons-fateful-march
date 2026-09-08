@@ -911,6 +911,10 @@ function is_troop_type_exhausted(type) {
 	return !!(type & 1)
 }
 
+function is_troop_type_fresh(type) {
+	return !is_troop_type_exhausted(type)
+}
+
 function has_troop_in_area(who, area) {
 	return get_area_troop_set(area, null)?.some(entry => decode_troop_entry_who(entry) === who) ?? false
 }
@@ -936,6 +940,14 @@ function get_troop_type_name(type) {
 	default:
 		return "unknown"
 	}
+}
+
+function is_fresh_infantry(troop_type) {
+	return is_infantry(troop_type) && is_troop_type_fresh(troop_type)
+}
+
+function is_fresh_cavalry(troop_type) {
+	return troop_type === FRESH_CAVALRY
 }
 
 function has_french_sp(area) {
@@ -2329,11 +2341,17 @@ P.additional_replacements = {
 		"place_sp": {
 			prompt() {
 				prompt(`Select an area to place ${get_troop_type_name(L.selected_type[R])}. (${L.count[R]} remaining)`)
-				filter_areas(area => {
+				let areas = filter_areas(area => {
 					return (has_friendly_leader(R, area) || is_key_city(area) || has_friendly_depot(R, area))
 					&& is_area_in_supply(R, area)
 					&& is_friendly_controlled(R, area)
-				}).forEach(action_area)
+				})
+
+				// End if fuzzer. Makes more sense for a human to undo at this point (and recover a card) rather than passing.
+				if (areas.length === 0 && globalThis.RTT_FUZZER)
+					button_pass()
+				else
+					areas.forEach(action_area)
 			},
 			on_area(area) {
 				push_local_undo(R, "place_sp", { area, type: L.selected_type[R] })
@@ -2864,7 +2882,7 @@ P.draw_card_to_hand = {
 				finish_state(R)
 			},
 			on_leader(leader) {
-				move_leader(leader, OUT_OF_PLAY)
+				move_leader(leader, POOL)
 				log_must_play_event(C_BARCLAY_DE_TOLLY_RESIGNS, true)
 				discard_or_remove_card(C_BARCLAY_DE_TOLLY_RESIGNS)
 				finish_state(R)
@@ -2897,7 +2915,7 @@ P.draw_card_to_hand = {
 				this.cleanup(false)
 			},
 			on_leader(leader) {
-				move_leader(leader, OUT_OF_PLAY)
+				move_leader(leader, POOL)
 				this.cleanup(true)
 			},
 			cleanup(removed) {
@@ -4025,6 +4043,15 @@ P.change_orders = {
 
 		for (let who = RUSSIA; who <= FRANCE; ++who)
 			L.leaders_who_can_use_abilities[who] = L.leaders_who_can_use_abilities[who].filter(leader => can_switch_order(leader, L.current_order_type))
+
+		for (let who = RUSSIA; who <= FRANCE; ++who) {
+			if (L.leaders_who_can_use_abilities[who].length === 0) {
+				set_delete(G.active, who)
+				log(`${ROLES[who]} did not change orders.`)
+			}
+		}
+
+		if (G.active.length === 0) end()
 	},
 	push_log(text) {
 		L.log[R].push(text)
@@ -4628,15 +4655,10 @@ function can_alexander_be_babysitted(evade = false) {
 
 function move_prompt() {
 	let s = ` (Selected: `
-	let has_seen_leader = false
-	for (let leader of G.move.leaders)
-		if (!has_seen_leader)
-			s += `L${leader}`
-		else
-			s += `, L${leader}`
+	s += G.move.leaders.map(leader => `L${leader}`).join(", ")
 	for (let type = 0; type < G.move.sps.length; ++type)
 		if (G.move.sps[type] > 0)
-			 s += `, ${G.move.sps[type]} ${get_troop_type_name(type)}`
+			 s += `${G.move.leaders.length > 0 ? ", " : ""}${G.move.sps[type]} ${get_troop_type_name(type)}`
 
 	return s + ")"
 }
@@ -5062,18 +5084,26 @@ P.move = {
 			sudden_death()
 		} else {
 			//This is mutually exclusive from City Ablaze! and removing an enemy depot since those two require that the area has no troops
-			if (needs_to_determine_seniority)
+			if (!has_enemy_sp(G.active, area) && needs_to_determine_seniority)
 				call("determine_seniority", { area })
 		}
 	},
 	done() {
 		push_undo()
-		mark_already_moved(G.active, G.move.path, G.move.type, G.move.leaders, G.move.sps)
 		goto("post_move_exhaustion")
+	},
+	_resume() {
+		if (has_enemy_sp(G.active, G.move.path[G.move.path.length - 1]))
+			goto("post_move_exhaustion")
 	},
 	confirm() {
 		push_undo()
 		let previous_area = G.move.path[G.move.path.length - 1]
+
+		let needs_to_determine_seniority = false
+		if (G.move.leaders.length > 0 && has_friendly_leader(G.active, L.current_area))
+			needs_to_determine_seniority = get_leader_seniority(get_seniormost_leader(G.active, L.current_area)) === get_leader_seniority(get_seniormost_leader_from_list(G.active, G.move.leaders))
+
 		conduct_movement(previous_area, L.current_area)
 
 		if (is_vp_area(previous_area) && !is_friendly_controlled(G.active, previous_area)) {
@@ -5082,11 +5112,16 @@ P.move = {
 		}
 
 		if (Math.abs(G.vp) < 20) {
-			mark_already_moved(G.active, G.move.path, G.move.type, G.move.leaders, G.move.sps)
-			goto("post_move_exhaustion")
+			if (needs_to_determine_seniority)
+				call("determine_seniority", { area: L.current_area })
+			else
+				goto("post_move_exhaustion")
 		} else {
 			sudden_death()
 		}
+	},
+	_end() {
+		mark_already_moved(G.active, G.move.path, G.move.type, G.move.leaders, G.move.sps)
 	}
 }
 
@@ -5952,10 +5987,6 @@ P.finish_evade = {
 	}
 }
 
-function get_player_battle_data(who, battle) {
-	return is_battle_attacker(who, battle) ? get_attacker_data(battle) : get_defender_data(battle)
-}
-
 function get_other_area(connection, area) {
 	return data.connections[connection].find(loc => loc !== area)
 }
@@ -6087,59 +6118,59 @@ function find_closest_depot_for_retreat(who, area, ignore_enemy_sps = false) {
 
 	Events
 	RUSSIA
-*		#5 	Idle Reserves 			If defending											- Imperial Guard fight X0, unless France play 'The Imperial Guard'
-*		#7 	Indecision	 																	- Cancel the effect of 'The Imperial Guard'
-*		#8 	Fighting Withdrawal 	If defending											- Both sides' losses are reduced by 2 and no pursuit. RU must retreat after battle and count as having lost it.
-*		#9 	Uninspired Tactics		If defending in a fortress town || under defend orders	- FR losses +1
-*		#12	Outflanking				Attacking with a leader across > 1 connection			- FR designate one connection as the main attack. The FR combat value is reduced by the total combat value across all other connections
-		#22 City Ablaze!			When FR gain control of a Key City
-		#23	Stubborn Rearguard		Immediately after losing a battle						- Cancel any losses from pursuit in the battle
-*		#28	Poor Coordination		No restriction											- FR combat value -3 for each Track connection used
-		#31 Stoic Infantry			If defending, at least 1 Infantry						- First two SPs exhausted in this battle immediately rally again
-*		#32 The Artillery Corps		If a RU leader is present								- FR losses +1, +1 more if France play 'Infantry Squares'
-*		#33	Fortifications			If defending with a leader								- Place a 'Defend' order, or double the effect of an existing one. Cancels 'Outflanking'.
-*		#34	Platov's Cossacks		If Platov is present									- Cossacks fight at X1. French combat value -= num cossacks
-*		#35	Fickle Habsburgs		If Schwarzenberg is present								- Losses on both sides -1, RU wins even if tied
-*		#36	Infantry Squares		If at least 4 RU Infantry SPs are present				- Combat value of all French Cavalry is X0, first loss must be cavalry if present
-*		#37	Enveloping Moves		If attacking with a leader								- If RU > FR fresh sps, drawn battle is considered Russian victory
--		#38	Konstantine's Corps		If a RU leader is present								- Up to 3 Infantry SPs fight at X2, draw additional card if battle won
--		#39	Cavalry Charge			If a RU leader is present								- Combat value of up to 2 RU Cavalry is doubled. draw additional card if battle won
-		#40 Delayed Forces			If defending											- FR designates one connection used to enter battle, the combat value of FR forces entering across all other connections is X0. Cancels 'Outflanking'
-*		#41	Fierce Fighting			If defending with a leader								- Increase both sides' losses by 2, and no prusuit
-*		#47	Treacherous Allies																- If RU are within two areas of Vilna, eliminate all Prussian and Austrian Sps in this battle + Schwarzenberg
-*		#50	Crumbling Cohesion		If attacking											- Shift Initiative 1 in Russia's favor. Cossacks X(RU Initiative) instead of X0.
-*		#51	Unreliable Germans		If RU has the initiative								- All Austrian and Prussian SPs X0, French Infantry and Cavalry X0,5
-*		#53	Aggressive Cossacks		If RU has the initiative								- Combat value of Cossacks X2 instead of X0
+		#5 	Idle Reserves 			If defending										- Imperial Guard fight X0, unless France play 'The Imperial Guard'
+		#7 	Indecision	 															- Cancel the effect of 'The Imperial Guard'
+		#8 	Fighting Withdrawal 		If defending										- Both sides' losses are reduced by 2 and no pursuit. RU must retreat after battle and count as having lost it.
+		#9 	Uninspired Tactics		If defending in a fortress town || under defend orders			- FR losses +1
+		#12	Outflanking				Attacking with a leader across > 1 connection					- FR designate one connection as the main attack. The FR combat value is reduced by the total combat value across all other connections
+		#22 	City Ablaze!			When FR gain control of a Key City
+		#23	Stubborn Rearguard		Immediately after losing a battle							- Cancel any losses from pursuit in the battle
+		#28	Poor Coordination			No restriction										- FR combat value -3 for each Track connection used
+		#31 	Stoic Infantry			If defending, at least 1 Infantry							- First two SPs exhausted in this battle immediately rally again
+		#32 	The Artillery Corps		If a RU leader is present								- FR losses +1, +1 more if France play 'Infantry Squares'
+		#33	Fortifications			If defending with a leader								- Place a 'Defend' order, or double the effect of an existing one. Cancels 'Outflanking'.
+		#34	Platov's Cossacks			If Platov is present									- Cossacks fight at X1. French combat value -= num cossacks
+		#35	Fickle Habsburgs			If Schwarzenberg is present								- Losses on both sides -1, RU wins even if tied
+		#36	Infantry Squares			If at least 4 RU Infantry SPs are present						- Combat value of all French Cavalry is X0, first loss must be cavalry if present
+		#37	Enveloping Moves			If attacking with a leader								- If RU > FR fresh sps, drawn battle is considered Russian victory
+		#38	Konstantine's Corps		If a RU leader is present								- Up to 3 Infantry SPs fight at X2, draw additional card if battle won
+		#39	Cavalry Charge			If a RU leader is present								- Combat value of up to 2 RU Cavalry is doubled. draw additional card if battle won
+		#40	Delayed Forces			If defending										- FR designates one connection used to enter battle, the combat value of FR forces entering across all other connections is X0. Cancels 'Outflanking'
+		#41	Fierce Fighting			If defending with a leader								- Increase both sides' losses by 2, and no prusuit
+		#47	Treacherous Allies														- If RU are within two areas of Vilna, eliminate all Prussian and Austrian Sps in this battle + Schwarzenberg
+		#50	Crumbling Cohesion		If attacking										- Shift Initiative 1 in Russia's favor. Cossacks X(RU Initiative) instead of X0.
+		#51	Unreliable Germans		If RU has the initiative								- All Austrian and Prussian SPs X0, French Infantry and Cavalry X0,5
+		#53	Aggressive Cossacks		If RU has the initiative								- Combat value of Cossacks X2 instead of X0
 
 	FRANCE
-*		#1 	Hard Marching																	- Forced March FR SPs fight X1 instead of X0,5
-*		#2 	Hard Marching																	- Forced March FR SPs fight X1 instead of X0,5
-*		#6 	Outflanking				If attacking from more than one direction				- RU designate one connection as main attack. The RU combat value is reduced by the total combat value across all other connections
-*		#7	Unsuccessful Diseng.															- Both sides losses -1
-*		#11	Grand Battery			If Napoleon is present									- RU losses +1 if defending, +2 if attacking. If RU played Infantry Squares losses +1 more.
-*		#12	Cavalry Charge			If Murat is present										- Up to two FR Cavalry SPs fight at X3
-*		#13	Murat's Cavalry			If Murat is present										- Up to two FR Cavalry SPs are doubled, but 1 is exhausted. If Fr win the battle, the remaining fresh Cavalry count X2 for pursuit.
-		#14	Skillful Maneuvers		If attacking with a leader && across >1 connection		- When Battle cards are revealed, France may choose to either cancel the effect of a river or a 'defend' order.
-*		#16	Infantry Squares		If at least 2 FR infantry/Imperial Guard				- combat value of all RU Cavalry SPs is X0, and first loss must be cavalry
-*		#18	Outflanking				If attacking with a Leader and across >1 connection		- same as #6
-		#21	Confusing Orders		If Kutuzov is present									- cancel the effect of up to 2 of the player RU battle cards
-*		#23	Poor Coordination		If RU forces entered the battle from >1 connection		- Reduce the total RU combat value by 2 for each connection used by RU to enter the battle
-*		#26	Combined Arms			If a FR leader is present								- X2 the combat value of up to 1 Cav. and 3 Inf. Cancels RU Infantry Squares.
-*		#27	Confusions & Delays		If defending											- Reduce FR losses by 2, RU by 1. France must retreat after battle, which is considered tied.
--		#28	Saint-Cyr's VI Corps	If defending											- Place a 'Defend' order in the area and double the combat value of 2 FR Infantry SPs.
-*		#29	Eble's Pontoneers		If a FR leader is present								- Ignore the penalties of attacking across a river
-		#30	Stubborn Rearguard		After losing											- Cancel any losses from pursuit in this battle
-*		#31	The Imperial Guard		If Napoleon is present.									- The combat value of all Imperial Guard are X3 instead of X1,5. If RU win, FR must discard a random card and Russia +2VP.
-		#32	Delayed Forces			If RU forces entered the battle from >1 connection		- All RU Sps across 1 connection fight at X0. Cancels 'Outflanking'.
-*		#33	Napoleon's Marshals		If a FR leader is present								- Rally 1 exhausted SP before determining losses. Draw a card if you win the battle.
-*		#34	Fierce Fighting			If a FR leader is present								- FR losses +1, Russia losses +2, 1 RU eliminates 1 leader if present.
--		#35	Ney's III Corps			If a FR leader is present								- up to 3 FR Infantry fight at X2, rally one exhuated SP after battle.
-*		#36	Eugene's IV Corps		If Eugene de Beauharnais is present						- up to 3 FR Infantry fight at X2
-*		#38	Inferior Gunpowder		If defending											- Halve the combat value of up to 8 RU Infantry SPs
-*		#47	Inferior Musketry		If defending											- Reduce FR losses by 1
-*		#50	Courage of Desperation	If RU has the Initiative								- Rally 1 exhausted SP. Up to 4 FR Exhausted SPs fight at X1 instead of X0.
-*		#51	The Old Guard			If an Imperial Guard SP is present						- Guard SPs fight at X2 instead of X1,5 and FR losses are reduced by 1. Cancels 'Outflanking'
-		#52	Ney's Escape																	- Regardless of who wins FR must retreat, but may do so across any connection (incl. ones used by the attacker) as long as they are unoccupied by RU
+		#1 	Hard Marching															- Forced March FR SPs fight X1 instead of X0,5
+		#2 	Hard Marching															- Forced March FR SPs fight X1 instead of X0,5
+		#6 	Outflanking				If attacking from more than one direction						- RU designate one connection as main attack. The RU combat value is reduced by the total combat value across all other connections
+		#7	Unsuccessful Diseng.														- Both sides losses -1
+		#11	Grand Battery			If Napoleon is present									- RU losses +1 if defending, +2 if attacking. If RU played Infantry Squares losses +1 more.
+		#12	Cavalry Charge			If Murat is present									- Up to two FR Cavalry SPs fight at X3
+		#13	Murat's Cavalry			If Murat is present									- Up to two FR Cavalry SPs are doubled, but 1 is exhausted. If Fr win the battle, the remaining fresh Cavalry count X2 for pursuit.
+		#14	Skillful Maneuvers		If attacking with a leader && across >1 connection				- When Battle cards are revealed, France may choose to either cancel the effect of a river or a 'defend' order.
+		#16	Infantry Squares			If at least 2 FR infantry/Imperial Guard						- combat value of all RU Cavalry SPs is X0, and first loss must be cavalry
+		#18	Outflanking				If attacking with a Leader and across >1 connection				- same as #6
+		#21	Confusing Orders			If Kutuzov is present									- cancel the effect of up to 2 of the player RU battle cards
+		#23	Poor Coordination			If RU forces entered the battle from >1 connection				- Reduce the total RU combat value by 2 for each connection used by RU to enter the battle
+		#26	Combined Arms			If a FR leader is present								- X2 the combat value of up to 1 Cav. and 3 Inf. Cancels RU Infantry Squares.
+		#27	Confusions & Delays		If defending										- Reduce FR losses by 2, RU by 1. France must retreat after battle, which is considered tied.
+		#28	Saint-Cyr's VI Corps		If defending										- Place a 'Defend' order in the area and double the combat value of 2 FR Infantry SPs.
+		#29	Eble's Pontoneers			If a FR leader is present								- Ignore the penalties of attacking across a river
+		#30	Stubborn Rearguard		After losing										- Cancel any losses from pursuit in this battle
+		#31	The Imperial Guard		If Napoleon is present.									- The combat value of all Imperial Guard are X3 instead of X1,5. If RU win, FR must discard a random card and Russia +2VP.
+		#32	Delayed Forces			If RU forces entered the battle from >1 connection				- All RU Sps across 1 connection fight at X0. Cancels 'Outflanking'.
+		#33	Napoleon's Marshals		If a FR leader is present								- Rally 1 exhausted SP before determining losses. Draw a card if you win the battle.
+		#34	Fierce Fighting			If a FR leader is present								- FR losses +1, Russia losses +2, 1 RU eliminates 1 leader if present.
+		#35	Ney's III Corps			If a FR leader is present								- up to 3 FR Infantry fight at X2, rally one exhuated SP after battle.
+		#36	Eugene's IV Corps			If Eugene de Beauharnais is present							- up to 3 FR Infantry fight at X2
+		#38	Inferior Gunpowder		If defending										- Halve the combat value of up to 8 RU Infantry SPs
+		#47	Inferior Musketry			If defending										- Reduce FR losses by 1
+		#50	Courage of Desperation		If RU has the Initiative								- Rally 1 exhausted SP. Up to 4 FR Exhausted SPs fight at X1 instead of X0.
+		#51	The Old Guard			If an Imperial Guard SP is present							- Guard SPs fight at X2 instead of X1,5 and FR losses are reduced by 1. Cancels 'Outflanking'
+		#52	Ney's Escape															- Regardless of who wins FR must retreat, but may do so across any connection (incl. ones used by the attacker) as long as they are unoccupied by RU
 
 	Leaders
 	Napoleon - +1 to Battle Die and Play up to 4 cards
@@ -6173,28 +6204,28 @@ function init_battle_entry(area) {
 	)
 }
 
+function delete_battle_entry(area) {
+	map_delete(G.battles, area)
+}
+
 function has_battle(area) {
 	return map_has(G.battles, area)
 }
 
-function get_battle_entry(area, fallback) {
+function get_battle_entry(area, fallback = null) {
 	return map_get(G.battles, area, fallback)
 }
 
-function get_battle_attacker(area) {
-	return map_get(G.battles, area, null)?.attacker.who ?? -1
+function get_attacker_data(area, fallback = null) {
+	return get_battle_entry(area, fallback)?.attacker ?? null
 }
 
-function get_battle_defender(area) {
-	return map_get(G.battles, area, null)?.defender.who ?? -1
+function get_battle_attacker(area, fallback = null) {
+	return get_attacker_data(area, fallback)?.who ?? -1
 }
 
 function is_battle_attacker(who, area) {
 	return get_battle_attacker(area) === who
-}
-
-function is_battle_defender(who, area) {
-	return get_battle_defender(area) === who
 }
 
 function add_attacker_to_battle(who, from, area, move_type, leaders, troops) {
@@ -6232,11 +6263,18 @@ function add_attacker_to_battle(who, from, area, move_type, leaders, troops) {
 			troops: troops,
 		})
 	}
-
 }
 
-function get_attacker_data(area) {
-	return get_battle_entry(area, null)?.attacker ?? null
+function get_defender_data(area, fallback = null) {
+	return get_battle_entry(area, fallback)?.defender ?? null
+}
+
+function get_battle_defender(area, fallback = null) {
+	return get_defender_data(area, fallback)?.who ?? -1
+}
+
+function is_battle_defender(who, area) {
+	return get_battle_defender(area) === who
 }
 
 function add_defender_to_battle(who, from, area, move_type, leaders, troops) {
@@ -6274,49 +6312,45 @@ function add_defender_to_battle(who, from, area, move_type, leaders, troops) {
 
 		battle.defender.defend_order = false
 	}
+}
 
-
+function get_player_battle_data(who, battle) {
+	return is_battle_attacker(who, battle) ? get_attacker_data(battle) : get_defender_data(battle)
 }
 
 function get_connections_used_by_attacker(area) {
 	if (!has_battle(area)) return []
-	let areas = []
-	for (let entry of get_attacker_data(area).forces)
-		set_add(areas, entry.from)
-	return areas
+	let origins = []
+	get_attacker_data(area).forces.forEach(force => {
+		if (!set_has(origins, force.from))
+			set_add(origins, force.from)
+	})
+	return origins
 }
 
 function get_connections_used_by_defender(area) {
 	if (!has_battle(area)) return []
-	let areas = []
-	for (let entry of get_defender_data(area).forces)
-		set_add(areas, entry.from)
-	return areas
+	let origins = []
+	get_defender_data(area).forces.forEach(force => {
+		if (!set_has(origins, force.from))
+			set_add(origins, force.from)
+	})
+	return origins
 }
 
 function get_connections_used_in_battle(who, area) {
 	return is_battle_attacker(who, area) ? get_connections_used_by_attacker(area) : get_connections_used_by_defender(area)
 }
 
-function get_defender_data(area) {
-	return get_battle_entry(area, null)?.defender ?? null
-}
-
 function add_defend_order_to_battle(area) {
-	let battle = get_battle_entry(area, null)
-
-	battle.defender.defend_order = true
+	get_battle_entry(area).defender.defend_order = true
 }
 
 function battle_has_defend_order(area) {
-	let battle = get_battle_entry(area, null)
-
-	return battle.defender.defend_order
+	return get_battle_entry(area).defender.defend_order
 }
 
 function update_battle_losses(who, area, amt) {
-	let battle = get_battle_entry(area, null)
-
 	get_player_battle_data(who, area).losses = amt
 }
 
@@ -6325,31 +6359,21 @@ function has_bridge(from, to) {
 }
 
 function add_battle_event(area, event) {
-	if (!has_battle(area)) init_battle_entry(area)
+	if (!has_battle(area))
+		init_battle_entry(area)
 
-	let battle = get_battle_entry(area, null)
-
-	set_add(battle.events, event)
+	set_add(get_battle_entry(area).events, event)
 }
 
 function remove_battle_event(area, event) {
-	if (!has_battle(area)) init_battle_entry(area)
-	let battle = get_battle_entry(area, null)
-	set_delete(battle.events, event)
-}
+	if (!has_battle(area))
+		init_battle_entry(area)
 
-function add_battle_outflanking(area, connection_origin) {
-	get_battle_entry(area, null).outflanking = connection_origin
-}
-
-function add_battle_delayed_forces(area, connection_origin) {
-	get_battle_entry(area, null).delayed_forces = connection_origin
+	set_delete(get_battle_entry(area).events, event)
 }
 
 function is_battle_event_active(area, event) {
-	let battle = get_battle_entry(area, null)
-
-	return set_has(battle.events, event)
+	return set_has(get_battle_entry(area).events, event)
 }
 
 function is_battle_event_currently_active(event) {
@@ -6371,42 +6395,39 @@ function is_battle_event_currently_active(event) {
 	return true
 }
 
+function add_battle_outflanking(area, connection_origin) {
+	get_battle_entry(area, null).outflanking = connection_origin
+}
+
+// TOFIX
+function add_battle_delayed_forces(area, connection_origin) {
+	get_battle_entry(area, null).delayed_forces = connection_origin
+}
+
 function set_battle_winner(who, area) {
-	let battle = get_battle_entry(area, null)
-	battle.winner = who
+	get_battle_entry(area).winner = who
 }
 
 function set_battle_loser(who, area) {
-	let battle = get_battle_entry(area, null)
-	battle.loser = who
+	get_battle_entry(area).loser = who
 }
 
 function get_battle_winner(area) {
-	let battle = get_battle_entry(area, null)
-	return battle.winner
+	return get_battle_entry(area).winner
 }
 
 function get_battle_loser(area) {
-	let battle = get_battle_entry(area, null)
-	return battle.loser
+	return get_battle_entry(area).loser
 }
 
+/* COMMON BATTLE EVENT ELIGIBILITY CHECKS */
+
 function count_num_attacker_connections(area) {
-	let battle = get_battle_entry(area, null)
-	let areas_from = []
-	for (let entry of battle.attacker.forces) {
-		set_add(areas_from, entry.from)
-	}
-	return areas_from.length
+	return get_connections_used_by_attacker(area).length
 }
 
 function count_num_defender_connections(area) {
-	let battle = get_battle_entry(area, null)
-	let areas_from = []
-	for (let entry of battle.defender.forces) {
-		set_add(areas_from, entry.from)
-	}
-	return areas_from.length
+	return get_connections_used_by_defender(area).length
 }
 
 function did_attacker_attack_across_multiple_connections(area) {
@@ -6414,17 +6435,11 @@ function did_attacker_attack_across_multiple_connections(area) {
 }
 
 function has_leader_in_battle(who, area) {
-	let battle = get_battle_entry(area, null)
-	if (is_battle_attacker(who, area))
-		return battle.attacker.forces.some(entry => entry.leaders.length > 0)
-	return battle.defender.forces.some(entry => entry.leaders.length > 0)
+	return get_player_battle_data(who, area).forces.some(force => force.leaders.length > 0)
 }
 
 function is_leader_in_battle(leader, area) {
-	let battle = get_battle_entry(area, null)
-	if (is_battle_attacker(get_leader_faction(leader), area))
-		return battle.attacker.forces.some(entry => set_has(entry.leaders, leader))
-	return battle.defender.forces.some(entry => set_has(entry.leaders, leader))
+	return get_player_battle_data(get_leader_faction(leader), area).forces.some(force => set_has(force.leaders, leader))
 }
 
 function count_num_infantry(who, area) {
@@ -6457,44 +6472,6 @@ function count_num_guard(who, area) {
 	return count
 }
 
-function is_troop_type_fresh(troop_type) {
-	return !is_troop_type_exhausted(troop_type)
-}
-
-function is_fresh_infantry(troop_type) {
-	return is_infantry(troop_type) && is_troop_type_fresh(troop_type)
-}
-
-function is_fresh_cavalry(troop_type) {
-	return is_cavalry(troop_type) && is_troop_type_fresh(troop_type)
-}
-
-/*
-	G.battles = [key, value, key, value]
-	key: area
-	value: entire battle data for that battle
-
-	Each value:
-	{
-		attacker:
-		{
-			who: FRANCE/RUSSIA,
-			forces: [
-				{
-					from: ,
-					strength: FULL/HALF
-					leaders: [],
-					troops: [],
-				}
-				...
-			]
-		}
-		defender:
-		events: [(set)] e.g. [HARD_MARCHING, THE_GRAND_BATTERY]
-	}
-
-*/
-
 P.battle = (`
 	log "@Battles"
 	call change_orders { current_order_type: DEFEND }
@@ -6509,13 +6486,12 @@ function sort_battles_by_type() {
 	let battles_by_type = [[], [], []]
 
 	map_for_each(G.battles, (area, battle) => {
-		if (battle.attacker.forces.some(entry => entry.leaders.length > 0) && battle.defender.forces.some(entry => entry.leaders.length > 0)) {
+		if (has_leader_in_battle(get_battle_attacker(area)) && has_leader_in_battle(get_battle_defender(area)))
 			set_add(battles_by_type[BATTLES_WHERE_BOTH_SIDES_HAVE_LEADERS], area)
-		} else if (battle.attacker.forces.some(entry => entry.leaders.length > 0) || battle.defender.forces.some(entry => entry.leaders.length > 0)) {
+		else if (has_leader_in_battle(get_battle_attacker(area)) || has_leader_in_battle(get_battle_defender(area)))
 			set_add(battles_by_type[BATTLES_WHERE_ONE_SIDE_HAS_LEADER], area)
-		} else {
+		else
 			set_add(battles_by_type[BATTLES_WITHOUT_LEADERS], area)
-		}
 	})
 
 	return battles_by_type
@@ -6552,13 +6528,10 @@ P.resolve_battles = {
 	confirm() {
 		push_undo()
 		log("No battles to execute this turn.")
-		map_clear(G.moved)
-		log()
 		end()
 	},
 	done() {
 		push_undo()
-		log()
 		end()
 	},
 	area(area) {
@@ -6578,9 +6551,14 @@ P.resolve_battles = {
 		}
 
 		G.current_battle = -1
+	},
+	_end() {
+		map_clear(G.moved)
+		log()
 	}
 }
 
+// WARNING: Used in P.do_battle script
 function has_friendly_order(who, area) {
 	return get_orders_at_area(who, area).length > 0
 }
@@ -6588,7 +6566,7 @@ function has_friendly_order(who, area) {
 P.do_battle = script(`
 	call play_battle_events { attacker: L.attacker, defender: L.defender, area: L.area }
 
-	eval { log_h5("Reveal Defend Orders") }
+	log "%Reveal Defend Orders"
 	if (has_friendly_order(L.defender, L.area)) {
 		set G.active L.defender
 		call defend { area: L.area }
@@ -6633,9 +6611,7 @@ P.defend = {
 }
 
 function get_num_battle_events_could_by_played(who, area) {
-	let seniormost_leader = get_seniormost_leader(who, area)
-
-	switch(seniormost_leader) {
+	switch(get_seniormost_leader(who, area)) {
 	case L_NAPOLEON:
 		return 4
 	case L_DE_TOLLY:
@@ -6691,7 +6667,7 @@ P.commit_battle_events = {
 	},
 	inactive: "play battle events",
 	prompt() {
-		if ((G.played_cards[G.active] === L.num_battle_events) || (L.num_battle_events_in_hand === 0)) {
+		if ((G.played_cards[G.active].length === L.num_battle_events) || (L.num_battle_events_in_hand === 0)) {
 			prompt(`Play Battle Events: All done.`)
 			button_done()
 		} else {
@@ -6743,8 +6719,7 @@ P.execute_battle_events = {
 	prompt() {
 		if (L.events_to_be_executed.length > 0) {
 			prompt(`Scroll down and implement the effect of each battle event played (${join_array_with_and(L.events_to_be_executed.map(card => get_card_log_alias(card)))}).`)
-			for (let card of L.events_to_be_executed)
-				action_card(card)
+			L.events_to_be_executed.forEach(action_card)
 		} else {
 			prompt(`Execute battle events: All done.`)
 			button_done()
@@ -7883,13 +7858,12 @@ P.end_battle = script(`
 			log(ROLES[L.winner] + " captured S" + G.current_battle + "!")
 			increase_vp(L.winner, get_area_vp(G.current_battle))
 		}
-		G.played_cards[RUSSIA] = []
-		G.played_cards[FRANCE] = []
+		G.played_cards[RUSSIA].length = 0
+		G.played_cards[FRANCE].length = 0
 		if (map_has(G.battles, G.current_battle)) {
 			map_delete(G.battles, G.current_battle)
 		}
 		G.active = get_who_has_initiative()
-		map_clear(G.moved)
 	}
 `)
 
@@ -8430,9 +8404,8 @@ P.do_retreat = function() {
 				if (sps[type] > 0) {
 					move_troop(G.active, G.current_battle, L.destination, type, sps[type])
 					for (let entry of battle_data.forces) {
-						if (entry.from === origin && entry.strength === strength) {
+						if (entry.from === origin && entry.strength === strength)
 							entry.troops[type] -= sps[type]
-						}
 					}
 				}
 			}
@@ -9068,7 +9041,7 @@ P.do_attrition = {
 
 			L.areas.forEach(action_area)
 		} else {
-			prompt(`Attrition: all done.`)
+			prompt(`Attrition: All done.`)
 			button_confirm()
 		}
 	},
@@ -9178,12 +9151,11 @@ P.assign_attrition_losses = {
 					break
 				case 1:
 				case 2:
-					if (
+					button("eliminate_2", (
 						get_all_exhausted_sp_types(G.active, L.area).some(type => is_cavalry(type) || is_cossack(type))
 						|| G.attrition_data.has_assigned_cavalry_loss
 						|| (!G.attrition_data.has_assigned_cavalry_loss && !has_cavalry_or_cossack_in_area(G.active, L.area))
-					)
-						button("eliminate_2")
+					))
 				}
 			}
 		}
@@ -9744,12 +9716,14 @@ P.may_play_evasive_maneuvers = {
 	prompt() {
 		if (hand_has(G.active, C_EVASIVE_MANEUVERS)) {
 			prompt(`You may play ${get_card_log_alias(C_EVASIVE_MANEUVERS)} to execute all Forced March orders first this turn.`)
+			button("play")
 			action_card(C_EVASIVE_MANEUVERS)
 		} else {
 			prompt(`You do not have ${get_card_log_alias(C_EVASIVE_MANEUVERS)}.`)
 		}
 		button_pass()
 	},
+	play() { this.card(C_EVASIVE_MANEUVERS) },
 	card(_) {
 		push_undo()
 		goto("evasive_maneuvers")
@@ -11405,7 +11379,7 @@ P.disease_and_starvation = {
 		if (L.num_sps_to_eliminate > 0) {
 			if (L.areas.length > 0) {
 				prompt_card(C_DISEASE_AND_STARVATION, `Select an area with a Devastation level of 2 or more to eliminate up to ${L.num_sps_to_eliminate} SPs.`)
-				if (L.areas.length <= 5) V.prompt += ` ${join_array_with_or(L.areas.map(area => `S${area}`))}`
+				if (L.areas.length <= 5) V.prompt += ` (${join_array_with_or(L.areas.map(area => `S${area}`))})`
 
 				for (let area of L.areas)
 					action_area(area)
@@ -13468,6 +13442,8 @@ function log_roll(roll) { //Uses fallback white die defined in world.js
 
 function on_assert() {
 	assert_troop_entries()
+	// TODO
+	// assert_lone_leaders()
 }
 
 // Test invariant for G.troops: Each area has exactly one entry for each player & type.
@@ -13478,6 +13454,19 @@ function assert_troop_entries() {
 				throw new Error(`Multiple entries of ${ROLES[decode_troop_entry_who(entry)]} ${get_troop_type_name(decode_troop_entry_type(entry))} found at (${area}).`)
 		}
 	})
+}
+
+// Leaders are immediately eliminated if they do not have any SPs with them.
+function assert_lone_leaders() {
+	if (TURN_PHASES.indexOf("resolve_battles") === G.phase || L === null)
+		return
+
+	for (let who = RUSSIA; who <= FRANCE; ++who) {
+		for (let leader = get_first_leader(who); leader <= get_last_leader(who); ++leader) {
+			if (is_leader_on_map(leader) && !has_friendly_troop(who, get_leader_location(leader)))
+				throw new Error(`${get_leader_short_name(leader)} is alone without SPs at ${get_area_name(get_leader_location(leader))}.`)
+		}
+	}
 }
 
 
