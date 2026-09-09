@@ -6693,6 +6693,10 @@ P.play_battle_events = script(`
 	if (is_battle_event_currently_active(C_THE_IMPERIAL_GUARD) && hand_has(RUSSIA, C_INDECISION)) {
 		call may_play_indecision { response_to: "the_imperial_guard" }
 	}
+	if (is_battle_event_currently_active(C_CONFUSING_ORDERS)) {
+		set G.active FRANCE
+		call confusing_orders
+	}
 
 	for L.who in RUSSIA to FRANCE {
 		if (G.played_cards[L.who].length > 0) {
@@ -6715,26 +6719,32 @@ P.commit_battle_events = {
 	_begin() {
 		//L.area
 		L.num_battle_events = get_num_battle_events_could_by_played(G.active, L.area)
-		L.num_battle_events_in_hand = count_num_battle_events_in_hand(G.active) + 1 //Dummy
+		L.num_battle_events_in_hand = count_num_battle_events_in_hand(G.active) + 1 // Dummy
 	},
 	inactive: "play battle events",
 	prompt() {
 		if ((G.played_cards[G.active].length === L.num_battle_events) || (L.num_battle_events_in_hand === 0)) {
 			prompt(`Play Battle Events: All done.`)
-			button_done()
 		} else {
 			prompt(`You may play any battle cards, or a dummy.`)
 			for (let card of get_hand(G.active))
 				if ((is_battle_card(card) && can_play_event(card)) || is_card_dummy(card))
 					action_card(card)
-			button_done()
 		}
+		G.committed_cards[G.active].forEach(action_card)
+		button_done()
 	},
 	card(card) {
 		push_undo()
-		remove_card_from_hand(G.active, card)
-		set_add(G.played_cards[G.active], card)
-		L.num_battle_events_in_hand--
+		if (set_has(G.committed_cards[G.active], card)) {
+			add_to_hand(G.active, card)
+			set_delete(G.committed_cards[G.active], card)
+			L.num_battle_events_in_hand++
+		} else {
+			remove_card_from_hand(G.active, card)
+			commit_card(card)
+			L.num_battle_events_in_hand--
+		}
 	},
 	done() {
 		clear_undo()
@@ -6745,6 +6755,8 @@ P.commit_battle_events = {
 P.reveal_battle_events = function() {
 	for (let who = RUSSIA; who <= FRANCE; ++who) {
 		log(ROLES[who])
+		reveal_committed_cards(who, true)
+
 		if (G.played_cards[who].length > 0) {
 			for (let c of G.played_cards[who]) {
 				logi(get_card_log_alias(c))
@@ -6767,6 +6779,8 @@ P.reveal_battle_events = function() {
 P.execute_battle_events = {
 	_begin() {
 		L.events_to_be_executed = G.played_cards[G.active].slice()
+		if (set_has(L.events_to_be_executed, C_CONFUSING_ORDERS))
+			set_delete(L.events_to_be_executed, C_CONFUSING_ORDERS)
 	},
 	prompt() {
 		if (L.events_to_be_executed.length > 0) {
@@ -9781,7 +9795,7 @@ P.opolchenie = {
 	},
 	inactive: "raise the militia",
 	prompt() {
-		//Always guaranteed at least Pskov (Russian off-map area cannot be entered by France)
+		// Always guaranteed at least Pskov (Russian off-map area cannot be entered by France)
 		prompt_card(C_OPOLCHENIE, `Place 2 exhausted Russian Infantry SPs at ${join_array_with_and(L.areas.map(s => `S${s}`))}.`)
 		L.areas.forEach(action_area)
 	},
@@ -10062,9 +10076,7 @@ P.indecision_cancel_napoleon_change = {
 E.fighting_withdrawal = function() { return is_battle_defender(RUSSIA, G.current_battle) }
 
 P.fighting_withdrawal = {
-	_begin() {
-		L.step = -1
-	},
+	_begin() { L.step = -1 },
 	prompt() {
 		if (L.step === -1) {
 			prompt_card(C_FIGHTING_WITHDRAWAL, `Both sides losses are reduced by 2 in this battle.`)
@@ -10384,11 +10396,11 @@ P.kutuzov_appointed = {
 	},
 	inactive: "appoint Mikhail Kutuzov",
 	prompt() {
-		let areas_with_most_ru_sps = find_areas_with_most_ru_sps()
 		if (L.has_placed_kutuzov) {
 			prompt_card(C_KUTUZOV_APPOINTED, "Receive a free Rally order.")
 			button_next()
 		} else {
+			let areas_with_most_ru_sps = find_areas_with_most_ru_sps()
 			prompt_card(C_KUTUZOV_APPOINTED, `Place ${L_KUTUZOV} in the space with the most Russian SPs (${join_array_with_or(areas_with_most_ru_sps.map(area => get_area_name(area)))}).`)
 			for (let area of areas_with_most_ru_sps) {
 				action_area(area)
@@ -10417,40 +10429,36 @@ P.kutuzov_appointed = {
 // RU #17: The Finland Corps
 E.the_finland_corps = function() { return get_current_month() >= AUG }
 
+function get_finland_corps_destinations() {
+	let areas = [S_RIGA, S_LIVONIA, S_PSKOV].filter(area => is_ru_controlled(area))
+	for (let area of [S_RIGA, S_LIVONIA, S_PSKOV]) {
+		for (let adj of get_all_adjacent_areas(area)) {
+			if (is_ru_controlled(area) && !set_has(areas, adj))
+				set_add(areas, area)
+		}
+	}
+	return areas
+}
+
 P.the_finland_corps = {
 	_begin() {
-		L.spaces = [S_RIGA, S_LIVONIA, S_PSKOV].filter(area => is_ru_controlled(area))
-		for (let area of [S_RIGA, S_LIVONIA, S_PSKOV]) {
-			for (let s of get_all_adjacent_areas(area)) {
-				if (is_ru_controlled(s) && !set_has(L.spaces, s)) set_add(L.spaces, s)
-			}
-		}
-		L.troops_to_place = 3
-		L.placement_status = []
+		log("Placed")
+		L.areas = get_finland_corps_destinations()
+		L.sps_to_place = 3
 	},
 	inactive: "deploy Steinheil's Finland Corps",
 	prompt() {
-		//Always guaranteed Livonia and Pskov (Russian off-map areas)
-		prompt_card(C_THE_FINLAND_CORPS, `Place ${L.troops_to_place} Infantry among ${join_array_with_or(L.spaces.map(area => `S${area}`))}.`)
-		for (let s of L.spaces) {
-			action_area(s)
-		}
+		// Always guaranteed Livonia and Pskov (Russian off-map areas)
+		prompt_card(C_THE_FINLAND_CORPS, `Place ${L.sps_to_place} Infantry among ${join_array_with_or(L.areas.map(area => `S${area}`))}.`)
+		L.areas.forEach(action_area)
 	},
 	area(area) {
 		push_undo()
-		if (map_has(L.placement_status, area)) {
-			map_increment(L.placement_status, area)
-		} else {
-			map_set(L.placement_status, area, 1)
-		}
 		add_troop(RUSSIA, area, FRESH_INFANTRY, 1)
-		if (--L.troops_to_place === 0) {
-			map_for_each(L.placement_status, (a, amount) => {
-				log("Placed at S" + a)
-				logi(amount + " " + get_troop_type_name(FRESH_INFANTRY))
-			})
+		logi(`S${area}`)
+		logii(`1 Infantry`)
+		if (--L.sps_to_place === 0)
 			end()
-		}
 	}
 }
 
@@ -10458,49 +10466,64 @@ P.the_finland_corps = {
 E.treaty_of_bucharest = function() { return get_current_month() >= AUG }
 
 P.treaty_of_bucharest = {
+	_begin() {
+		log("Placed")
+		L.has_placed_chichagov = false
+		L.sps_to_place = 3
+		L.sp_log = []
+	},
 	inactive: "transfer Chichagov from Bessarabia",
 	prompt() {
-		prompt_card(C_TREATY_OF_BUCHAREST, `Place Chichagov and 3 Infantry SPs at S${S_UKRAINE} or S${S_MOLDAVIA}.`)
+		if (!L.has_placed_chichagov)
+			prompt_card(C_TREATY_OF_BUCHAREST, `Place Chichagov at S${S_UKRAINE} or S${S_MOLDAVIA}.`)
+		else
+			prompt_card(C_TREATY_OF_BUCHAREST, `Select where to place Infantry SPs — ${L.sps_to_place} remaining.`)
+
 		action_area(S_UKRAINE)
 		action_area(S_MOLDAVIA)
 	},
 	area(area) {
 		push_undo()
-		log("Placed at S" + area)
-		move_leader(L_CHICHAGOV, area)
-		logi(`L${L_CHICHAGOV}`)
-		add_troop(RUSSIA, area, FRESH_INFANTRY, 3)
-		end()
+		if (!L.has_placed_chichagov) {
+			move_leader(L_CHICHAGOV, area)
+			L.has_placed_chichagov = true
+			logi(`S${area}`)
+			logii(`L${L_CHICHAGOV}`)
+		} else {
+			add_troop(RUSSIA, area, FRESH_INFANTRY, 1)
+			if (!map_has(L.sp_log, area))
+				map_set(L.sp_log, area, 1)
+			else
+				map_increment(L.sp_log, area)
+			if (--L.sps_to_place === 0) {
+				map_for_each(L.sp_log, (loc, num) => {
+					logi(`S${loc}`)
+					logii(`${num} Infantry`)
+				})
+				end()
+			}
+		}
 	}
 }
 
 //RU #19: The Czar Leaves the Army
+E.the_czar_leaves_the_army = function() { return is_leader_on_map(L_ALEXANDER) }
+
 P.the_czar_leaves_the_army = {
-	_begin() {
-		L.step = -1
-	},
 	inactive: "send Alexander back to St. Petersburg",
 	prompt() {
-		if (L.step === -1) {
-			prompt_card(C_THE_CZAR_LEAVES_THE_ARMY, "Remove Alexander from play at no cost.")
-			action_leader(L_ALEXANDER)
-		} else {
-			prompt_card(C_THE_CZAR_LEAVES_THE_ARMY, "All done.")
-			button_next()
-		}
-
+		prompt_card(C_THE_CZAR_LEAVES_THE_ARMY, "Remove Alexander from play at no cost.")
+		action_leader(L_ALEXANDER)
 	},
-	leader(alexander) {
+	leader(_) {
 		push_undo()
+		move_leader(L_ALEXANDER, POOL)
 		log("Removed from S" + get_leader_location(L_ALEXANDER))
-		move_leader(alexander, POOL)
 		logi(`L${L_ALEXANDER}`)
-		++L.step
 		call("draw_card_to_hand")
 	},
-	next() {
-		push_undo()
-		end()
+	_resume() {
+		goto("event_done", { card: C_THE_CZAR_LEAVES_THE_ARMY })
 	}
 }
 
@@ -10850,7 +10873,8 @@ P.new_posting = {
 	}
 }
 
-// RU #25, RU #26 Exhausting March
+// RU #25 Exhausting March
+// RU #26 Exhausting March
 function count_moving_sps() {
 	let count = 0
 	for (let type = 0; type < G.move.sps.length; ++type)
@@ -12565,6 +12589,35 @@ P.xi_corps_arrives = {
 
 // FR #21: Confusing Orders
 E.confusing_orders = function() { return is_leader_in_battle(L_KUTUZOV, G.current_battle) }
+
+P.confusing_orders = {
+	_begin() {
+		card_box_begin(C_CONFUSING_ORDERS)
+		log("Cancelled")
+		L.num_cards_to_cancel = Math.min(2, G.played_cards[RUSSIA].length)
+	},
+	prompt() {
+		if (L.num_cards_to_cancel > 0) {
+			prompt_card(C_CONFUSING_ORDERS, `Select Russian battle events to cancel.`)
+			G.played_cards[RUSSIA].forEach(action_card)
+		} else {
+			prompt_card(C_CONFUSING_ORDERS, "All done.")
+			button_confirm()
+		}
+	},
+	card(card) {
+		push_undo()
+		set_delete(G.played_cards[RUSSIA], card)
+		remove_battle_event(G.current_battle, card)
+		logi(get_card_log_alias(card))
+		--L.num_cards_to_cancel
+	},
+	confirm() {
+		push_undo()
+		card_box_end()
+		end()
+	}
+}
 
 // FR #22: Poor Communications
 // RULES MODIFICATION: Now the player selects a space and a random order is removed from it (as opposed to selecting an order).
