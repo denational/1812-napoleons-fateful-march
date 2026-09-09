@@ -1430,7 +1430,7 @@ function on_view() {
 /*
 	Several states in 1812 involve playing events during multi-active states.
 	For instance, must-play events are executed immediately as they are drawn.
-	In other cases, it is useful (for expediency) to include event actions within multi-active states.
+	In other cases, it is convenient to sequence the effect of an event within a multi-active state (e.g. discarding a card when placing orders if Command Friction is active).
 
 	In these states, players are shown a different prompt/actions depending on their 'local state'.
 
@@ -1446,6 +1446,7 @@ function on_view() {
 		},
 		states: {
 			state1 : {
+				on_begin() { ... },
 				on_prompt() { ... },
 				on_area(area) { ... },
 			}
@@ -1454,14 +1455,18 @@ function on_view() {
 		area(area) 	{ this.states[L.state[R]].on_area(area) }
 	}
 
-	Common functions:
+	Common functions (WIP):
 		advance_local_state(player): Advances to the next state (in enumeration order) that the player could possibly do.
 			Useful for multi-active states where local states follow a linear sequence.
-			Each local state has an on_eligible(player) method, which evaluates whether the player can perform that state.
+			In states using this structure, each local state has an eligible(player) method, which evaluates whether the player can perform that state.
 
 		goto_local_state(player, next_state): Sets the player's state to the target state, and calls an on_begin() method, if defined.
 			Useful for more complex multi-active states (e.g. draw_card_to_hand )
 			Mimics the goto function in the global RTT framework.
+
+		end_local_state(player): Cleans up the state and performs any final things that need to happen before a player leaves a multi-active state.
+			Calls on_end() on the current local state, followed by a state-wide finish_state handler.
+			Somewhat mimics the end funcion in the global RTT framework.
 */
 
 function advance_local_state(player) {
@@ -1486,6 +1491,15 @@ function goto_local_state(who, state) {
 		P[L.P]?.states?.[L.state[who]]?.on_end?.()
 		L.state[who] = state
 		P[L.P]?.states?.[state]?.on_begin?.()
+	} catch(x) {
+		console.error(x)
+	}
+}
+
+function end_local_state(who) {
+	try {
+		P[L.P]?.states?.[L.state[who]]?.on_end?.()
+		P[L.P]?.finish_state?.()
 	} catch(x) {
 		console.error(x)
 	}
@@ -2688,39 +2702,20 @@ function get_event_step(card) {
 	return get_event_data(card).step
 }
 
-function finish_state(player) {
-	P[L.P]?.states?.[L.state[player]]?.on_end?.()
-
-	if (--L.num_cards_to_draw[player] > 0) {
-		L.state[player] = "draw_card"
-		return
-	}
-
-	if (player === FRANCE && map_has(L.event_tracker, C_HOLY_MOTHER_RUSSIA_RU) && (get_event_step(C_HOLY_MOTHER_RUSSIA_RU) === 1)) {
-		L.state[FRANCE] = "holy_mother_russia_ru"
-		return
-	}
-
-	if (Array.isArray(G.active))
-		set_delete(G.active, player)
-
-	if ((Array.isArray(G.active) && G.active.length === 0) || !Array.isArray(G.active)) {
-		end()
-	}
-}
-
 // TODO: Cleanup repeated discard/log
 P.draw_card_to_hand = {
 	_begin() {
 		// NOTE: Set G.active to whoever needs to draw a card before calling (since we don't want to define must-play events in different places)
+		// Supports simultaneous and individual card drawing
+
 		// Current local state
 		L.state = ["draw_card", "draw_card"]
-		//Current card drawn
+		// Current card drawn
 		L.drawn_card = [-1, -1]
 		// Some must-play draw are also multi-step (eeks!), so track them using a map
 		// Also stores event-specific information, so that it stays organized
 		L.event_tracker = []
-		// Cache of persistent events played throughout the state (which will be added to G.persistent_events at the end)
+		// Cache of persistent events played throughout the state by both sides (which will be added to G.persistent_events at the end)
 		L.persistent_events = []
 		// Number of cards each player must draw (relevant for the resources phase)
 		L.num_cards_to_draw = L.num_cards_to_draw ?? [1, 1]
@@ -2746,7 +2741,7 @@ P.draw_card_to_hand = {
 					init_event_tracker(L.drawn_card[R])
 					goto_local_state(R, get_event_state_name(L.drawn_card[R]))
 				} else {
-					finish_state(R)
+					end_local_state(R)
 				}
 			},
 		},
@@ -2801,7 +2796,7 @@ P.draw_card_to_hand = {
 				} else {
 					log_must_play_event(C_HOLY_MOTHER_RUSSIA_RU, get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key)
 				}
-				finish_state(R)
+				end_local_state(R)
 			},
 			on_undo() {
 				decrement_event_tracker(C_HOLY_MOTHER_RUSSIA_RU)
@@ -2846,7 +2841,7 @@ P.draw_card_to_hand = {
 			on_confirm() {
 				log_must_play_event(C_COMMAND_FRICTION)
 				discard_or_remove_card(C_COMMAND_FRICTION)
-				finish_state(R)
+				end_local_state(R)
 			},
 		},
 		"poor_logistics": {
@@ -2857,7 +2852,7 @@ P.draw_card_to_hand = {
 			on_confirm() {
 				log_must_play_event(C_POOR_LOGISTICS)
 				discard_or_remove_card(C_POOR_LOGISTICS)
-				finish_state(R)
+				end_local_state(R)
 			},
 		},
 		"devastated_countryside": {
@@ -2868,7 +2863,7 @@ P.draw_card_to_hand = {
 			on_confirm() {
 				log_must_play_event(C_DEVASTATED_COUNTRYSIDE)
 				discard_or_remove_card(C_DEVASTATED_COUNTRYSIDE)
-				finish_state(R)
+				end_local_state(R)
 			},
 		},
 		"barclay_de_tolly_resigns": {
@@ -2885,11 +2880,11 @@ P.draw_card_to_hand = {
 				}
 			},
 			on_confirm() {
-				finish_state(R)
+				end_local_state(R)
 			},
 			on_leader(leader) {
 				move_leader(leader, POOL)
-				finish_state(R)
+				end_local_state(R)
 			},
 			on_end() {
 				log_must_play_event(C_BARCLAY_DE_TOLLY_RESIGNS, get_leader_location(L_DE_TOLLY) === POOL)
@@ -2904,7 +2899,7 @@ P.draw_card_to_hand = {
 			on_confirm() {
 				log_must_play_event(C_POOR_COMMUNICATIONS)
 				discard_or_remove_card(C_POOR_COMMUNICATIONS)
-				finish_state(R)
+				end_local_state(R)
 			},
 		},
 		"jerome_goes_home": {
@@ -2918,11 +2913,11 @@ P.draw_card_to_hand = {
 				}
 			},
 			on_confirm() {
-				finish_state(R)
+				end_local_state(R)
 			},
 			on_leader(leader) {
 				move_leader(leader, POOL)
-				finish_state(R)
+				end_local_state(R)
 			},
 			on_end() {
 				log_must_play_event(C_JEROME_GOES_HOME, get_leader_location(L_JEROME) === POOL)
@@ -3017,7 +3012,7 @@ P.draw_card_to_hand = {
 				}
 			},
 			on_done() {
-				finish_state(R)
+				end_local_state(R)
 			},
 			on_undo() {
 				let action = get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.pop()
@@ -3102,7 +3097,7 @@ P.draw_card_to_hand = {
 				if (get_event_step(C_VULNERABLE_SUPPLY_LINES) === 0)
 					increment_event_tracker(C_VULNERABLE_SUPPLY_LINES)
 				else
-					finish_state(R)
+					end_local_state(R)
 			},
 			on_depot(depot) {
 				set_delete(get_event_data(C_VULNERABLE_SUPPLY_LINES).depots_to_remove, get_depot_location(depot))
@@ -3146,7 +3141,7 @@ P.draw_card_to_hand = {
 			on_confirm() {
 				log_must_play_event(C_FREEZING_WEATHER)
 				discard_or_remove_card(C_FREEZING_WEATHER)
-				finish_state(R)
+				end_local_state(R)
 			},
 			on_undo() {
 				decrement_event_tracker(C_FREEZING_WEATHER)
@@ -3172,7 +3167,7 @@ P.draw_card_to_hand = {
 				}
 			},
 			on_next() { increment_event_tracker(C_EXTREME_WEATHER_FR) },
-			on_confirm() { finish_state(R) },
+			on_confirm() { end_local_state(R) },
 			on_undo() { decrement_event_tracker(C_EXTREME_WEATHER_FR) },
 		},
 		"logistics_collapse": {
@@ -3180,7 +3175,7 @@ P.draw_card_to_hand = {
 				prompt_card(C_LOGISTICS_COLLAPSE, "For the rest of the game, France must discard a card from hand to execute a 'Place Depot' order.")
 				button_confirm()
 			},
-			on_confirm() { finish_state(R) }
+			on_confirm() { end_local_state(R) }
 		},
 		"chaotic_food_distribution": {
 			on_begin() {
@@ -3241,7 +3236,7 @@ P.draw_card_to_hand = {
 			on_confirm() {
 				log_must_play_event(C_CHAOTIC_FOOD_DISTRIBUTION, "no effect")
 				discard_or_remove_card(C_CHAOTIC_FOOD_DISTRIBUTION)
-				finish_state(R)
+				end_local_state(R)
 			},
 			on_undo() {
 				if (get_event_step(C_CHAOTIC_FOOD_DISTRIBUTION) === 0) {
@@ -3270,7 +3265,24 @@ P.draw_card_to_hand = {
 	leader(leader) 	{ this.states[L.state[R]].on_leader(leader) },
 	troop(type) 	{ this.states[L.state[R]].on_troop(type) },
 	done() 		{ this.states[L.state[R]].on_done() },
-	undo() 		{ this.states[L.state[R]].on_undo() }
+	undo() 		{ this.states[L.state[R]].on_undo() },
+	finish_state() {
+		if (--L.num_cards_to_draw[R] > 0) {
+			goto_local_state(R, "draw_card")
+			return
+		}
+
+		if (R === FRANCE && map_has(L.event_tracker, C_HOLY_MOTHER_RUSSIA_RU) && (get_event_step(C_HOLY_MOTHER_RUSSIA_RU) === 1)) {
+			goto_local_state(FRANCE, "holy_mother_russia_ru")
+			return
+		}
+
+		if (Array.isArray(G.active))
+			set_delete(G.active, R)
+
+		if (!Array.isArray(G.active) || G.active.length === 0)
+			end()
+	}
 }
 
 //=== 2. PLAY A CARD FOR ADDITIONAL ORDERS ===
@@ -10992,6 +11004,9 @@ P.exhausting_march_exhaust = {
 		let strength = decode_troop_action_strength(entry)
 		let from = decode_troop_action_from(entry)
 
+		log("Exhausted")
+		logi(`1 ${get_troop_type_name(type)}`)
+
 		exhaust_troop(G.active, area, type)
 		G.move.sps[type]--
 		G.move.sps[type + 1]++
@@ -11027,6 +11042,9 @@ P.exhausting_march_eliminate = {
 		let area = decode_troop_action_area(entry)
 		let strength = decode_troop_action_strength(entry)
 		let from = decode_troop_action_from(entry)
+
+		log("Eliminated")
+		logi(`1 ${get_troop_type_name(type)}`)
 
 		eliminate_troop(G.active, area, type)
 		G.move.sps[type]--
