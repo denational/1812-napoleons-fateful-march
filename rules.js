@@ -838,7 +838,7 @@ function has_non_dummy_order_at_area(who, area) {
 	Each bitpacked entry follows the following format: (NOTE: For programming simplicity, I've fudged the Prussian and Austrian SPs as separate 'types' of troops, not separate nationalities.)
 		Player owner		1 bit 		Uses player mnemonics RUSSIA and FRANCE.
 		Type 				4 bits 		Corresponds to the 12 (8 type + 4 allies) constants defined in the "Troops" section of constants
-		Number of troops	6 bits  	Safe estimate of max. troops of a specific nationality and type in an area.
+		Number of troops		6 bits  		Safe estimate of max. troops of a specific nationality and type in an area.
 */
 const TROOP_ENTRY_WHO_SHIFT = 10
 const TROOP_ENTRY_TYPE_SHIFT = 6
@@ -4522,7 +4522,7 @@ P.end_order = {
 		if (L.type === FORCED_MARCH && G.active === RUSSIA && is_event_active(C_EVASIVE_MANEUVERS) && has_executable_order(RUSSIA, FORCED_MARCH)) {
 			goto("execute_next_order", { type: L.type })
 		}
-		else if (L.type === FORCED_MARCH && G.active === FRANCE) {
+		else if (L.type === FORCED_MARCH && G.active === FRANCE && G.move.path.length > 1) {
 			G.active = enemy(G.active)
 			goto("may_play_exhausting_march")
 		}
@@ -10839,6 +10839,35 @@ P.new_posting = {
 }
 
 // RU #25, RU #26 Exhausting March
+function count_moving_sps() {
+	let count = 0
+	for (let type = 0; type < G.move.sps.length; ++type)
+		count += G.move.sps[type]
+	return count
+}
+
+function count_fresh_moving_sps() {
+	let count = 0
+	for (let type = 0; type < G.move.sps.length; ++type) {
+		if (is_troop_type_fresh(type))
+			count += G.move.sps[type]
+	}
+	return count
+}
+
+function count_exhausted_moving_sps() {
+	let count = 0
+	for (let type = 0; type < G.move.sps.length; ++type) {
+		if (is_troop_type_exhausted(type))
+			count += G.move.sps[type]
+	}
+	return count
+}
+
+function is_track_connection(a, b) {
+	return get_adjacent_areas_by_track(a).includes(b)
+}
+
 P.may_play_exhausting_march = {
 	prompt() {
 		if (hand_has(G.active, C_EXHAUSTING_MARCH_1)) {
@@ -10855,7 +10884,6 @@ P.may_play_exhausting_march = {
 	},
 	card(card) {
 		clear_undo() // Since we reveal the size of the army in the subsequent step
-		discard_or_remove_card(card)
 		goto("exhausting_march", { card })
 	},
 	pass() {
@@ -10872,32 +10900,22 @@ P.may_play_exhausting_march = {
 	}
 }
 
-function is_track_connection(a, b) {
-	return get_adjacent_areas_by_track(a).includes(b)
-}
-
 P.exhausting_march = {
 	_begin() {
-		// L.card, G.move
+		// L.card
 		card_box_begin(L.card)
-		L.num_losses = 0
-		L.sp_losses = 0
 
-		G.move.sps.forEach(amt => L.sp_losses += amt)
-		L.sp_losses = Math.ceil(L.sp_losses / 5)
-		L.num_losses += L.sp_losses
-
+		L.sp_losses = Math.ceil(count_moving_sps() / 5)
+		L.track_losses = 0
 		for (let i = 0; i < G.move.path.length - 1; ++i)
 			if (is_track_connection(G.move.path[i], G.move.path[i + 1]))
-				++L.num_losses
+				++L.track_losses
 
-		L.has_assigned = false
-		if (L.num_losses === 0)
-			L.has_assigned = true
+		L.has_assigned = (L.sp_losses === 0 && L.track_losses === 0)
 	},
 	prompt() {
 		if (!L.has_assigned) {
-			prompt_card(L.card, `France must take ${L.num_losses} attrition losses.`)
+			prompt_card(L.card, `France must take ${L.sp_losses + L.track_losses} attrition losses.`)
 			button_confirm()
 		} else {
 			prompt_card(L.card, `All done.`)
@@ -10906,39 +10924,123 @@ P.exhausting_march = {
 	},
 	confirm() {
 		push_undo()
-		add_persistent_event(L.card)
-		log(`France takes ${L.num_losses} attrition losses.`)
+		log(`France must take ${L.sp_losses + L.track_losses} attrition losses.`)
 		logi(`+${L.sp_losses} SPs`)
-		logi(`+${L.num_losses - L.sp_losses} Tracks`)
+		logi(`+${L.track_losses} Tracks`)
 
-		reset_attrition_data()
-		G.attrition_data.area = G.move.path[G.move.path.length - 1]
-		G.attrition_data.num_losses_remaining = L.num_losses
 		G.active = FRANCE
-		// TODO: Add Exhausting March losses
-		this.done()
-		//call("assign_attrition_losses", { area: G.move.path[G.move.path.length - 1] })
+		call("exhausting_march_assign_attrition_losses", { losses: L.sp_losses + L.track_losses })
 	},
-	_resume() {
-		log_attrition()
-		L.has_assigned = true
-	},
+	_resume() { L.has_assigned = true },
 	done() {
 		push_undo()
-		if (L.num_losses === 0)
+		if (L.sp_losses + L.track_losses === 0)
 			log(`No losses to assign.`)
-		card_box_end()
-		map_delete(G.persistent_events, L.card)
-		G.active = RUSSIA
-		if (has_executable_order(G.active, FORCED_MARCH)) {
+		if (has_executable_order(RUSSIA, FORCED_MARCH)) {
+			G.active = RUSSIA
 			goto("execute_next_order", { type: FORCED_MARCH })
-		} else if (has_executable_order(enemy(G.active), FORCED_MARCH)) {
-			G.active = enemy(G.active)
+		} else if (has_executable_order(FRANCE, FORCED_MARCH)) {
+			G.active = FRANCE
 			goto("execute_next_order", { type: FORCED_MARCH })
 		} else {
+			G.active = RUSSIA
 			log()
 			end()
 		}
+	},
+	_end() {
+		discard_or_remove_card(L.card)
+		card_box_end()
+	}
+}
+
+P.exhausting_march_assign_attrition_losses = {
+	// L.losses
+	prompt() {
+		prompt(`Assign attrition losses in the moving force — ${L.losses} remaining.`)
+		button("exhaust", count_fresh_moving_sps() > 0)
+		button("eliminate_2", count_exhausted_moving_sps() >= 2 || (count_exhausted_moving_sps() === 1 && count_fresh_moving_sps() === 0))
+		if (count_moving_sps() === 0)
+			button_pass()
+	},
+	exhaust() {
+		push_undo()
+		call_or_goto(--L.losses > 0, "exhausting_march_exhaust")
+	},
+	eliminate_2() {
+		push_undo()
+		call_or_goto(--L.losses > 0, "exhausting_march_eliminate")
+	},
+	pass() {
+		push_undo()
+		end()
+	}
+}
+
+P.exhausting_march_exhaust = {
+	prompt() {
+		prompt(`Exhaust a fresh SP at S${G.move.path[G.move.path.length - 1]}.`)
+		for (let type = 0; type < G.move.sps.length; ++type) {
+			if (is_troop_type_fresh(type) && G.move.sps[type] > 0)
+				action_troop_imp(type, G.move.path[G.move.path.length - 1], HALF_STRENGTH, G.move.path[G.move.path.length - 2])
+		}
+	},
+	troop(entry) {
+		push_undo()
+		let type = decode_troop_action_type(entry)
+		let area = decode_troop_action_area(entry)
+		let strength = decode_troop_action_strength(entry)
+		let from = decode_troop_action_from(entry)
+
+		exhaust_troop(G.active, area, type)
+		G.move.sps[type]--
+		G.move.sps[type + 1]++
+
+		let force = map_get(G.moved, area).find(f => f.strength === strength && f.from === from)
+		force.troops[type]--
+		force.troops[type + 1]++
+
+		if (has_battle(area)) {
+			let bforce = get_player_battle_data(G.active, area).forces.find(f => f.strength === strength && f.from === from)
+			bforce.troops[type]--
+			bforce.troops[type + 1]++
+		}
+
+		end()
+	}
+}
+
+P.exhausting_march_eliminate = {
+	_begin() {
+		L.losses_remaining = Math.min(2, count_exhausted_moving_sps())
+	},
+	prompt() {
+		prompt(`Eliminate an exhausted SP at S${G.move.path[G.move.path.length - 1]} — ${L.losses_remaining} remaining.`)
+		for (let type = 0; type < G.move.sps.length; ++type) {
+			if (is_troop_type_exhausted(type) && G.move.sps[type] > 0)
+				action_troop_imp(type, G.move.path[G.move.path.length - 1], HALF_STRENGTH, G.move.path[G.move.path.length - 2])
+		}
+	},
+	troop(entry) {
+		push_undo()
+		let type = decode_troop_action_type(entry)
+		let area = decode_troop_action_area(entry)
+		let strength = decode_troop_action_strength(entry)
+		let from = decode_troop_action_from(entry)
+
+		eliminate_troop(G.active, area, type)
+		G.move.sps[type]--
+
+		let force = map_get(G.moved, area).find(f => f.strength === strength && f.from === from)
+		force.troops[type]--
+
+		if (has_battle(area)) {
+			let bforce = get_player_battle_data(G.active, area).forces.find(f => f.strength === strength && f.from === from)
+			bforce.troops[type]--
+		}
+
+		if (--L.losses_remaining === 0)
+			end()
 	}
 }
 
