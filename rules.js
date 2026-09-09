@@ -6452,8 +6452,12 @@ function add_battle_outflanking(area, connection_origin) {
 }
 
 // TOFIX
-function add_battle_delayed_forces(area, connection_origin) {
-	get_battle_entry(area, null).delayed_forces = connection_origin
+function add_battle_delayed_forces_ru(area, connection_origin) {
+	get_battle_entry(area, null).delayed_forces_ru = connection_origin
+}
+
+function add_battle_delayed_forces_fr(area, connection_origin) {
+	get_battle_entry(area, null).delayed_forces_fr = connection_origin
 }
 
 function set_battle_winner(who, area) {
@@ -6825,16 +6829,24 @@ P.do_combat_value_calculations = function() {
 	const attacker = get_attacker_data(G.current_battle)
 	const attacker_who = get_battle_attacker(G.current_battle)
 	attacker.sps_unaffected_by_events = get_troop_list_by_type(attacker_who, G.current_battle)
-	attacker.forces.forEach(force => {
+
+	for (let force of attacker.forces) {
+		if (is_battle_event_currently_active(C_DELAYED_FORCES_RU) && force.from !== get_battle_entry(G.current_battle).delayed_forces_ru)
+			continue
+		if (attacker_who === RUSSIA && is_battle_event_currently_active(C_DELAYED_FORCES_FR) && force.from === get_battle_entry(G.current_battle).delayed_forces_fr)
+			continue
 		combat_value[attacker_who] += find_combat_value(attacker_who, force)
-	})
+	}
 
 	const defender = get_defender_data(G.current_battle)
 	const defender_who = get_battle_defender(G.current_battle)
 	defender.sps_unaffected_by_events = get_troop_list_by_type(defender_who, G.current_battle)
-	defender.forces.forEach(force => {
+
+	for (let force of defender.forces) {
+		if (defender_who === RUSSIA && is_battle_event_currently_active(C_DELAYED_FORCES_FR) && force.from === get_battle_entry(G.current_battle).delayed_forces_fr)
+			continue
 		combat_value[defender_who] += find_combat_value(defender_who, force)
-	})
+	}
 
 	// RU #28: Poor Coordination
 	if (is_battle_event_currently_active(C_POOR_COORDINATION_RU)) {
@@ -11500,7 +11512,7 @@ P.delayed_forces_ru = {
 				log(`Cancels ${get_card_log_alias(C_OUTFLANKING_FR_1)}.`)
 			if (is_battle_event_active(G.current_battle, C_OUTFLANKING_FR_2))
 				log(`Cancels ${get_card_log_alias(C_OUTFLANKING_FR_2)}.`)
-			add_battle_delayed_forces(G.current_battle, L.designated_connection_from)
+			add_battle_delayed_forces_ru(G.current_battle, L.designated_connection_from)
 			end()
 		}
 	},
@@ -12994,6 +13006,49 @@ E.delayed_forces_fr = function() {
 		(is_battle_defender(RUSSIA, G.current_battle) && (count_num_defender_connections(G.current_battle) > 1))
 }
 
+P.delayed_forces_fr = {
+	_begin() {
+		L.connections_from = []
+		for (let force of get_player_battle_data(RUSSIA, G.current_battle).forces) {
+			if (!set_has(L.connections_from, force.from))
+				set_add(L.connections_from, force.from)
+		}
+		L.designated_connection_from = -1
+		L.has_confirmed_selection = false
+	},
+	prompt() {
+		if (L.designated_connection_from === -1) {
+			prompt_card(C_DELAYED_FORCES_FR, `Designate a connection. All Russian forces entering across that connection fight at X0.`)
+			L.connections_from.forEach(from => action_connection(from, G.current_battle))
+		} else if (!L.has_confirmed_selection) {
+			prompt_card(C_DELAYED_FORCES_FR, `You designated the connection from S${L.designated_connection_from} to S${G.current_battle}.`)
+			button_confirm()
+		} else {
+			prompt_card(C_DELAYED_FORCES_FR, `Cancels ${get_card_log_alias(C_OUTFLANKING_RU)}.`)
+			button_confirm()
+		}
+	},
+	connection(connection_id) {
+		push_undo()
+		L.designated_connection_from = get_other_area(connection_id, G.current_battle)
+	},
+	confirm() {
+		push_undo()
+		if (!L.has_confirmed_selection) {
+			log(`Designated connection from S${L.designated_connection_from} to S${G.current_battle}.`)
+			add_battle_delayed_forces_fr(G.current_battle, L.designated_connection_from)
+
+			if (is_battle_event_active(G.current_battle, C_OUTFLANKING_RU))
+				L.has_confirmed_selected = true
+			else
+				end()
+		} else {
+			log(`Cancels ${get_card_log_alias(C_OUTFLANKING_RU)}.`)
+			end()
+		}
+	}
+}
+
 // FR #33: Napoléon's Marshals
 E.napoleons_marshals = function() { return has_leader_in_battle(FRANCE, G.current_battle) }
 
@@ -13840,7 +13895,6 @@ function assert_lone_leaders() {
 		}
 	}
 }
-
 
 // === COMMON FRAMEWORK - DO NOT EDIT ===
 function log(s) {
