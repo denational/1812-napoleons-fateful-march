@@ -7802,10 +7802,15 @@ P.determine_battle_winner = function() {
 		log(`${ROLES[winner]} won!`)
 		log()
 
-		if (can_play_event(C_STUBBORN_REARGUARD_RU) && (winner === FRANCE))
-			goto("may_play_stubborn_rearguard_ru")
-		else
+		if (
+			(winner === RUSSIA) && can_play_event(C_STUBBORN_REARGUARD_FR)
+			|| (winner === FRANCE) && can_play_event(C_STUBBORN_REARGUARD_RU)
+		) {
+			G.active = enemy(winner)
+			goto("may_play_stubborn_rearguard")
+		} else {
 			goto("pursuit")
+		}
 	}
 }
 
@@ -10776,31 +10781,32 @@ P.city_ablaze = {
 }
 
 // RU #23: Stubborn Rearguard
-P.may_play_stubborn_rearguard_ru = {
+// FR #30: Stubborn Rearguard
+P.may_play_stubborn_rearguard = {
 	_begin() {
-		G.active = RUSSIA
+		L.card = get_battle_loser(G.current_battle) === RUSSIA ? C_STUBBORN_REARGUARD_RU : C_STUBBORN_REARGUARD_FR
 	},
 	prompt() {
-		if (hand_has(RUSSIA, C_STUBBORN_REARGUARD_RU)) {
-			prompt(`You may play ${get_card_log_alias(C_STUBBORN_REARGUARD_RU)} to cancel any losses from pursuit after this battle.`)
-			action_card(C_STUBBORN_REARGUARD_RU)
+		if (hand_has(G.active, L.card)) {
+			prompt(`You may play ${get_card_log_alias(L.card)} to cancel any losses from pursuit after this battle.`)
+			action_card(L.card)
 		} else {
-			prompt(`You do not have ${get_card_log_alias(C_STUBBORN_REARGUARD_RU)} in hand.`)
+			prompt(`You do not have ${get_card_log_alias(L.card)} in hand.`)
 			button_pass()
 		}
 	},
 	card(card) {
 		push_undo()
-		goto("event", { card })
+		goto("stubborn_rearguard", { card })
 	},
 	pass() {
-		goto("pursuit", { winner: FRANCE })
+		goto("pursuit", { winner: enemy(G.active) })
 	}
 }
 
-P.stubborn_rearguard_ru = {
+P.stubborn_rearguard = {
 	prompt() {
-		prompt_card(C_STUBBORN_REARGUARD_RU, "Cancel any losses from pursuit in this battle. (cannot be undone)")
+		prompt_card(L.card, "Cancel any losses from pursuit in this battle. (cannot be undone)")
 		button_confirm()
 	},
 	confirm() {
