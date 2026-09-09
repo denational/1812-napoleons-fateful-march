@@ -1017,6 +1017,14 @@ function get_troop_list_by_type(who, area) {
 	return list
 }
 
+function has_sp_of_type(who, type, area) {
+	if (!has_troop(area)) return false
+	return get_area_troop_set(area).some(entry => {
+		return decode_troop_entry_who(entry) === who
+		&& decode_troop_entry_type(entry) === type
+	})
+}
+
 function get_move_strength(move_type) {
 	if (move_type === FORCED_MARCH)
 		return HALF_STRENGTH
@@ -3352,10 +3360,6 @@ P.play_card_for_orders = {
 }
 
 /*
-	Basic rules:
-		First, the non-initiative player declares if he wants to play any events along with his OPS card and
-		place the chosen event(s) face up on the table, and then the player with the Initiative does the same. (p. 9)
-
 	Events:
 		RUSSIA
 			1  Well-Disciplined Retreat
@@ -3378,7 +3382,6 @@ P.play_card_for_orders = {
 			17 Davout Takes Command
 			19 IX Corps Arrives
 			20 XI Corps Arrives
-
 */
 
 P.play_events_with_ops_card = {
@@ -3403,23 +3406,18 @@ P.play_events_with_ops_card = {
 			button_done()
 		}
 	},
-	card(c) {
+	card(card) {
 		push_undo()
-		L.active_card = c
-		call("event", { card: c })
-	},
-	_resume() {
-		array_delete_item(L.events_could_be_played, L.active_card)
+		array_delete_item(L.events_could_be_played, card)
 		L.has_played_event = true
+		call("event", { card: card })
 	},
 	pass() {
 		if (!L.has_played_event)
 			log(`${ROLES[G.active]} did not play events.`)
 		end()
 	},
-	done() {
-		this.pass()
-	}
+	done() { this.pass() }
 }
 
 //=== 3. CHOOSE ORDERS ===
@@ -3450,26 +3448,28 @@ function calculate_num_orders() {
 	return orders
 }
 
-function find_forbidden_orders() { //Being proactive here, maybe rollback later?
-	let forbidden_orders = [[], []]
+function find_forbidden_orders(who) {
+	let forbidden_orders = []
 
-	// RU #45: Russia may not use 'Place Depot' orders.
-	if (is_event_active(C_POOR_LOGISTICS)) {
-		L.forbidden_orders[RUSSIA].push(PLACE_DEPOT)
+	// RU #45 Poor Logistics: Russia may not use 'Place Depot' orders.
+	if (who === RUSSIA && is_event_active(C_POOR_LOGISTICS))
+		set_add(forbidden_orders, PLACE_DEPOT)
+
+	// FR #41 Freezing Weather: France may not use 'Place Depot' or 'Forage' orders.
+	if (who === FRANCE && is_event_active(C_FREEZING_WEATHER)) {
+		set_add(forbidden_orders, PLACE_DEPOT)
+		set_add(forbidden_orders, FORAGE)
 	}
 
-	// FR #41: France may not use 'Place Depot' or 'Forage' orders.
-	if (is_event_active(C_FREEZING_WEATHER)) {
-		L.forbidden_orders[FRANCE].push(PLACE_DEPOT, FORAGE)
-	}
-
-	// FR #42: Neither side may use 'Forced March' orders.
-	if (is_event_active(C_EXTREME_WEATHER_FR)) {
-		L.forbidden_orders[RUSSIA].push(FORCED_MARCH)
-		L.forbidden_orders[FRANCE].push(FORCED_MARCH)
-	}
+	// FR #42 Extreme Weather: Neither side may use 'Forced March' orders.
+	if (is_event_active(C_EXTREME_WEATHER_FR))
+		set_add(forbidden_orders, FORCED_MARCH)
 
 	return forbidden_orders
+}
+
+function is_order_forbidden(who, type) {
+	return set_has(find_forbidden_orders(who), type)
 }
 
 /*
@@ -3610,7 +3610,7 @@ P.select_orders = {
 			else if (set_has(L.already_selected, MARCH))
 				prompt("French Logistic Preparations: Select 1 Place Depot order.")
 			else
-				prompt(`French Logistic Preparations: Select 1 Place Depot and 1 March order.`) //TODO: Modify prompt dynamically
+				prompt(`French Logistic Preparations: Select 1 Place Depot and 1 March order.`)
 
 			for (let order = get_first_order(R); order <= get_last_order(R); ++order)
 				if (!get_selected_orders(R).includes(order) && (get_order_type(order) === PLACE_DEPOT || get_order_type(order) === MARCH) && !set_has(L.already_selected[R], get_order_type(order)))
@@ -3732,7 +3732,7 @@ P.select_orders = {
 }
 
 //=== 4. PLACE ORDERS ===
-//TODO: Allow alternating placing orders (implementing simultaneous optional rule as default for expediency)
+// TODO: Allow alternating placing orders (implementing simultaneous optional rule as default for expediency)
 P.place_orders = script(`
 	log "@Place Orders"
 
@@ -3740,7 +3740,7 @@ P.place_orders = script(`
 	if (is_event_active(C_COMMAND_FRICTION)) {
 		call command_friction
 	}
-	call place_orders_events { time: "beginning" }
+	call begin_place_orders_events
 
 	set G.active [RUSSIA, FRANCE]
 	call do_place_orders
@@ -3749,39 +3749,33 @@ P.place_orders = script(`
 	if (is_event_active(C_POOR_COMMUNICATIONS)) {
 		call poor_communications
 	}
-	call place_orders_events { time: "end" }
+	goto end_place_orders_events
 `)
 
-// Common state for events that could be played at the beginning of place orders or end of place orders
-// The structure is identical, just the list of events that could be played vary and the player taking actions (beginning: FRANCE, end: RUSSIA)
-P.place_orders_events = {
+P.begin_place_orders_events = {
 	_begin() {
-		//L.time
-		L.events = (L.time === "beginning") ? [C_INFIGHTING_AND_INTRIGUE, C_LETHARGIC_PURSUIT] : [C_NEW_POSTING, C_EXHAUSTED_HORSES, C_DISORDERLY_MARCH]
-		L.playable_events = L.events.filter(card => can_play_event(card) && hand_has(G.active, card))
-		L.has_played_event = false
+		L.events = [C_INFIGHTING_AND_INTRIGUE, C_LETHARGIC_PURSUIT].filter(card => can_play_event(card) && hand_has(G.active, card))
 	},
 	prompt() {
-		if (L.playable_events.length > 0) {
-			prompt(`You may play events (${L.events.map(card => get_card_log_alias(card)).join(", ")}).`)
-			L.playable_events.forEach(card => action_card(card))
+		if (L.events.length > 0) {
+			prompt(`You may play ${join_array_with_or(L.events.map(card => `${get_card_log_alias(card)}`))}.`)
+			L.events.forEach(action_card)
+			if (L.events.length === 1)
+				button("play")
 			button_pass()
 		} else {
-			if (L.has_played_event)
-				prompt("Play Events: All done.")
-			else
-				prompt(`You do not have ${join_array_with_or(L.events.map(card => get_card_log_alias(card, NONE)))}.`)
-			button_done()
+			prompt(`Play Events — All done.`)
+			button_confirm()
 		}
 	},
-	card(c) {
+	play() { this.card(L.events[0]) },
+	pass() { this.confirm() },
+	confirm() { end() },
+	card(card) {
 		push_undo()
-		L.has_played_event = true
-		set_delete(L.playable_events, c)
-		call("event", { card: c })
-	},
-	pass() { end() },
-	done() { end() }
+		set_delete(L.events, card)
+		call("event", { card })
+	}
 }
 
 P.do_place_orders = {
@@ -3908,6 +3902,32 @@ P.do_place_orders = {
 
 			end()
 		}
+	}
+}
+
+P.end_place_orders_events = {
+	_begin() {
+		L.events = [C_NEW_POSTING, C_EXHAUSTED_HORSES, C_DISORDERLY_MARCH].filter(card => can_play_event(card) && hand_has(G.active, card))
+	},
+	prompt() {
+		if (L.events.length > 0) {
+			prompt(`You may play ${join_array_with_or(L.events.map(card => `${get_card_log_alias(card)}`))}.`)
+			L.events.forEach(action_card)
+			if (L.events.length === 1)
+				button("play")
+			button_pass()
+		} else {
+			prompt(`Play Events — All done.`)
+			button_confirm()
+		}
+	},
+	play() { this.card(L.events[0]) },
+	pass() { this.confirm() },
+	confirm() { end() },
+	card(card) {
+		push_undo()
+		set_delete(L.events, card)
+		call("event", { card })
 	}
 }
 
@@ -11410,10 +11430,136 @@ P.command_friction = {
 }
 
 // RU #43: Exhausted Horses
-P.exhausted_horses = { //TODO
+function exhausted_horses_could_exhaust() {
+	return get_areas_with_sps(FRANCE).some(area => count_num_sps_of_type(FRANCE, FRESH_CAVALRY, area) > 0)
+}
+
+function exhausted_horses_could_eliminate() {
+	let count = 0
+	for (let area of get_areas_with_sps(FRANCE)) {
+		count += count_num_sps_of_type(FRANCE, EXHAUSTED_CAVALRY, area)
+		if (count >= 2 || (count === 1 && !exhausted_horses_could_exhaust()))
+			return true
+	}
+	return false
+}
+
+function count_num_exhausted_cavalry_on_map(who) {
+	let count = 0
+	for (let area of get_areas_with_sps(who))
+		count += count_num_sps_of_type(who, EXHAUSTED_CAVALRY, area)
+	return count
+}
+
+P.exhausted_horses = {
+	prompt() {
+		if (G.active === RUSSIA)
+			prompt(`Confirm playing ${get_card_log_alias(C_EXHAUSTED_HORSES)}? (cannot be undone)`)
+		else
+			prompt(`French forces have a maximum move of 1 this turn, regardless of type/orders.`)
+
+		button_confirm()
+	},
+	confirm() {
+		if (G.active === RUSSIA) {
+			G.active = FRANCE
+			call("exhausted_horses_assign_attrition_losses")
+		} else {
+			log(`French forces have a maximum move of 1 this turn.`)
+			G.active = RUSSIA
+			end()
+		}
+	}
+}
+
+P.exhausted_horses_assign_attrition_losses = {
 	_begin() {
-		log("TODO")
+		L.has_assigned_attrition_losses = false
+		L.losses_remaining = 2
+	},
+	prompt() {
+		prompt(`Assign attrition losses — ${L.losses_remaining} remaining.`)
+		let any = false
+		if (exhausted_horses_could_exhaust()) {
+			any = true
+			button("exhaust")
+		}
+		if (exhausted_horses_could_eliminate()) {
+			any = true
+			button("eliminate_2")
+		}
+		if (!any)
+			button_pass()
+	},
+	exhaust() {
+		push_undo()
+		call_or_goto(--L.losses_remaining > 0, "exhausted_horses_exhaust")
+	},
+	eliminate_2() {
+		push_undo()
+		call_or_goto(--L.losses_remaining > 0, "exhausted_horses_eliminate")
+	},
+	pass() {
+		push_undo()
+		log(`No Cavalry SPs on map.`)
 		end()
+	},
+	confirm() {
+		push_undo()
+		end()
+	}
+}
+
+P.exhausted_horses_exhaust = {
+	_begin() {
+		log("Exhausted")
+		L.areas = get_areas_with_sps(FRANCE).filter(area => has_sp_of_type(FRANCE, FRESH_CAVALRY, area))
+	},
+	prompt() {
+		prompt(`Exhaust a fresh Cavalry SP.`)
+		if (L.areas.length <= 5)
+			add_to_prompt(` (${join_array_with_or(L.areas.map(area => `S${area}`))})`)
+
+		L.areas.forEach(area => action_troop_imp(FRESH_CAVALRY, area))
+	},
+	troop(entry) {
+		push_undo()
+		let type = decode_troop_action_type(entry)
+		let area = decode_troop_action_area(entry)
+		exhaust_troop(FRANCE, area, type)
+		logi(`S${area}`)
+		log_masked(FRANCE, `^1 ${get_troop_type_name(type)}`, `^1 fresh SP`)
+		end()
+	}
+}
+
+P.exhausted_horses_eliminate = {
+	_begin() {
+		log("Eliminated")
+		L.num_sps_to_eliminate = Math.min(2, count_num_exhausted_cavalry_on_map(FRANCE))
+		L.areas = get_areas_with_sps(FRANCE).filter(area => has_sp_of_type(FRANCE, EXHAUSTED_CAVALRY, area))
+	},
+	prompt() {
+		prompt(`Eliminate exhausted Cavalry SPs — ${L.num_sps_to_eliminate} remaining.`)
+		if (L.areas.length <= 5)
+			add_to_prompt(` (${join_array_with_or(L.areas.map(area => `S${area}`))})`)
+
+		L.areas.forEach(area => action_troop_imp(EXHAUSTED_CAVALRY, area))
+	},
+	troop(entry) {
+		push_undo()
+		let type = decode_troop_action_type(entry)
+		let area = decode_troop_action_area(entry)
+		eliminate_troop(FRANCE, area, type)
+		logi(`S${area}`)
+		log_masked(FRANCE, `^1 ${get_troop_type_name(type)}`, `^1 Exh. SP`)
+
+		if (--L.num_sps_to_eliminate === 0) {
+			end()
+		} else {
+			if (!has_sp_of_type(FRANCE, EXHAUSTED_CAVALRY, area))
+				array_delete_item(L.areas, area)
+		}
 	}
 }
 
