@@ -791,11 +791,18 @@ function on_update() {
 		populate("hand", 0, "card", c)
 	}
 
-	if (V.played_cards) {
-		update_panel_show("table", 0, V.played_cards[R].length > 0)
-		if (V.played_cards[R].length > 0)
-			for (let c of V.played_cards[R])
-				populate("table", 0, "card", c)
+	if (V.played_cards || V.committed_cards || V.num_enemy_committed_cards > 0) {
+		update_panel_show("table", 0, (V.played_cards && V.played_cards[R].length > 0) || (V.committed_cards && V.committed_cards.length > 0) || (V.num_enemy_committed_cards > 0))
+		if (V.played_cards && V.played_cards[R].length > 0) {
+			for (let card of V.played_cards[R])
+				populate("table", 0, "card", card)
+		}
+		if (V.num_enemy_committed_cards > 0)
+			populate_generic("table", 0, `card card_back_${get_abbreviation(get_opponent(R))}`, V.num_enemy_committed_cards)
+		if (V.committed_cards && V.committed_cards.length > 0) {
+			for (let card of V.committed_cards)
+				populate("table", 0, "card", card)
+		}
 	}
 
 	update_panel_show("leaders", RUSSIA, false)

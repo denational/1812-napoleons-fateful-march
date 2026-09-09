@@ -570,6 +570,9 @@ body.hide-pieces .troop { display: none }
 		drop-shadow(2px 0 0 yellow)
 }
 
+.card_back_ru {background-image: url(cards/ru/card_back_ru.png);}
+.card_back_fr {background-image: url(cards/fr/card_back_fr.png);}
+
 /* See gencardscss.js in /tools */
 .card_0{background-image: url(cards/ru/card_00.png);}
 .card_1{background-image: url(cards/ru/card_01.png);}

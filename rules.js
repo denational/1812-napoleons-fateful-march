@@ -1406,6 +1406,8 @@ function on_view() {
 	V.turn = (G.turn === undefined) ? G.start_turn : G.turn
 	V.vp = G.vp
 	V.played_cards = G.played_cards ?? [[], []]
+	V.committed_cards = G.committed_cards?.[R] ?? []
+	V.num_enemy_committed_cards = G.committed_cards[enemy(R)]?.length ?? 0
 	V.orders = G.orders.slice(get_first_order(R), get_last_order(R) + 1) ?? []
 	V.enemy_orders = G.orders.slice(get_first_order(enemy(R)), get_last_order(enemy(R)) + 1)?.filter(loc => loc !== POOL) ?? []
 	V.selected_orders = (G.selected_orders) ? G.selected_orders[R] : []
@@ -1524,7 +1526,10 @@ function on_setup(scenario, options) {
 	G.depots = new Array(NUM_DEPOTS_RU + NUM_DEPOTS_FR).fill(POOL)
 	G.devastation = new Array(NUM_AREAS).fill(0)
 
+	// Cards on the table that will be showed to all roles
 	G.played_cards = [[], []]
+	// Roles that are not the player will see the number, but not the identity of committed cards.
+	G.committed_cards = [[], []]
 	G.persistent_events = []
 
 	G.orders = [null, ...(new Array(NUM_ORDERS).fill(POOL))]
@@ -3280,11 +3285,17 @@ function get_who_has_initiative() {
 	return (G.initiative > 0) ? FRANCE : RUSSIA
 }
 
-/*
-	At the beginning of each new Turn, each player plays a card to increase the number of orders for that turn by its OPS value.
-	If a player doesn’t want to use a card for extra orders, he uses his Dummy card to hide this intention from his opponent.
-	Players then simultaneously flip their chosen card revealing it to the opponent. (p. 9)
-*/
+function commit_card(card) {
+	set_add(G.committed_cards[get_card_owner(card)], card)
+}
+
+function reveal_committed_cards(player, add_to_table = false) {
+	for (let card of G.committed_cards[player]) {
+		if (add_to_table)
+			set_add(G.played_cards[player], card)
+	}
+	set_clear(G.committed_cards[player])
+}
 
 P.play_card_for_orders = {
 	_begin() {
@@ -3294,38 +3305,43 @@ P.play_card_for_orders = {
 	prompt() {
 		if (L.played_card[R] === -1) {
 			prompt("Play a card for additional orders, or play a Dummy.")
-			get_hand(R).forEach(card => action_card(card))
+			get_hand(R).forEach(action_card)
 		} else {
 			prompt(`You played ${get_card_log_alias(L.played_card[R])} for ${L.ops_played[R]} additional orders.`)
+			action_card(L.played_card[R])
 			button_confirm()
 			button_undo()
 		}
 	},
 	card(card) {
-		L.played_card[R] = card
-		L.ops_played[R] = get_card_ops(card)
-		discard_card(card)
+		if (L.played_card[R] === -1) {
+			L.played_card[R] = card
+			L.ops_played[R] = get_card_ops(card)
+			commit_card(card)
+			discard_card(card)
+		} else {
+			this.undo()
+		}
 	},
 	undo() {
-		if (is_card_dummy(L.played_card[R]))
-			return_dummy_to_hand(R)
-		else
-			add_to_hand(R, L.played_card[R])
+		add_to_hand(R, L.played_card[R])
+		set_delete(G.committed_cards[R], L.played_card[R])
+		set_delete(G.discard[R], L.played_card[R])
 
 		L.played_card[R] = -1
 		L.ops_played[R] = -1
 	},
 	confirm() {
 		set_delete(G.active, R)
-		if (is_card_dummy(L.played_card[R])) {
-			return_dummy_to_hand(R)
-		} else {
-			discard_card(L.played_card[R])
-		}
 
 		if (G.active.length === 0) {
 			log()
 			for (let who = RUSSIA; who <= FRANCE; ++who) {
+				if (is_card_dummy(L.played_card[who]))
+					return_dummy_to_hand(who)
+				else
+					discard_card(L.played_card[who])
+				reveal_committed_cards(who)
 				log(`${get_card_log_alias(L.played_card[who])}: +${L.ops_played[who]} orders`)
 			}
 			log()
@@ -3380,10 +3396,10 @@ P.play_events_with_ops_card = {
 			L.events_could_be_played.forEach(card => action_card(card))
 			button_pass()
 		} else if (L.has_played_event) {
-			prompt("No more eligible events can be played.")
+			prompt(`Play Events with OPs card — All done.`)
 			button_done()
 		} else {
-			prompt("No eligible events can be played.")
+			prompt("You do not have any events that can be played with your OPs card.")
 			button_done()
 		}
 	},
