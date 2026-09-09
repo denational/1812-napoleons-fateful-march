@@ -7435,7 +7435,7 @@ P.assign_losses = {
 					prompt_card(C_NAPOLEONS_MARSHALS, `Rally an exhausted SP at S${G.current_battle}.`)
 					get_player_battle_data(FRANCE, G.current_battle).forces.forEach(force => {
 						for (let type = 0; type < force.troops.length; ++type) {
-							if (is_troop_type_exhausted(type))
+							if (force.troops[type] > 0)
 								action_troop_imp(type, G.current_battle, force.strength, force.from)
 						}
 					})
@@ -7895,8 +7895,11 @@ P.assign_pursuit_losses = {
 		} else {
 			prompt(`Pursuit: Eliminate ${L.difference} SPs at S${G.current_battle}.`)
 			get_player_battle_data(R, G.current_battle).forces.forEach(force => {
-				for (let type = 0; type < force.troops.length; ++type)
-					action_troop_imp(type, G.current_battle, force.strength, force.from)
+				for (let type = 0; type < force.troops.length; ++type) {
+					if (force.troops[type] > 0)
+						action_troop_imp(type, G.current_battle, force.strength, force.from)
+				}
+
 			})
 		}
 	},
@@ -8335,8 +8338,16 @@ P.retreat = script(`
 
 P.select_retreat_destination = {
 	_begin() {
-		L.has_valid_retreat_destination = has_retreat_destination(G.active, G.current_battle)
-		L.retreat_destinations = get_valid_retreat_destinations(G.active, G.current_battle, !L.has_valid_retreat_destination)
+		if (G.active === FRANCE && is_battle_event_currently_active(C_NEYS_ESCAPE)) {
+			L.has_valid_retreat_destination = get_all_adjacent_areas(G.current_battle).some(area => !has_enemy_sp(FRANCE, area))
+			if (L.has_valid_retreat_destination)
+				L.retreat_destinations = get_all_adjacent_areas(G.current_battle).filter(area => !has_russian_sp(area))
+			else
+				L.retreat_destinations = get_valid_retreat_destinations(G.active, G.current_battle, !L.has_valid_retreat_destination)
+		} else {
+			L.has_valid_retreat_destination = has_retreat_destination(G.active, G.current_battle)
+			L.retreat_destinations = get_valid_retreat_destinations(G.active, G.current_battle, !L.has_valid_retreat_destination)
+		}
 	},
 	prompt() {
 		prompt(`Select a destination to retreat from S${G.current_battle}.`)
@@ -8395,9 +8406,8 @@ P.select_retreat_force = {
 		L.leaders = get_leaders_at_area(G.active, G.current_battle)
 		L.sps = get_evade_sps(G.active, G.current_battle)
 
-		L.retreat_destinations = []
-		if (!has_enemy_sp(G.active, L.destination))
-			L.retreat_destinations = find_retreat_destinations(G.active, G.current_battle)
+		L.has_valid_retreat_destination = has_retreat_destination(G.active, G.current_battle)
+		L.retreat_destinations = get_valid_retreat_destinations(G.active, G.current_battle, !L.has_valid_retreat_destination)
 
 		L.num_sps_selected = 0
 
@@ -8507,8 +8517,6 @@ P.select_retreat_force = {
 }
 
 P.do_retreat = function() {
-	let battle_data = get_player_battle_data(G.active, L.area)
-
 	logi(`to S${L.destination}`)
 
 	for (let leader of G.move.leaders)
@@ -8519,10 +8527,8 @@ P.do_retreat = function() {
 			for (let type = 0; type < sps.length; ++type) {
 				if (sps[type] > 0) {
 					move_troop(G.active, G.current_battle, L.destination, type, sps[type])
-					for (let entry of battle_data.forces) {
-						if (entry.from === origin && entry.strength === strength)
-							entry.troops[type] -= sps[type]
-					}
+					let force = get_player_battle_data(G.active, G.current_battle).forces.find(f => f.from === origin && f.strength === strength)
+					force.troops[type] -= sps[type]
 				}
 			}
 		})

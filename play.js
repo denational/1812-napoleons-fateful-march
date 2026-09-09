@@ -597,11 +597,12 @@ function toggle_troop_type_exhaustion(type) {
 		return type - 1
 }
 
-function populate_half_strength(player, parent_id, count = 1) {
+function populate_half_strength(player, parent_id, half_strength = true, count = 1) {
 	populate_generic("troop", parent_id, `half_strength_${get_abbreviation(player)}`, count)
 
 	let troop = lookup_troop(parent_id)
-	troop.my_strength = HALF_STRENGTH
+	if (half_strength)
+		troop.my_strength = HALF_STRENGTH
 }
 
 function populate_troop(player, type, parent_action, parent_id) {
@@ -1150,9 +1151,9 @@ function update_troops() {
 							}
 
 							if (force.strength === HALF_STRENGTH && (is_battle_attacker(player, area) && has_bridge(force.from, area)))
-								populate_half_strength(player, get_used(player, type), 2)
+								populate_half_strength(player, get_used(player, type), true, 2)
 							else if ((force.strength === HALF_STRENGTH || (is_battle_attacker(player, area) && has_bridge(force.from, area))))
-								populate_half_strength(player, get_used(player, type))
+								populate_half_strength(player, get_used(player, type), force.strength === HALF_STRENGTH)
 
 							if (!map_has(troop_nums, get_used(player, type)))
 								map_set(troop_nums, get_used(player, type), force.troops[type] - num_moving)
