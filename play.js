@@ -21,6 +21,7 @@ const FIRST_AREA = 1
 const LAST_AREA = 156
 
 // Some useful areas
+const HIDDEN = -2
 const OUT_OF_PLAY = -1
 const POOL = 0
 const FRENCH_CASUALTIES = 157
@@ -730,7 +731,7 @@ function on_init() {
 	define_card_list("card", 0, 107, "card_")
 
 	/* DEVASTATION/DEPOTS */
-	define_marker_list("devastation", 0, 80)
+	define_marker_list("devastation", 0, NUM_AREAS - 1)
 	define_marker_list("depot", 0, 13, "ru")
 	define_marker_list("depot", 14, 20, "fr")
 	define_marker_list("attrition_checked", 0, 80)
@@ -959,7 +960,7 @@ function has_battle(area) {
 }
 
 function get_battle_entry(area, fallback) {
-	return map_get(G.battles, area, fallback)
+	return map_get(V.battles, area, fallback)
 }
 
 function get_battle_attacker(area) {
@@ -1035,6 +1036,7 @@ function update_leaders() {
 	for (let leader = V.leaders.length - 1; leader >= 0; --leader) {
 		let location = get_leader_location(leader)
 		switch(location) {
+		case HIDDEN: break
 		case OUT_OF_PLAY:
 			populate((get_leader_owner(leader) === RUSSIA) ? "fr_pool_leaders" : "ru_pool_leaders", 0, "leader", leader)
 			break
@@ -1079,8 +1081,8 @@ function has_bridge(from, to) {
 }
 
 function update_troops() {
-	// V.troops is a plain array map keyed by area and each value contains a set of bitpacked troop entries
-	map_for_each(V.troops, (area, entries) => {
+	// V.sps is a plain array map keyed by area and each value contains a set of bitpacked troop entries
+	map_for_each(V.sps, (area, entries) => {
 		for (let entry of entries) {
 			// Unravel bitmasks
 			let player = decode_troop_entry_who(entry)
@@ -1115,7 +1117,7 @@ function update_troops() {
 								update_position("move", 0, move_offset_x(area), move_offset_y(area))
 								update_troop_exhaustion(get_used(player, type), is_fresh(type) ? FRESH : EXHAUSTED)
 
-								if (R === player || (R !== player && G.move.leaders.length === 0))
+								if (R === player || (R !== player && V.move.leaders.length === 0))
 									populate_troop(player, type, "move", 0)
 
 								lookup_troop(get_used(player, type)).my_area = area
@@ -1192,19 +1194,19 @@ function update_troops() {
 						update_position("move", 0, move_offset_x(area), move_offset_y(area))
 						update_troop_exhaustion(get_used(player, type), is_fresh(type) ? FRESH : EXHAUSTED)
 
-						if (R === player || (R !== player && G.move.leaders.length === 0))
+						if (R === player || (R !== player && V.move.leaders.length === 0))
 							populate_troop(player, type, "move", 0)
 
 						lookup_troop(get_used(player, type)).my_area = area
-						if (G.move.path.length >= 2)
-							lookup_troop(get_used(player, type)).my_from = G.move.path[G.move.path.length - 2]
+						if (V.move.path.length >= 2)
+							lookup_troop(get_used(player, type)).my_from = V.move.path[V.move.path.length - 2]
 						else
 							lookup_troop(get_used(player, type)).my_from = POOL
 						lookup_troop(get_used(player, type)).am_moving = 1
 
-						num_moved += G.move.sps[type]
+						num_moved += V.move.sps[type]
 						if (!map_has(troop_nums, get_used(player, type)))
-							map_set(troop_nums, get_used(player, type), G.move.sps[type])
+							map_set(troop_nums, get_used(player, type), V.move.sps[type])
 						incr_used(player, type)
 					}
 				}
@@ -1247,15 +1249,10 @@ function update_depots() {
 }
 
 function update_devastation() {
-	let num_devastated = 0
-	for (let dev = 1; dev < V.devastation.length; ++dev) {
-		if (Number(V.devastation[Number(dev)]) > 0) {
-			populate("area", Number(dev), "devastation", num_devastated)
-			update_keyword("devastation", num_devastated, `lvl${V.devastation[dev]}`)
-
-			num_devastated++
-		}
-	}
+	map_for_each(V.devastation, (area, amount) => {
+		populate("area", area, "devastation", area)
+		update_keyword("devastation", area, `lvl${amount}`)
+	})
 }
 
 function update_orders() {
