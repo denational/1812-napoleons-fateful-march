@@ -751,6 +751,16 @@ function get_seniormost_leader(who, area) {
 	return -1
 }
 
+function get_areas_with_leaders(who) {
+	let areas = []
+	for (let leader = get_first_leader(who); leader <= get_last_leader(who); ++leader) {
+		let location = get_leader_location(leader)
+		if (location !== POOL && location !== OUT_OF_PLAY && !set_has(areas, location))
+			set_add(areas, location)
+	}
+	return areas
+}
+
 function is_seniormost_leader(leader, area) {
 	return get_seniormost_leader(get_leader_faction(leader), area) === leader
 }
@@ -1208,12 +1218,16 @@ function find_connection(a, b) {
 //=== STATE-MANIPULATING FUNCTIONS ===
 /* VP */
 function sudden_death() {
-	log_h1("Sudden Death")
 	if (G.vp >= 20) {
+		log_h1("Sudden Death")
 		finish(FRANCE, `Sudden Death: France won with ${Math.abs(G.vp)} VP.`)
-	} else {
+		return true
+	} else if (G.vp <= -20) {
+		log_h1("Sudden Death")
 		finish(RUSSIA, `Sudden Death: Russia won with ${Math.abs(G.vp)} VP.`)
+		return true
 	}
+	return false
 }
 
 function increase_vp(who, amount = 1) {
@@ -2330,10 +2344,10 @@ function is_france_within_two_areas_of_moscow() {
 	}
 
 	if (does_france_gain_vp()) {
-		log(`France has an SP within two areas of Moscow.`)
+		log(`France has a fresh Infantry SP within two areas of Moscow.`)
 		increase_vp(FRANCE, 1)
 	} else {
-		log(`France does not have an SP within two areas of Moscow.`)
+		log(`France does not have a fresh Infantry SP within two areas of Moscow.`)
 	}
 }
 
@@ -2797,9 +2811,10 @@ P.end_turn = function() {
 	//Reset orders
 	log("Removed all orders.")
 	G.orders_by_type = Array.from({ length: NUM_ORDER_TYPES }, () => [[], []])
-	for (let order = FIRST_ORDER; order <= LAST_ORDER; ++order)
+	for (let order = FIRST_ORDER; order <= LAST_ORDER; ++order) {
 		if (get_order_location(order) !== POOL || get_order_location(order) !== OUT_OF_PLAY)
 			G.orders[order] = POOL
+	}
 
 	if (is_event_active(C_HOLY_MOTHER_RUSSIA_RU)) {
 		let key_controller = is_fr_controlled(map_get(G.persistent_events, C_HOLY_MOTHER_RUSSIA_RU).area) ? FRANCE: RUSSIA
@@ -2812,17 +2827,15 @@ P.end_turn = function() {
 		increase_vp(FRANCE, get_current_season() == SUMMER ? 1 : 2)
 	}
 
-	if (Math.abs(G.vp) < 20) {
-		let events_to_clear = []
-		map_for_each(G.persistent_events, (evt, info) => {
-			if (info.remove === G.turn)
-				set_add(events_to_clear, evt)
-		})
-		events_to_clear.forEach(evt => map_delete(G.persistent_events, evt))
+	let events_to_clear = []
+	map_for_each(G.persistent_events, (evt, info) => {
+		if (info.remove === G.turn)
+			set_add(events_to_clear, evt)
+	})
+	events_to_clear.forEach(evt => map_delete(G.persistent_events, evt))
+
+	if (!sudden_death())
 		end()
-	} else {
-		sudden_death()
-	}
 }
 
 //=== 1. DRAW CARD TO HAND ===
@@ -4883,7 +4896,7 @@ function can_alexander_be_babysitted(evade = false) {
 	if (!set_has(leaders, L_ALEXANDER)) return true
 
 	// Alexander may not move alone if there are other leaders in the area
-	if (G.move.leaders.length === 1 && set_has(G.move.leaders, L_ALEXANDER) && leaders.length > 0)
+	if (G.move.leaders.length === 1 && set_has(G.move.leaders, L_ALEXANDER) && leaders.length > 1)
 		return false
 
 	// No leader may willingly leave Alexander behind without a handler
@@ -5165,11 +5178,10 @@ function get_movable_areas_in_radius(source, radius, callback = function(area) {
 	return areas
 }
 
+// Returns the possible areas a force could move to. See get_lone_alexander_destinations() for handling of Alexander's automatic move in case he is alone.
 // NOTE: Brian rules that Evasive Maneuvers takes precedence over (and basically cancels) Infighting & Intrigue
 // Brian's ruling: "Evasive Maneuvres is placed last and thus takes precedence :)"
-// I have assumed the same applies for Bagration's Retreat vs. Infighting & Intrigue, since Bagration's Retreat is played after Infighting & Intrigue
-
-// TODO: Alexander must move towards the closest Russian leader if he doesn't have a babysitter
+// I have assumed the same applies for Bagration's Retreat vs. Infighting & Intrigue, since Bagration's Retreat is played after Infighting & Intrigu
 function get_move_destinations(current_area, allowance) {
 	// RU #4 Evasive Maneuvers: Russia may not end moves in, or adjacent to areas with French SPs
 	if (is_event_active(C_EVASIVE_MANEUVERS) && G.active === RUSSIA && G.move.type === FORCED_MARCH) {
@@ -5212,6 +5224,46 @@ function get_move_destinations(current_area, allowance) {
 	}
 }
 
+// If Alexander I is alone without a handler, move him towards the closest Russian leader.
+// This is NOT in the rules.
+// See https://boardgamegeek.com/thread/3743026/fairly-basic-clarification-on-alexanders-stacking for Brian's ruling. This is the basis on which I have implemented this rule.
+// Since it is tricky and (well beyond the game's scope) to force other leaders to move toward Alexander if he is alone, I have only enforced that Alexander must move towards the cloest Russian leader.
+
+function find_closest_destination_among_options(to, options) {
+	let distance = []
+	for (let a of options) {
+		let possible_distances = to.map(area => find_path_distance(area, a))
+		let minimum_distance = Math.min(...possible_distances)
+
+		if (map_keys(distance).some(d => d < minimum_distance)) {
+			continue
+		} else {
+			if (!map_has(distance, minimum_distance))
+				map_set(distance, minimum_distance, [ a ])
+			else
+				set_add(map_get_set(distance, minimum_distance), a)
+		}
+	}
+	// If no options meet the 'callback', return all the options.
+	// This should be fairly rare for it to matter (it would require no Russian leader on map excepting Alexander).
+	if (distance.length === 0)
+		return options
+	return distance[1] // Areas corresponding to the shortest distance
+}
+
+function find_location_of_closest_russian_leader(area) {
+	let options = get_areas_with_leaders(RUSSIA).filter(area => get_leader_location(L_ALEXANDER) !== area)
+	return find_closest_destination_among_options([ area ], options)
+}
+
+function get_lone_alexander_move_destinations() {
+	let location_of_closest_russian_leader = find_location_of_closest_russian_leader(get_leader_location(L_ALEXANDER))
+	let destinations = get_move_destinations(L.current_area, L.move_allowance)
+	if (location_of_closest_russian_leader === -1)
+		return destinations
+	return find_closest_destination_among_options(location_of_closest_russian_leader, destinations)
+}
+
 P.move = {
 	_begin() {
 		// Number of areas left to move
@@ -5246,7 +5298,15 @@ P.move = {
 		}
 		else if (L.move_allowance > 0) {
 			prompt(`Select destination for move (${L.move_allowance} remaining MPs).`)
-			get_move_destinations(L.current_area, L.move_allowance).forEach(action_area)
+
+			// Alexander must move towards that closest Russian leader (if present) if alone.
+			if (G.active === RUSSIA && set_has(G.move.leaders, L_ALEXANDER) && G.move.leaders.length === 1) {
+				add_to_prompt(` L${L_ALEXANDER} must move towards the closest Russian leader since he is alone.`)
+				get_lone_alexander_move_destinations().forEach(action_area)
+			} else {
+				get_move_destinations(L.current_area, L.move_allowance).forEach(action_area)
+			}
+
 			button_done(G.move.path.length > 1)
 		}
 		else {
@@ -5259,18 +5319,14 @@ P.move = {
 		logi("to S" + area)
 		let could_play_city_ablaze = ((G.active === FRANCE) && is_key_city(area) && !has_troop(area))
 
-		// Cache all VP adjustments since we cannot terminate the function's execution midway in case of a Sudden Death victory
-		let vp_adjustment = 0
-
 		// If the destination is a VP area, increase VP
 		if (is_vp_area(area) && !is_friendly_controlled(G.active, area) && !has_enemy_sp(G.active, area)) {
-			vp_adjustment += G.active === RUSSIA ? (-1 * get_area_vp(area)) : get_area_vp(area)
-			log(`${ROLES[G.active]} +${get_area_vp(area)} VP.`)
+			increase_vp(G.active, get_area_vp(area))
 			if (G.active === FRANCE && area === S_MOSCOW && !G.has_france_occupied_moscow) {
-				// Scenario special rule.
+				// Scenario special rule: France gains +5 VP the instant it first enters Moscow.
 				if (G.scenario === THE_GRAND_CAMPAIGN || G.scenario === BATTLE_OF_SMOLENSK_CAMPAIGN_START) {
-					vp_adjustment += 5
-					log(`Scenario special rule: France +5 VP.`)
+					log("Scenario special rule.")
+					increase_vp(FRANCE, 5)
 					G.has_france_occupied_moscow = true
 				}
 			}
@@ -5279,15 +5335,13 @@ P.move = {
 		// RU #15 Pride and Hesitation: Russia gains +1 VP if any French leaders leave Moscow.
 		if ((L.current_area === S_MOSCOW) && is_event_active(C_PRIDE_AND_HESITATION) && (G.move.leaders.length > 0) && (G.active === FRANCE)) {
 			log_card(C_PRIDE_AND_HESITATION)
-			vp_adjustment--
-			log(`Russia +1 VP.`)
+			decrease_vp(FRANCE)
 		}
 
 		// FR #4 Holy Mother Russia: France gains +1 VP for each force that leaves the selected area
 		if (is_event_active(C_HOLY_MOTHER_RUSSIA_FR) && (map_get(G.persistent_events, C_HOLY_MOTHER_RUSSIA_FR, -1).area === L.current_area) && (G.active === RUSSIA)) { //TO CHECK: Does this stack on the same move or only once per move?
 			log_card(C_HOLY_MOTHER_RUSSIA_FR)
-			vp_adjustment++
-			log(`France +1 VP.`)
+			increase_vp(FRANCE)
 		}
 
 		// FR #48 Disorderly March: France must stop after entering the target area.
@@ -5309,31 +5363,21 @@ P.move = {
 
 			if (is_vp_area(L.current_area) && !is_friendly_controlled(G.active, L.current_area)) {
 				log(`S${L.current_area} abandoned!`)
-				vp_adjustment -= G.active === RUSSIA ? (-1 * get_area_vp(L.current_area)) : get_area_vp(L.current_area)
-				log(`${ROLES[G.active]} -${get_area_vp(L.current_area)} VP.`)
+				decrease_vp(G.active, get_area_vp(L.current_area))
 			}
 
 			L.current_area = area
-
-			if ((Math.abs(G.vp) + Math.abs(vp_adjustment)) < 20) {
-				//https://boardgamegeek.com/thread/3347839/card-22-city-ablaze-russian-card
-				//Russia plays City Ablaze first, depots are checked after (In the case of City Ablaze + depot removal, the depot removal is called from the City Ablaze states)
-				if (could_play_city_ablaze) { //If France just took an unnoccupied key city, Russia may play City Ablaze!
-					call(`russia_may_play_city_ablaze`, { area: area, who: FRANCE })
-				} else if (!has_enemy_sp(G.active, area) && has_enemy_depot(G.active, area)) {
-					call(`confirm_remove_depot`, { area: area })
-				}
-			}
-
 		}
 
-		G.vp += vp_adjustment
-		if (Math.abs(G.vp) >= 20) {
-			sudden_death()
-		} else {
-			//This is mutually exclusive from City Ablaze! and removing an enemy depot since those two require that the area has no troops
-			if (!has_enemy_sp(G.active, area) && needs_to_determine_seniority)
-				call("determine_seniority", { area })
+		if (!sudden_death()) {
+			if (!has_enemy_sp(G.active, area)) {
+				if (could_play_city_ablaze) // If France just took an unnoccupied key city, Russia may play City Ablaze!
+					call(`russia_may_play_city_ablaze`, { area: area, who: FRANCE })
+				else if (has_enemy_depot(G.active, area))
+					call(`confirm_remove_depot`, { area: area })
+				else if (needs_to_determine_seniority)
+					call("determine_seniority", { area })
+			}
 		}
 	},
 	done() {
@@ -5359,13 +5403,11 @@ P.move = {
 			decrease_vp(G.active, get_area_vp(previous_area))
 		}
 
-		if (Math.abs(G.vp) < 20) {
+		if (!sudden_death()) {
 			if (needs_to_determine_seniority)
 				call("determine_seniority", { area: L.current_area })
 			else
 				goto("post_move_exhaustion")
-		} else {
-			sudden_death()
 		}
 	},
 	_end() {
@@ -6148,12 +6190,11 @@ P.eliminate_all_sps = {
 		push_undo()
 		L.has_shifted_vp = true
 		decrease_vp(G.active, L.count)
-		if (Math.abs(G.vp) >= 20)
-			sudden_death()
 	},
 	done() {
 		push_undo()
-		end()
+		if (!sudden_death())
+			end()
 	}
 }
 
@@ -10784,14 +10825,16 @@ P.flying_columns = {
 			prompt_card(C_FLYING_COLUMNS, "Shift Initiative 1 in Russia's favor.")
 			action_initiative_marker()
 		} else if (L.step === 0) {
+			let possible_areas = filter_areas(area => has_cossack_sp(area))
 			if (L.count === 0) {
 				prompt_card(C_FLYING_COLUMNS, `No Cossack Raid orders in pool to place.`)
 				button_confirm()
+			} else if (possible_areas.length === 0) {
+				prompt_card(C_FLYING_COLUMNS, `No areas with a Cossack SP.`)
+				button_confirm()
 			} else {
-				prompt(`Select up to ${L.count} locations to place Cossack Raid.`)
-				for (let area = FIRST_AREA; area <= LAST_AREA; ++area)
-					if (has_cossack_sp(area))
-						action_area(area)
+				prompt(`Select up to ${L.count} areas to place Cossack Raid.`)
+				possible_areas.forEach(action_area)
 			}
 		} else {
 			prompt_card(C_FLYING_COLUMNS, "All done.")
@@ -14369,7 +14412,6 @@ function _run() {
 			return // state
 		}
 	}
-	print(L)
 	if (L)
 		throw new Error("runaway script")
 }
