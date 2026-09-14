@@ -123,6 +123,28 @@ const TROOP_ENTRY_WHO_MASK = 1024
 const TROOP_ENTRY_TYPE_MASK = 960
 const TROOP_ENTRY_NUM_MASK = 63
 
+// Moved Bitmasks
+/*
+	Each bitpacked troop moved entry is 19 bits:
+	1 bit - player (RUSSIA or FRANCE)
+	8 bits - from (corresponds to the area id from which the force entered)
+	1 bit - strength (HALF_STRENGTH or FULL_STRENGTH)
+	4 bits - troop type (FRESH_INFANTRY (0) to EXHAUSTED_AUSTRIAN_INFANTRY (11))
+	6 bits - number of SPs of that type in a particular area
+*/
+
+const TROOP_MOVED_PLAYER_SHIFT = 19
+const TROOP_MOVED_FROM_SHIFT = 11
+const TROOP_MOVED_STRENGTH_SHIFT = 10
+const TROOP_MOVED_TYPE_SHIFT = 6
+const TROOP_MOVED_NUM_SHIFT = 0
+
+const TROOP_MOVED_PLAYER_MASK = 1 << 19
+const TROOP_MOVED_FROM_MASK = 522240
+const TROOP_MOVED_STRENGTH_MASK = 1 << 10
+const TROOP_MOVED_TYPE_MASK = 960
+const TROOP_MOVED_NUM_MASK = 63
+
 // SP Pool
 const first_ru_inf = 0
 const last_ru_inf = 79
@@ -339,6 +361,7 @@ function get_order_keyword(order) {
 }
 
 /* SPs */
+// For V.sps
 function decode_troop_entry_who(entry) {
 	return (entry & TROOP_ENTRY_WHO_MASK) >> TROOP_ENTRY_WHO_SHIFT
 }
@@ -349,6 +372,27 @@ function decode_troop_entry_type(entry) {
 
 function decode_troop_entry_num(entry) {
 	return entry & TROOP_ENTRY_NUM_MASK
+}
+
+// For V.moved.sps
+function decode_troop_moved_player(entry) {
+	return (entry & TROOP_MOVED_PLAYER_MASK) >> TROOP_MOVED_PLAYER_SHIFT
+}
+
+function decode_troop_moved_from(entry) {
+	return (entry & TROOP_MOVED_FROM_MASK) >> TROOP_MOVED_FROM_SHIFT
+}
+
+function decode_troop_moved_strength(entry) {
+	return (entry & TROOP_MOVED_STRENGTH_MASK) >> TROOP_MOVED_STRENGTH_SHIFT
+}
+
+function decode_troop_moved_type(entry) {
+	return (entry & TROOP_MOVED_TYPE_MASK) >> TROOP_MOVED_TYPE_SHIFT
+}
+
+function decode_troop_moved_num(entry) {
+	return (entry & TROOP_MOVED_NUM_MASK) >> TROOP_MOVED_NUM_SHIFT
 }
 
 function is_infantry(type) {
@@ -506,7 +550,8 @@ function get_pool_depots(side) {
 }
 
 // === SPECIAL TROOP HANDLING (WIP) ===
-// WARNING: Touches sections of the world.js framework.
+
+// IMPORTANT WARNING: Touches sections of the world.js framework.
 class Troop extends Thing {
 	constructor(element, type, action, id) {
 		// We can now conveniently use all world.js functions excepting those which affect actions
@@ -545,14 +590,14 @@ function _on_click_troop(evt) {
 function package_troop_id(id) {
 	let troop = lookup_troop(id)
 
-	let move = troop.am_moving
-	let player = troop.my_player
-	let type = troop.my_type
-	let strength = troop.my_strength
-	let area = troop.my_area
-	let from = troop.my_from
-
-	return package_troop(player, type, strength, area, from, move)
+	return package_troop(
+		troop.my_player,
+		troop.my_type,
+		troop.my_strength,
+		troop.my_area,
+		troop.my_from,
+		troop.am_moving
+	)
 }
 
 function define_troop(type, id) {
@@ -615,7 +660,6 @@ function populate_troop(player, type, parent_action, parent_id) {
 	lookup_troop(troop_id).my_strength = FULL_STRENGTH
 	lookup_troop(troop_id).am_moving = 0
 }
-
 
 // === INITIALIZE THINGS ===
 /* HELPERS */
@@ -1167,23 +1211,26 @@ function update_troops() {
 			} else {
 				let num_moved = 0
 
-				if (map_has(V.moved, area)) {
-					for (let force of map_get(V.moved, area, null)) {
-						if (force.faction === player && force.troops[type] > 0) {
+				if (
+					map_has(V.moved.sps, area)
+					&& map_get(V.moved.sps, area, null).some(item => decode_troop_moved_player(item) === player && decode_troop_moved_type(item) === type)
+				) {
+					for (let item of map_get(V.moved.sps, area, null)) {
+						if (decode_troop_moved_player(item) === player && decode_troop_moved_type(item) === type) {
 							update_troop_exhaustion(get_used(player, type), is_fresh(type) ? FRESH : EXHAUSTED)
 
-							if (R === player || (R !== player && !has_friendly_leader(player, area)))
+							if (R === player || !has_friendly_leader(player, area))
 								populate_troop(player, type, "area_stack", area)
 
 							lookup_troop(get_used(player, type)).my_area = area
-							lookup_troop(get_used(player, type)).my_from = force.from ?? POOL
+							lookup_troop(get_used(player, type)).my_from = decode_troop_moved_from(item)
+							num_moved += decode_troop_moved_num(item)
 
-							num_moved += force.troops[type]
-							if (force.strength === HALF_STRENGTH)
+							if (decode_troop_moved_strength(item) === HALF_STRENGTH)
 								populate_half_strength(player, get_used(player, type))
 
 							if (!map_has(troop_nums, get_used(player, type)))
-								map_set(troop_nums, get_used(player, type), force.troops[type])
+								map_set(troop_nums, get_used(player, type), decode_troop_moved_num(item))
 							incr_used(player, type)
 						}
 					}
