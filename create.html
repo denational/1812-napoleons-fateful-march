@@ -1,10 +1,53 @@
-<style>
-    .scenario_info {display: none;}
-    .scenario_info.show { display: block;}
-</style>
 
-<div class="scenario_info" data-scenario="The Grand Campaign">
-    <p><i>
-        The grand campaign game covering the entire 1812 campaign.
-    </i></p>
+<div id="option_no_unsuccessful_disengagement">
+	<label>
+		<input type="checkbox" name="no_unsuccessful_disengagement">No <i>Unsuccessful Disengagement</i> during Turn 1.
+	</label>
 </div>
+<div id="option_increased_french_command_capability">
+	<label>
+		<input type="checkbox" name="increased_command_capability">Increased French Command Capability
+	</label>
+</div>
+<div id="option_russian_disorganization_and_confusion">
+	<label>
+		<input type="checkbox" name="russian_confusion">Russian Disorganization and Confusion
+	</label>
+</div>
+<div id="options_additional_info">
+	<p>
+	See the <a href="https://cdn.shopify.com/s/files/1/0295/6650/0908/files/Additional_Official_Optional_Rules_v2.pdf?v=1731673877">Additional Official Optional Rules</a> for more information on these options.
+</div>
+
+<script>
+	const THE_EAGLES_MARCH_ON_SMOLENSK			= "The Eagles' March on Smolensk";
+	const THE_EAGLES_MARCH_ON_MOSCOW 			= "The Eagles' March on Moscow";
+	const THE_GRAND_CAMPAIGN 					= "The Grand Campaign";
+	const HOLLOW_VICTORIES 						= "Hollow Victories";
+	const BATTLE_OF_SMOLENSK_CAMPAIGN_START 	= "Battle of Smolensk Campaign Start";
+	const THE_RETREAT_OF_THE_GRANDE_ARMEE 		= "The Retreat of the Grande Armée";
+
+	const JUNE_SETUP_SCENARIOS = [THE_EAGLES_MARCH_ON_SMOLENSK, THE_EAGLES_MARCH_ON_MOSCOW, THE_GRAND_CAMPAIGN];
+
+	let scenario = document.querySelector("select[name='scenario']");
+	scenario.onchange = function(evt) {
+		if (!JUNE_SETUP_SCENARIOS.includes(scenario.value)) {
+			document.querySelector("#option_no_unsuccessful_disengagement").checked = false;
+			document.querySelector("#option_no_unsuccessful_disengagement").hidden = true;
+		} else {
+			document.querySelector("#option_no_unsuccessful_disengagement").hidden = false;
+		}
+
+		if (scenario.value === THE_RETREAT_OF_THE_GRANDE_ARMEE) {
+			document.querySelector("#option_increased_french_command_capability").checked = false;
+			document.querySelector("#option_increased_french_command_capability").hidden = true;
+			document.querySelector("#option_russian_disorganization_and_confusion").checked = false;
+			document.querySelector("#option_russian_disorganization_and_confusion").hidden = true;
+			document.querySelector("#options_additional_info").hidden = true;
+		} else {
+			document.querySelector("#option_increased_french_command_capability").hidden = false;
+			document.querySelector("#option_russian_disorganization_and_confusion").hidden = false;
+			document.querySelector("#options_additional_info").hidden = false;
+		}
+	}
+</script>

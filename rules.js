@@ -1224,6 +1224,19 @@ function find_connection(a, b) {
 	return data.connections.findIndex(conn => (set_has(conn, a) && set_has(conn, b)))
 }
 
+/* OPTIONAL RULES */
+function is_no_unsuccessful_disengagement() {
+	return G.options.no_unsuccessful_disengagement
+}
+
+function is_increased_french_command_capability() {
+	return G.options.increased_command_capability
+}
+
+function is_russian_disorganization_and_confusion() {
+	return G.options.russian_confusion
+}
+
 // === STATE-MANIPULATING FUNCTIONS ===
 /* VP */
 function sudden_death() {
@@ -1543,6 +1556,8 @@ const SCENARIOS = [
 	THE_RETREAT_OF_THE_GRANDE_ARMEE,
 ]
 
+exports.default_scenario = THE_GRAND_CAMPAIGN
+
 function on_setup(scenario, options) {
 	// Most scenario-specific data is precalculated in tools/gendata.js
 	const SCENARIO_DATA = data.scenarios.find(sc => sc.name === scenario)
@@ -1554,6 +1569,9 @@ function on_setup(scenario, options) {
 	G.scenario = scenario
 	G.start_turn = SCENARIO_DATA.start
 	G.end_turn = SCENARIO_DATA.end
+
+	// Optional rules
+	G.options = object_copy(options)
 
 	// VP and Initiative
 	G.vp = SCENARIO_DATA.vp
@@ -1624,14 +1642,35 @@ function on_setup(scenario, options) {
 
 	update_supply()
 
+	G.platov_order = -1
+	G.increased_french_command_capability_order = -1
+
+	if (
+		is_no_unsuccessful_disengagement()
+		&& G.start_turn === JUNE_5
+	) {
+		array_delete_item(get_deck(FRANCE), C_UNSUCCESSFUL_DISENGAGEMENT)
+		set_add(get_discard(FRANCE), C_UNSUCCESSFUL_DISENGAGEMENT)
+		log(`No ${format_card(C_UNSUCCESSFUL_DISENGAGEMENT)} during Turn 1.`)
+	}
+
+	if (is_increased_french_command_capability())
+		log(`Increased French Command Capability.`)
+
+	if (
+		is_russian_disorganization_and_confusion()
+		&& scenario !== THE_RETREAT_OF_THE_GRANDE_ARMEE
+	) {
+		add_order_of_type_from_pool(RUSSIA, RALLY, OUT_OF_PLAY)
+		log(`Russian Disorganization & Confusion.`)
+	}
+
 	switch(get_month(G.start_turn)) {
 	case JUNE: setup_june(); break
 	case JULY: setup_july(); break
 	case AUG: setup_aug(); break
 	case OCT: setup_oct(); break
 	}
-
-	G.platov_order = -1
 
 	G.active = [RUSSIA, FRANCE]
 	call("setup_hand", {scenario, hand_size: SCENARIO_DATA.hand_size.slice()})
@@ -3467,7 +3506,10 @@ P.draw_card_to_hand = {
 		if (Array.isArray(G.active))
 			set_delete(G.active, R)
 
-		if (!Array.isArray(G.active) || G.active.length === 0) {
+		if (
+			(!Array.isArray(G.active) && (!set_has(L.persistent_events, C_HOLY_MOTHER_RUSSIA_RU) || R === FRANCE))
+			|| G.active.length === 0
+		) {
 			for (let card of L.persistent_events) {
 				if (card === C_HOLY_MOTHER_RUSSIA_RU)
 					add_persistent_event(card, { key: get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key })
@@ -3736,7 +3778,11 @@ function does_receive_platov_free_order(player) {
 }
 
 function does_receive_increased_french_command_capability_free_order(player) {
-	return player === FRANCE && is_leader_on_map(L_NAPOLEON) && is_area_in_supply(FRANCE, get_leader_location(L_NAPOLEON)) && get_current_season() === SUMMER
+	return is_increased_french_command_capability()
+		&& player === FRANCE
+		&& get_current_season() === SUMMER
+		&& is_leader_on_map(L_NAPOLEON)
+		&& is_area_in_supply(FRANCE, get_leader_location(L_NAPOLEON))
 }
 
 function is_french_logistic_preparations(player) {
@@ -3746,9 +3792,15 @@ function is_french_logistic_preparations(player) {
 function generate_select_order_actions(who, types) {
 	if (typeof types === 'number') types = [types]
 
-	for (let order = get_first_order(who); order <= get_last_order(who); ++order)
-		if (!G.selected_orders[who].includes(order) && (types.includes(get_order_type(order))))
+	for (let order = get_first_order(who); order <= get_last_order(who); ++order) {
+		if (
+			get_order_location(order) === POOL
+			&& !G.selected_orders[who].includes(order)
+			&& types.includes(get_order_type(order))
+		) {
 			action_order(order)
+		}
+	}
 }
 
 function select_order(order, snapshot = true, advance_state = true) {
@@ -3817,12 +3869,19 @@ P.select_orders = {
 			on_order(order) { select_order(order) },
 		},
 		// Increased French Command Capability optional rule: France gets a Cavalry Patrols order in Napoléon's location in Summer.
-		// TODO
 		"increased_french_command_capability": {
 			eligible(player) {
-				return false
-				// return does_receive_increased_french_command_capability_free_order(player)
+				return does_receive_increased_french_command_capability_free_order(player)
 			},
+			on_prompt() {
+				prompt(`Increased French Command Capability: Select a Cavalry Patrols order. This order would be placed in ${format_area(get_leader_location(L_NAPOLEON))}.`)
+				generate_select_order_actions(R, CAVALRY_PATROLS)
+			},
+			on_order(order) {
+				push_local_undo(R, "select_increased_french_command_capability_order")
+				G.increased_french_command_capability_order = order
+				select_order(order, false)
+			}
 		},
 		// Each player must select 4 Dummy orders.
 		"select_dummy_orders": {
@@ -3908,7 +3967,7 @@ P.select_orders = {
 				if (L.count[R] > 0) {
 					prompt(`Select ${L.count[R]} more orders.`)
 					for (let order = get_first_order(R); order <= get_last_order(R); ++order) {
-						if (!G.selected_orders[R].includes(order))
+						if (get_order_location(order) === POOL && !G.selected_orders[R].includes(order))
 							action_order(order)
 					}
 				} else {
@@ -3940,6 +3999,8 @@ P.select_orders = {
 
 		if (undo.action === "select_platov_order")
 			G.platov_order = -1
+		else if (undo.action === "select_increased_french_command_capability_order")
+			G.increased_french_command_capability_order = -1
 		else if (undo.action === "select_dummy_order" || undo.action === "select_order_main")
 			++L.count[R]
 		else if (undo.action === "select_french_logistic_preparations_order")
@@ -4040,7 +4101,7 @@ P.do_place_orders = {
 		L.undo = [[], []]
 
 		L.has_placed_platov_order = is_leader_on_map(L_PLATOV) ? false : true
-		L.has_placed_increased_command_capability_order = true // TODO
+		L.has_placed_increased_command_capability_order = is_leader_on_map(L_NAPOLEON) ? false : true
 		L.has_discarded_card = false
 	},
 	states: {
@@ -10131,6 +10192,7 @@ function has_depot_within_four_road_connections(who, area) {
 	Use add_event_keyword to add any keywords necessary to store the event's effect
 	Use get_event_keyword to read specific keywords attached to the event
 */
+
 function get_event_state_name(event) {
 	return cards[event].state_name
 }
@@ -10971,43 +11033,57 @@ P.pride_and_hesitation = {
 }
 
 // RU #16: Kutuzov Appointed
-// TODO: Apply optional rule effects
 E.kutuzov_appointed = function() { return get_current_month() >= AUG }
 
 P.kutuzov_appointed = {
 	_begin() {
-		L.has_placed_kutuzov = false
+		L.has_confimed_free_order = false
+		L.end_disorganization = !is_russian_disorganization_and_confusion()
 	},
 	inactive: "appoint Mikhail Kutuzov",
 	prompt() {
-		if (L.has_placed_kutuzov) {
-			prompt_card(C_KUTUZOV_APPOINTED, "Receive a free Rally order.")
+		if (!is_leader_on_map(L_KUTUZOV)) {
+			let areas_with_most_ru_sps = find_areas_with_most_ru_sps()
+			prompt_card(C_KUTUZOV_APPOINTED, `Place ${format_leader(L_KUTUZOV)}, 1 Infantry, and 1 Cossack in the area with the most Russian SPs. (${join_array_with_or(areas_with_most_ru_sps.map(area => get_area_name(area)))})`)
+			areas_with_most_ru_sps.forEach(action_area)
+		} else if (!L.has_confimed_free_order) {
+			prompt_card(C_KUTUZOV_APPOINTED, `Receive a free Rally order when selecting orders this turn.`)
 			button_next()
 		} else {
-			let areas_with_most_ru_sps = find_areas_with_most_ru_sps()
-			prompt_card(C_KUTUZOV_APPOINTED, `Place ${L_KUTUZOV} in the space with the most Russian SPs (${join_array_with_or(areas_with_most_ru_sps.map(area => get_area_name(area)))}).`)
-			for (let area of areas_with_most_ru_sps) {
-				action_area(area)
-			}
+			prompt(`Russian Disorganization & Confusion: Add the removed Rally order to your pool.`)
+			button_next()
+			get_orders_at_area(RUSSIA, OUT_OF_PLAY).forEach(action_order)
 		}
 	},
 	area(area) {
 		push_undo()
-		log(`Placed at ${format_area(area)}`)
 		move_leader(L_KUTUZOV, area)
-		logi(format_leader(L_KUTUZOV))
 		add_troop(RUSSIA, area, FRESH_INFANTRY, 1)
-		logi(1 + " " + get_troop_type_name(FRESH_INFANTRY))
 		add_troop(RUSSIA, area, FRESH_COSSACK, 1)
-		logi(1 + " " + get_troop_type_name(FRESH_COSSACK))
-		L.has_placed_kutuzov = true
+
+		log(`Placed at ${format_area(area)}`)
+		logi(format_leader(L_KUTUZOV))
+		logi(`1 Infantry`)
+		logi(`1 Cossack`)
 	},
 	next() {
 		push_undo()
-		log("Received a free Rally order.")
-		add_persistent_event(C_KUTUZOV_APPOINTED) //To add the free Rally order later
+		if (!L.has_confimed_free_order) {
+			L.has_confimed_free_order = true
+			log(`Received a free Rally order.`)
+			if (L.has_confimed_free_order && !is_russian_disorganization_and_confusion())
+				end()
+		} else {
+			this.order()
+		}
+	},
+	order(_) {
+		for (let order of get_orders_at_area(RUSSIA, OUT_OF_PLAY))
+			G.orders[order] = POOL
+		log(`Moved Rally order to Pool.`)
 		end()
-	}
+	},
+	_end() { add_persistent_event(C_KUTUZOV_APPOINTED) }
 }
 
 // RU #17: The Finland Corps

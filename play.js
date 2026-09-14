@@ -1003,16 +1003,16 @@ function has_battle(area) {
 	return map_has(V.battles, area)
 }
 
-function get_battle_entry(area, fallback) {
+function get_battle_entry(area, fallback = null) {
 	return map_get(V.battles, area, fallback)
 }
 
 function get_battle_attacker(area) {
-	return map_get(V.battles, area, null)?.attacker.who ?? -1
+	return map_get(V.battles, area)?.attacker.who ?? -1
 }
 
 function get_battle_defender(area) {
-	return map_get(V.battles, area, null)?.defender.who ?? -1
+	return map_get(V.battles, area)?.defender.who ?? -1
 }
 
 function find_connection(a, b) {
@@ -1020,11 +1020,11 @@ function find_connection(a, b) {
 }
 
 function get_attacker_data(area) {
-	return get_battle_entry(area, null)?.attacker ?? null
+	return get_battle_entry(area)?.attacker ?? null
 }
 
 function get_defender_data(area) {
-	return get_battle_entry(area, null)?.defender ?? null
+	return get_battle_entry(area)?.defender ?? null
 }
 
 function get_player_battle_data(who, area) {
@@ -1213,7 +1213,7 @@ function update_troops() {
 
 				if (
 					map_has(V.moved.sps, area)
-					&& map_get(V.moved.sps, area, null).some(item => decode_troop_moved_player(item) === player && decode_troop_moved_type(item) === type)
+					&& map_get(V.moved.sps, area).some(item => decode_troop_moved_player(item) === player && decode_troop_moved_type(item) === type)
 				) {
 					for (let item of map_get(V.moved.sps, area, null)) {
 						if (decode_troop_moved_player(item) === player && decode_troop_moved_type(item) === type) {
@@ -1305,15 +1305,23 @@ function update_devastation() {
 function update_orders() {
 	if (!is_observer(R)) {
 		for (let order = 0; order < V.orders.length; ++order) {
-			if (V.orders[order] === POOL) {
+			switch(V.orders[order]) {
+			case OUT_OF_PLAY:
+				populate(get_pool_depots(R), 0, "order", order + get_first_order(R))
+				break
+			case POOL:
 				populate("plan_orders", 0, "order", order + get_first_order(R))
-			} else {
+				break
+			default:
 				populate("orders_stack", V.orders[order], "order", order + get_first_order(R))
 			}
 		}
 
 		for (let order = 0; order < V.enemy_orders.length; ++order) {
-			populate("orders_stack", V.enemy_orders[order], "order", order + get_first_order(get_opponent(R)))
+			if (V.enemy_orders[order] === OUT_OF_PLAY)
+				populate(get_pool_depots(1 - R), 0, "order", order + get_first_order(1 - R))
+			else
+				populate("orders_stack", V.enemy_orders[order], "order", order + get_first_order(get_opponent(R)))
 			update_keyword("order", order + get_first_order(get_opponent(R)), `hidden ${get_abbreviation(get_opponent(R))}`)
 		}
 	}
@@ -1340,6 +1348,10 @@ function escape_text(text) {
 	text = escape_dice(text, /\b(battle_fr|battle_ru)([0-6])\b/g)
 	text = escape_dice(text, /\b([W])([0-6])\b/g)
 	return text
+}
+
+function on_prompt(text) {
+	return escape_text(text)
 }
 
 function on_log(text, ix) {
@@ -1416,12 +1428,6 @@ function on_log(text, ix) {
 	return p
 }
 
-function on_prompt(text) {
-	return escape_text(text)
-}
-
-scroll_with_middle_mouse("main")
-
 // === UTILITY FUNCTIONS ===
 // Array utility functions
 function array_insert(array, index, item) {
@@ -1485,8 +1491,6 @@ function set_has(set, item) {
 }
 
 // Map as plain sorted array of key/value pairs
-
-
 function map_has(map, key) {
 	var a = 0
 	var b = (map.length >> 1) - 1
@@ -1503,7 +1507,8 @@ function map_has(map, key) {
 	return false
 }
 
-function map_get(map, key, missing) {
+// NOTE: I added a null fallback since that is what I use for most use cases.
+function map_get(map, key, missing = null) {
 	var a = 0
 	var b = (map.length >> 1) - 1
 	while (a <= b) {
@@ -1535,30 +1540,6 @@ function map_set(map, key, value) {
 		}
 	}
 	array_insert_pair(map, a<<1, key, value)
-}
-
-function map_delete(map, key) {
-	var a = 0
-	var b = (map.length >> 1) - 1
-	while (a <= b) {
-		var m = (a + b) >> 1
-		var x = map[m<<1]
-		if (key < x)
-			b = m - 1
-		else if (key > x)
-			a = m + 1
-		else {
-			array_delete_pair(map, m<<1)
-			return
-		}
-	}
-}
-
-function map_get_set(map, key) {
-	var set = map_get(map, key, null)
-	if (set === null)
-		map_set(map, key, (set = []))
-	return set
 }
 
 function map_for_each(map, f) {
