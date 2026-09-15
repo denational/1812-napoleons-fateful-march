@@ -199,8 +199,8 @@ id,space1,space2,type,bridge
 198,Dorogobuzh,Vyazma,road,0
 199,Sverskovo,Dorogobuzh,track,0
 200,Sverskovo,Roslavl,road,0
-201,Dorogobuzh,Unnamed F3,road,0
-202,Roslavl,Unnamed F3,road,0
+201,Dorogobuzh,Unnamed F3,track,0
+202,Roslavl,Unnamed F3,track,0
 203,Roslavl,Bryansk,road,0
 204,Roslavl,Surazh,road,0
 205,Surazh,Starodub,road,0
@@ -216,7 +216,7 @@ id,space1,space2,type,bridge
 215,Vyazma,Gzhatsk,road,0
 216,Vyazma,Silenki,track,0
 217,Vyazma,Yukhnov,road,0
-218,Unnamed F3,Yukhnov,road,0
+218,Unnamed F3,Yukhnov,track,0
 219,Bryansk,Karachev,road,0
 220,Torzhok,Tver,road,0
 221,Staritsa,Tver,road,1

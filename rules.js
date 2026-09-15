@@ -1,8 +1,7 @@
 "use strict"
 
-//MOSTLY DONE: Battle events
-//TODO: Fix & complete retreat
-//TODO: New Living Rules updates (from notes.html)
+// IN PROGRESS: New Living Rules updates
+// TODO: Better handling of response events
 
 const data = require("./data")
 
@@ -345,12 +344,12 @@ const FIRST_AREA = 1
 const LAST_AREA = 156
 const NUM_AREAS = 158
 
-// Some precomputed groupings of areas
+// Some precomputed (sorted) groupings of areas
 const SUPPLY_SOURCES = [
-	[S_RIGA, S_LIVONIA, S_PSKOV, S_UKRAINE, S_TORZHOK, S_VORONEZH, S_VLADIMIR_RUSSIA, S_UNNAMED_H2, S_RYAZAN],
-	[S_PRUSSIA_SOUTH, S_GRAND_DUCHY_OF_WARSAW_NORTH, S_GRAND_DUCHY_OF_WARSAW_SOUTH, S_AUSTRIA],
+	[ S_RIGA, S_LIVONIA, S_PSKOV, S_UKRAINE, S_TORZHOK, S_VORONEZH, S_VLADIMIR_RUSSIA, S_UNNAMED_H2, S_RYAZAN ],
+	[ S_PRUSSIA_SOUTH, S_GRAND_DUCHY_OF_WARSAW_NORTH, S_GRAND_DUCHY_OF_WARSAW_SOUTH, S_AUSTRIA ],
 ]
-const FRENCH_OFF_MAP_AREAS = [S_PRUSSIA_NORTH, S_PRUSSIA_SOUTH, S_GRAND_DUCHY_OF_WARSAW_NORTH, S_GRAND_DUCHY_OF_WARSAW_SOUTH, S_AUSTRIA]
+const FRENCH_OFF_MAP_AREAS = [ S_PRUSSIA_NORTH, S_PRUSSIA_SOUTH, S_GRAND_DUCHY_OF_WARSAW_NORTH, S_GRAND_DUCHY_OF_WARSAW_SOUTH, S_AUSTRIA ]
 
 /* LEADERS */
 const leaders = data.leaders
@@ -737,10 +736,6 @@ function get_leader_location(leader) {
 
 function is_leader_on_map(leader) {
 	return (get_leader_location(leader) !== POOL) && (get_leader_location(leader) !== OUT_OF_PLAY)
-}
-
-function set_leader(who, where) {
-	G.leaders[who] = where
 }
 
 function move_leader(who, where) {
@@ -1135,6 +1130,8 @@ function move_depot(id, where) {
 function remove_depot(id, where) {
 	G.depots[id] = POOL
 	log(`Removed depot at ${format_area(where)}.`)
+	let who = id <= last_russia_depot ? RUSSIA : FRANCE
+	update_supply(who)
 }
 
 function find_depot_at_location(who, area) {
@@ -1229,8 +1226,8 @@ function is_no_unsuccessful_disengagement() {
 	return G.options.no_unsuccessful_disengagement
 }
 
-function is_increased_french_command_capability() {
-	return G.options.increased_command_capability
+function is_superior_staff_officers() {
+	return G.options.superior_staff
 }
 
 function is_russian_disorganization_and_confusion() {
@@ -1413,6 +1410,7 @@ function filter_leaders(leaders, player) {
 	return filtered_leaders
 }
 
+// Needs more cleanup, especially for the observer view.
 function on_view() {
 	// Global stuff
 	// G.turn will be undefined before the 'main' script is called.
@@ -1437,13 +1435,19 @@ function on_view() {
 
 	// Only pass orders' identities if the role matches the player.
 	V.orders = G.orders.slice(get_first_order(R), get_last_order(R) + 1) ?? []
-	V.enemy_orders = get_areas_with_orders(enemy(R)) ?? []
+	V.enemy_orders = []
+	if (!is_observer(R)) {
+		for (let order = get_first_order(enemy(R)); order <= get_last_order(enemy(R)); ++order) {
+			if (get_order_location(order) !== POOL)
+				V.enemy_orders.push(get_order_location(order))
+		}
+	}
 	V.selected_orders = G.selected_orders?.[R] ?? []
 
 	// Stuff that needs to be filtered based on role
 	V.log = filter_log(V.log, R)
 	V.leaders = filter_leaders(G.leaders, R)
-	// TODO: Filter these
+	// TODO: Filter these based on role
 	V.sps = G.sps
 	V.battles = G.battles
 	V.moved = G.moved
@@ -1477,7 +1481,7 @@ function on_view() {
 			area(area) 	{ this.states[L.state[R]].on_area(area) }
 		}
 
-	L.state needs to be defined as an array of length 2 for the following functions to work:
+	L.state needs to be defined as an array of length 2 for the following functions to work.
 */
 
 /* COMMON EXTENSIONS */
@@ -1486,10 +1490,10 @@ function on_view() {
 // The standard state transition used in most multi-active states.
 // Calls on_end() if present on the state that is ending (similar to _end() in the global framework).
 // Calls on_begin() if present on the next state (similar to _begin() in the global framework).
-function goto_local_state(who, state) {
+function goto_local_state(player, state) {
 	try {
-		P[L.P]?.states?.[L.state[who]]?.on_end?.()
-		L.state[who] = state
+		P[L.P]?.states?.[L.state[player]]?.on_end?.()
+		L.state[player] = state
 		P[L.P]?.states?.[state]?.on_begin?.()
 	} catch(x) {
 		console.error(x)
@@ -1519,10 +1523,10 @@ function advance_local_state(player) {
 // Loosely mimics end() in the global framework.
 // End the player's time in the current local state.
 // Calls a common finish_state() helper, if present, in the common multi-active state.
-// finish_state contains final cleanup steps that are common to both players.
-function end_local_state(who) {
+// finish_state contains final cleanup steps that must happen as one side leaves the state.
+function end_local_state(player) {
 	try {
-		P[L.P]?.states?.[L.state[who]]?.on_end?.()
+		P[L.P]?.states?.[L.state[player]]?.on_end?.()
 		P[L.P]?.finish_state?.()
 	} catch(x) {
 		console.error(x)
@@ -1643,7 +1647,7 @@ function on_setup(scenario, options) {
 	update_supply()
 
 	G.platov_order = -1
-	G.increased_french_command_capability_order = -1
+	G.superior_staff_officers_order = -1
 
 	if (
 		is_no_unsuccessful_disengagement()
@@ -1654,8 +1658,8 @@ function on_setup(scenario, options) {
 		log(`No ${format_card(C_UNSUCCESSFUL_DISENGAGEMENT)} during Turn 1.`)
 	}
 
-	if (is_increased_french_command_capability())
-		log(`Increased French Command Capability.`)
+	if (is_superior_staff_officers())
+		log(`Superior Staff Officers.`)
 
 	if (
 		is_russian_disorganization_and_confusion()
@@ -1676,9 +1680,11 @@ function on_setup(scenario, options) {
 	call("setup_hand", {scenario, hand_size: SCENARIO_DATA.hand_size.slice()})
 }
 
-function update_supply(who) {
-	if (who === undefined) G.supply = [calculate_distance_to_nearest_depot(RUSSIA), calculate_distance_to_nearest_depot(FRANCE)]
-	else G.supply[who] = calculate_distance_to_nearest_depot(who)
+function update_supply(player) {
+	if (player === undefined)
+		G.supply = [calculate_distance_to_nearest_depot(RUSSIA), calculate_distance_to_nearest_depot(FRANCE)]
+	else
+		G.supply[player] = calculate_distance_to_nearest_depot(player)
 }
 
 function setup_june() {
@@ -1687,12 +1693,12 @@ function setup_june() {
 	set_troop(RUSSIA, S_RIGA, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_DUNABURG, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_DUNABURG)
-	set_leader(L_WITTGENSTEIN, S_KALTINENAI)
+	move_leader(L_WITTGENSTEIN, S_KALTINENAI)
 	set_troop(RUSSIA, S_KALTINENAI, FRESH_INFANTRY, 3)
 	set_troop(RUSSIA, S_VILKOMIR, FRESH_CAVALRY, 2)
 	set_troop(RUSSIA, S_VILKOMIR, FRESH_INFANTRY, 2)
-	set_leader(L_ALEXANDER, S_VILNA)
-	set_leader(L_DE_TOLLY, S_VILNA)
+	move_leader(L_ALEXANDER, S_VILNA)
+	move_leader(L_DE_TOLLY, S_VILNA)
 	set_troop(RUSSIA, S_VILNA, FRESH_INFANTRY, 6)
 	add_depot(RUSSIA, S_VILNA)
 	set_troop(RUSSIA, S_SVENCIONYS, FRESH_INFANTRY, 3)
@@ -1701,16 +1707,16 @@ function setup_june() {
 	add_depot(RUSSIA, S_MINSK)
 	set_troop(RUSSIA, S_LIDA, FRESH_CAVALRY, 1)
 	set_troop(RUSSIA, S_LIDA, FRESH_INFANTRY, 2)
-	set_leader(L_PLATOV, S_GRODNO)
+	move_leader(L_PLATOV, S_GRODNO)
 	set_troop(RUSSIA, S_GRODNO, FRESH_COSSACK, 2)
 	set_troop(RUSSIA, S_BIALYSTOK, FRESH_CAVALRY, 1)
-	set_leader(L_BAGRATION, S_VOLKOVYSK)
+	move_leader(L_BAGRATION, S_VOLKOVYSK)
 	set_troop(RUSSIA, S_VOLKOVYSK, FRESH_INFANTRY, 4)
 	set_troop(RUSSIA, S_BREST, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_BREST)
 	set_troop(RUSSIA, S_KOVEL, FRESH_CAVALRY, 1)
 	set_troop(RUSSIA, S_KOVEL, EXHAUSTED_CAVALRY, 1)
-	set_leader(L_TORMASOV, S_LUTSK)
+	move_leader(L_TORMASOV, S_LUTSK)
 	set_troop(RUSSIA, S_LUTSK, FRESH_INFANTRY, 1)
 	set_troop(RUSSIA, S_LUTSK, EXHAUSTED_INFANTRY, 1)
 	add_depot(RUSSIA, S_LUTSK)
@@ -1742,20 +1748,20 @@ function setup_june() {
 
 	/* FRANCE */
 	set_troop(FRANCE, S_PRUSSIA_NORTH, FRESH_PRUSSIAN_INFANTRY, 3)
-	set_leader(L_NAPOLEON, S_KALVARIJA)
-	set_leader(L_MURAT, S_KALVARIJA)
+	move_leader(L_NAPOLEON, S_KALVARIJA)
+	move_leader(L_MURAT, S_KALVARIJA)
 	set_troop(FRANCE, S_KALVARIJA, FRESH_GUARD, 4)
 	set_troop(FRANCE, S_KALVARIJA, FRESH_CAVALRY, 5)
 	set_troop(FRANCE, S_KALVARIJA, FRESH_INFANTRY, 19)
-	set_leader(L_DE_BEAUHARNAIS, S_SUWALKI)
+	move_leader(L_DE_BEAUHARNAIS, S_SUWALKI)
 	set_troop(FRANCE, S_SUWALKI, FRESH_CAVALRY, 1)
 	set_troop(FRANCE, S_SUWALKI, FRESH_INFANTRY, 7)
-	set_leader(L_JEROME, S_SZCZUCZY)
+	move_leader(L_JEROME, S_SZCZUCZY)
 	set_troop(FRANCE, S_SZCZUCZY, FRESH_CAVALRY, 2)
 	set_troop(FRANCE, S_SZCZUCZY, FRESH_INFANTRY, 6)
 	set_troop(FRANCE, S_SUWALKI, FRESH_CAVALRY, 1)
 	set_troop(FRANCE, S_GRAND_DUCHY_OF_WARSAW_NORTH, FRESH_INFANTRY, 2)
-	set_leader(L_SCHWARZENBERG, S_GRAND_DUCHY_OF_WARSAW_SOUTH)
+	move_leader(L_SCHWARZENBERG, S_GRAND_DUCHY_OF_WARSAW_SOUTH)
 	set_troop(FRANCE, S_GRAND_DUCHY_OF_WARSAW_SOUTH, FRESH_AUSTRIAN_INFANTRY, 3)
 	set_troop(FRANCE, S_AUSTRIA, FRESH_AUSTRIAN_INFANTRY, 1)
 
@@ -1770,29 +1776,29 @@ function setup_july() {
 	set_troop(RUSSIA, S_RIGA, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_DUNABURG, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_DUNABURG)
-	set_leader(L_WITTGENSTEIN, S_SEVEZH)
+	move_leader(L_WITTGENSTEIN, S_SEVEZH)
 	set_troop(RUSSIA, S_SEVEZH, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_SEVEZH, EXHAUSTED_INFANTRY, 1)
-	set_leader(L_DE_TOLLY, S_VITEBSK)
+	move_leader(L_DE_TOLLY, S_VITEBSK)
 	set_troop(RUSSIA, S_VITEBSK, FRESH_INFANTRY, 7)
 	set_troop(RUSSIA, S_VITEBSK, FRESH_CAVALRY, 2)
 	set_troop(RUSSIA, S_VITEBSK, EXHAUSTED_INFANTRY, 5)
 	set_troop(RUSSIA, S_VITEBSK, EXHAUSTED_CAVALRY, 1)
 	add_depot(RUSSIA, S_VITEBSK)
-	set_leader(L_PLATOV, S_BABINOVICHI)
+	move_leader(L_PLATOV, S_BABINOVICHI)
 	set_troop(RUSSIA, S_BABINOVICHI, FRESH_COSSACK, 1)
 	set_troop(RUSSIA, S_SMOLENSK, FRESH_INFANTRY, 2)
 	add_depot(RUSSIA, S_SMOLENSK)
 	set_troop(RUSSIA, S_DUKHOVSHCHINA, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_RAGOSTOV, FRESH_INFANTRY, 1)
 	set_troop(RUSSIA, S_RAGOSTOV, EXHAUSTED_INFANTRY, 1)
-	set_leader(L_BAGRATION, S_UNNAMED_E4)
+	move_leader(L_BAGRATION, S_UNNAMED_E4)
 	set_troop(RUSSIA, S_UNNAMED_E4, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_UNNAMED_E4, FRESH_CAVALRY, 1)
 	set_troop(RUSSIA, S_UNNAMED_E4, EXHAUSTED_INFANTRY, 1)
 	set_troop(RUSSIA, S_MSTISLAVL, FRESH_COSSACK, 1)
 
-	set_leader(L_TORMASOV, S_BREST)
+	move_leader(L_TORMASOV, S_BREST)
 	set_troop(RUSSIA, S_BREST, FRESH_INFANTRY, 1)
 	set_troop(RUSSIA, S_BREST, EXHAUSTED_INFANTRY, 1)
 	set_troop(RUSSIA, S_VLADIMIR_GALICIA, FRESH_INFANTRY, 1)
@@ -1822,9 +1828,9 @@ function setup_july() {
 	set_troop(FRANCE, S_DISNA, FRESH_INFANTRY, 1)
 	set_troop(FRANCE, S_POLOTSK, FRESH_INFANTRY, 2)
 	set_troop(FRANCE, S_POLOTSK, EXHAUSTED_INFANTRY, 1)
-	set_leader(L_NAPOLEON, S_KAMEN)
-	set_leader(L_MURAT, S_KAMEN)
-	set_leader(L_DE_BEAUHARNAIS, S_KAMEN)
+	move_leader(L_NAPOLEON, S_KAMEN)
+	move_leader(L_MURAT, S_KAMEN)
+	move_leader(L_DE_BEAUHARNAIS, S_KAMEN)
 	set_troop(FRANCE, S_KAMEN, FRESH_GUARD, 4)
 	set_troop(FRANCE, S_KAMEN, FRESH_CAVALRY, 3)
 	set_troop(FRANCE, S_KAMEN, FRESH_INFANTRY, 5)
@@ -1838,13 +1844,13 @@ function setup_july() {
 	add_depot(FRANCE, S_MINSK)
 	set_troop(FRANCE, S_BORISOV, FRESH_INFANTRY, 3)
 	set_troop(FRANCE, S_BORISOV, EXHAUSTED_INFANTRY, 1)
-	set_leader(L_DAVOUT, S_MOGILEV)
+	move_leader(L_DAVOUT, S_MOGILEV)
 	set_troop(FRANCE, S_MOGILEV, FRESH_INFANTRY, 2)
 	set_troop(FRANCE, S_MOGILEV, EXHAUSTED_INFANTRY, 1)
 	set_troop(FRANCE, S_KOKHANOVO, FRESH_INFANTRY, 3)
 	set_troop(FRANCE, S_KOKHANOVO, EXHAUSTED_INFANTRY, 1)
 	set_troop(FRANCE, S_ORSHA, FRESH_CAVALRY, 1)
-	set_leader(L_SCHWARZENBERG, S_NESVICH)
+	move_leader(L_SCHWARZENBERG, S_NESVICH)
 	set_troop(FRANCE, S_NESVICH, FRESH_AUSTRIAN_INFANTRY, 1)
 	set_troop(FRANCE, S_NESVICH, EXHAUSTED_AUSTRIAN_INFANTRY, 1)
 	set_troop(FRANCE, S_SLUTSK, FRESH_CAVALRY, 1)
@@ -1894,21 +1900,21 @@ function setup_aug() {
 	/* RUSSIA */
 	set_troop(RUSSIA, S_RIGA, FRESH_INFANTRY, 1)
 	set_troop(RUSSIA, S_MITAU, FRESH_INFANTRY, 1)
-	set_leader(L_WITTGENSTEIN, S_SEVEZH)
+	move_leader(L_WITTGENSTEIN, S_SEVEZH)
 	set_troop(RUSSIA, S_SEVEZH, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_SEVEZH, EXHAUSTED_INFANTRY, 1)
-	set_leader(L_DE_TOLLY, S_SMOLENSK)
+	move_leader(L_DE_TOLLY, S_SMOLENSK)
 	set_troop(RUSSIA, S_SMOLENSK, FRESH_INFANTRY, 8)
 	set_troop(RUSSIA, S_SMOLENSK, FRESH_CAVALRY, 2)
 	set_troop(RUSSIA, S_SMOLENSK, EXHAUSTED_INFANTRY, 5)
 	set_troop(RUSSIA, S_SMOLENSK, EXHAUSTED_CAVALRY, 1)
 	add_depot(RUSSIA, S_SMOLENSK)
-	set_leader(L_BAGRATION, S_SVERSKOVO)
+	move_leader(L_BAGRATION, S_SVERSKOVO)
 	set_troop(RUSSIA, S_SVERSKOVO, FRESH_INFANTRY, 3)
 	set_troop(RUSSIA, S_SVERSKOVO, FRESH_CAVALRY, 1)
 	set_troop(RUSSIA, S_SVERSKOVO, EXHAUSTED_INFANTRY, 2)
 	set_troop(RUSSIA, S_ROSLAVL, FRESH_COSSACK, 1)
-	set_leader(L_PLATOV, S_DUKHOVSHCHINA)
+	move_leader(L_PLATOV, S_DUKHOVSHCHINA)
 	set_troop(RUSSIA, S_DUKHOVSHCHINA, FRESH_COSSACK, 2)
 
 	set_troop(RUSSIA, S_MOSCOW, FRESH_INFANTRY, 3)
@@ -1920,7 +1926,7 @@ function setup_aug() {
 	add_depot(RUSSIA, S_OREL)
 	set_troop(RUSSIA, S_VORONEZH, FRESH_COSSACK, 2)
 
-	set_leader(L_TORMASOV, S_KOBRYN)
+	move_leader(L_TORMASOV, S_KOBRYN)
 	set_troop(RUSSIA, S_KOBRYN, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_KOBRYN, FRESH_CAVALRY, 2)
 	set_troop(RUSSIA, S_KOBRYN, EXHAUSTED_INFANTRY, 1)
@@ -1942,16 +1948,16 @@ function setup_aug() {
 	set_troop(FRANCE, S_POLOTSK, FRESH_INFANTRY, 1)
 	set_troop(FRANCE, S_POLOTSK, EXHAUSTED_INFANTRY, 1)
 	add_depot(FRANCE, S_POLOTSK)
-	set_leader(L_NAPOLEON, S_VITEBSK)
+	move_leader(L_NAPOLEON, S_VITEBSK)
 	set_troop(FRANCE, S_VITEBSK, FRESH_GUARD, 3)
 	set_troop(FRANCE, S_VITEBSK, FRESH_INFANTRY, 3)
 	set_troop(FRANCE, S_VITEBSK, FRESH_CAVALRY, 1)
 	set_troop(FRANCE, S_VITEBSK, EXHAUSTED_INFANTRY, 2)
 	set_troop(FRANCE, S_VITEBSK, EXHAUSTED_GUARD, 1)
-	set_leader(L_DE_BEAUHARNAIS, S_PORECZIE)
+	move_leader(L_DE_BEAUHARNAIS, S_PORECZIE)
 	set_troop(FRANCE, S_PORECZIE, FRESH_INFANTRY, 3)
-	set_leader(L_MURAT, S_BABINOVICHI)
-	set_leader(L_DAVOUT, S_BABINOVICHI)
+	move_leader(L_MURAT, S_BABINOVICHI)
+	move_leader(L_DAVOUT, S_BABINOVICHI)
 	set_troop(FRANCE, S_BABINOVICHI, FRESH_INFANTRY, 7)
 	set_troop(FRANCE, S_BABINOVICHI, FRESH_CAVALRY, 2)
 	set_troop(FRANCE, S_BABINOVICHI, EXHAUSTED_INFANTRY, 3)
@@ -1967,7 +1973,7 @@ function setup_aug() {
 	set_troop(FRANCE, S_KOVNO, FRESH_INFANTRY, 2)
 	add_depot(FRANCE, S_KOVNO)
 	set_troop(FRANCE, S_MOLODECHNO, FRESH_INFANTRY, 1)
-	set_leader(L_SCHWARZENBERG, S_PRUZHANY)
+	move_leader(L_SCHWARZENBERG, S_PRUZHANY)
 	set_troop(FRANCE, S_PRUZHANY, FRESH_AUSTRIAN_INFANTRY, 2)
 	set_troop(FRANCE, S_PRUZHANY, FRESH_INFANTRY, 2)
 	set_troop(FRANCE, S_PRUZHANY, EXHAUSTED_AUSTRIAN_INFANTRY, 1)
@@ -2023,13 +2029,13 @@ function setup_oct() {
 	/* RUSSIA */
 	set_troop(RUSSIA, S_RIGA, FRESH_INFANTRY, 2)
 	set_troop(RUSSIA, S_DRISSA, FRESH_INFANTRY, 1)
-	set_leader(L_WITTGENSTEIN, S_SEVEZH)
+	move_leader(L_WITTGENSTEIN, S_SEVEZH)
 	set_troop(RUSSIA, S_SEVEZH, FRESH_INFANTRY, 3)
 	set_troop(RUSSIA, S_SEVEZH, EXHAUSTED_INFANTRY, 1)
 	set_troop(RUSSIA, S_OSTROV, FRESH_INFANTRY, 1)
 
 	set_troop(RUSSIA, S_BRYANSK, FRESH_COSSACK, 1)
-	set_leader(L_PLATOV, S_KOSELYSK)
+	move_leader(L_PLATOV, S_KOSELYSK)
 	set_troop(RUSSIA, S_KOSELYSK, FRESH_COSSACK, 2)
 	set_troop(RUSSIA, S_OREL, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_OREL)
@@ -2037,8 +2043,8 @@ function setup_oct() {
 	set_troop(RUSSIA, S_MALOYAROSLAVET, FRESH_CAVALRY, 2)
 	set_troop(RUSSIA, S_MALOYAROSLAVET, FRESH_COSSACK, 1)
 	set_troop(RUSSIA, S_MALOYAROSLAVET, EXHAUSTED_INFANTRY, 1)
-	set_leader(L_KUTUZOV, S_KALUGA)
-	set_leader(L_TORMASOV, S_KALUGA)
+	move_leader(L_KUTUZOV, S_KALUGA)
+	move_leader(L_TORMASOV, S_KALUGA)
 	set_troop(RUSSIA, S_KALUGA, FRESH_INFANTRY, 7)
 	set_troop(RUSSIA, S_KALUGA, FRESH_CAVALRY, 1)
 	set_troop(RUSSIA, S_KALUGA, FRESH_COSSACK, 1)
@@ -2050,7 +2056,7 @@ function setup_oct() {
 
 	set_troop(RUSSIA, S_BREST, FRESH_INFANTRY, 2)
 	add_depot(RUSSIA, S_BREST)
-	set_leader(L_CHICHAGOV, S_PRUZHANY)
+	move_leader(L_CHICHAGOV, S_PRUZHANY)
 	set_troop(RUSSIA, S_PRUZHANY, FRESH_INFANTRY, 3)
 	set_troop(RUSSIA, S_PRUZHANY, FRESH_CAVALRY, 1)
 	set_troop(RUSSIA,S_PRUZHANY, EXHAUSTED_INFANTRY, 2)
@@ -2063,16 +2069,16 @@ function setup_oct() {
 	set_troop(RUSSIA, S_KIEV, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_KIEV)
 
-	set_leader(L_ALEXANDER, POOL)
-	set_leader(L_DE_TOLLY, POOL)
-	set_leader(L_BAGRATION, POOL)
+	move_leader(L_ALEXANDER, POOL)
+	move_leader(L_DE_TOLLY, POOL)
+	move_leader(L_BAGRATION, POOL)
 
 	/* FRANCE */
 	set_troop(FRANCE, S_PRUSSIA_SOUTH, FRESH_INFANTRY, 1)
 	set_troop(FRANCE, S_MITAU, FRESH_PRUSSIAN_INFANTRY, 1)
 	set_troop(FRANCE, S_KOVNO, FRESH_INFANTRY, 1)
 	add_depot(FRANCE, S_KOVNO)
-	set_leader(L_SCHWARZENBERG, S_BIALYSTOK)
+	move_leader(L_SCHWARZENBERG, S_BIALYSTOK)
 	set_troop(FRANCE, S_BIALYSTOK, FRESH_AUSTRIAN_INFANTRY, 1)
 	set_troop(FRANCE, S_BIALYSTOK, FRESH_INFANTRY, 1)
 	set_troop(FRANCE, S_BIALYSTOK, EXHAUSTED_AUSTRIAN_INFANTRY, 1)
@@ -2097,14 +2103,14 @@ function setup_oct() {
 	add_depot(FRANCE, S_DOROGOBUZH)
 	set_troop(FRANCE, S_VYAZMA, FRESH_INFANTRY, 1)
 	set_troop(FRANCE, S_MOZHAYSK, FRESH_INFANTRY, 1)
-	set_leader(L_MURAT, S_TARUTINO)
+	move_leader(L_MURAT, S_TARUTINO)
 	set_troop(FRANCE, S_TARUTINO, FRESH_INFANTRY, 2)
 	set_troop(FRANCE, S_TARUTINO, FRESH_CAVALRY, 1)
 	set_troop(FRANCE, S_TARUTINO, EXHAUSTED_INFANTRY, 1)
 	set_troop(FRANCE, S_TARUTINO, EXHAUSTED_CAVALRY, 1)
-	set_leader(L_NAPOLEON, S_MOSCOW)
-	set_leader(L_DAVOUT, S_MOSCOW)
-	set_leader(L_DE_BEAUHARNAIS, S_MOSCOW)
+	move_leader(L_NAPOLEON, S_MOSCOW)
+	move_leader(L_DAVOUT, S_MOSCOW)
+	move_leader(L_DE_BEAUHARNAIS, S_MOSCOW)
 	set_troop(FRANCE, S_MOSCOW, FRESH_GUARD, 3)
 	set_troop(FRANCE, S_MOSCOW, FRESH_INFANTRY, 4)
 	set_troop(FRANCE, S_MOSCOW, EXHAUSTED_GUARD, 1)
@@ -2396,24 +2402,21 @@ function count_french_casualties() {
 	increase_vp(RUSSIA, Math.floor(count / 3))
 }
 
-// === RESOURCE PHASES ===
+// === RESOURCES PHASE ===
 P.resources_phase = script(`
 	eval { start_turn(G.turn) }
 	if (get_current_month() === OCT) {
 		call add_winter_cards
 	}
 	if (get_current_season() === WINTER) {
-		log "%Winter"
-		eval { shift_initiative(RUSSIA) }
-		log
+		call winter_shift_initiative
 	}
 	call free_replacements
 	call additional_replacements
 	call select_new_cards
 
-	log "@Draw Cards"
+	eval { log_h2("Draw Cards") }
 	set G.active [RUSSIA, FRANCE]
-	log
 	call draw_card_to_hand { num_cards_to_draw: L.$ }
 `)
 
@@ -2435,6 +2438,13 @@ P.add_winter_cards = function() {
 	log("Removed Summer cards.")
 	log("Added Winter cards.")
 	log("Decks reshuffled.")
+	log()
+	end()
+}
+
+P.winter_shift_initiative = function() {
+	log_h5("Winter")
+	shift_initiative(RUSSIA)
 	log()
 	end()
 }
@@ -2847,6 +2857,11 @@ P.end_turn = function() {
 			set_add(events_to_clear, evt)
 	})
 	events_to_clear.forEach(evt => map_delete(G.persistent_events, evt))
+
+	if (get_current_initiative_level() === 4) {
+		log(`Initiative is at ${ROLES[get_who_has_initiative()]} 4.`)
+		increase_vp(get_who_has_initiative())
+	}
 
 	if (!sudden_death())
 		end()
@@ -3732,7 +3747,7 @@ function is_order_forbidden(who, type) {
 			Russia - 1 Cavalry Patrols
 			France - 1 Forage
 
-		Optional rule (Increased French Command Capability) -
+		Optional rule (Superior Staff Officers) -
 			France - 1 Cavalry Patrols
 
 		Dummy orders -
@@ -3777,8 +3792,8 @@ function does_receive_platov_free_order(player) {
 	return player === RUSSIA && is_leader_on_map(L_PLATOV)
 }
 
-function does_receive_increased_french_command_capability_free_order(player) {
-	return is_increased_french_command_capability()
+function does_receive_superior_staff_officers_free_order(player) {
+	return is_superior_staff_officers()
 		&& player === FRANCE
 		&& get_current_season() === SUMMER
 		&& is_leader_on_map(L_NAPOLEON)
@@ -3790,7 +3805,7 @@ function is_french_logistic_preparations(player) {
 }
 
 function generate_select_order_actions(who, types) {
-	if (typeof types === 'number') types = [types]
+	if (typeof types === 'number') types = [ types ]
 
 	for (let order = get_first_order(who); order <= get_last_order(who); ++order) {
 		if (
@@ -3822,6 +3837,7 @@ P.select_orders = {
 		// Reset trackers
 		G.selected_orders = [[], []]
 		G.platov_order = -1
+		G.superior_staff_officers_order = -1
 
 		// Local state
 		L.state = [null, null]
@@ -3868,18 +3884,18 @@ P.select_orders = {
 			},
 			on_order(order) { select_order(order) },
 		},
-		// Increased French Command Capability optional rule: France gets a Cavalry Patrols order in Napoléon's location in Summer.
-		"increased_french_command_capability": {
+		// Superior Staff Officers optional rule: France gets a Cavalry Patrols order in Napoléon's location in Summer.
+		"superior_staff_officers": {
 			eligible(player) {
-				return does_receive_increased_french_command_capability_free_order(player)
+				return does_receive_superior_staff_officers_free_order(player)
 			},
 			on_prompt() {
-				prompt(`Increased French Command Capability: Select a Cavalry Patrols order. This order would be placed in ${format_area(get_leader_location(L_NAPOLEON))}.`)
+				prompt(`Superior Staff Officers: Select a Cavalry Patrols order. This order would be placed in ${format_area(get_leader_location(L_NAPOLEON))}.`)
 				generate_select_order_actions(R, CAVALRY_PATROLS)
 			},
 			on_order(order) {
-				push_local_undo(R, "select_increased_french_command_capability_order")
-				G.increased_french_command_capability_order = order
+				push_local_undo(R, "select_superior_staff_officers_order")
+				G.superior_staff_officers_order = order
 				select_order(order, false)
 			}
 		},
@@ -3999,8 +4015,8 @@ P.select_orders = {
 
 		if (undo.action === "select_platov_order")
 			G.platov_order = -1
-		else if (undo.action === "select_increased_french_command_capability_order")
-			G.increased_french_command_capability_order = -1
+		else if (undo.action === "select_superior_staff_officers_order")
+			G.superior_staff_officers_order = -1
 		else if (undo.action === "select_dummy_order" || undo.action === "select_order_main")
 			++L.count[R]
 		else if (undo.action === "select_french_logistic_preparations_order")
@@ -4101,7 +4117,7 @@ P.do_place_orders = {
 		L.undo = [[], []]
 
 		L.has_placed_platov_order = is_leader_on_map(L_PLATOV) ? false : true
-		L.has_placed_increased_command_capability_order = is_leader_on_map(L_NAPOLEON) ? false : true
+		L.has_placed_superior_staff_officers_order = is_leader_on_map(L_NAPOLEON) ? false : true
 		L.has_discarded_card = false
 	},
 	states: {
@@ -4110,9 +4126,9 @@ P.do_place_orders = {
 				if (!L.has_placed_platov_order && does_receive_platov_free_order(R)) {
 					prompt_leader(L_PLATOV, `Select an ${get_order_name(G.platov_order)} order.`)
 					action_order(G.platov_order)
-				} else if (!L.has_placed_increased_command_capability_order && does_receive_increased_french_command_capability_free_order(R)) {
-					prompt(`Increased French Command Capability: Select a Cavalry Patrols order.`)
-					action_order(G.increased_french_command_capability_order)
+				} else if (!L.has_placed_superior_staff_officers_order && does_receive_superior_staff_officers_free_order(R)) {
+					prompt(`Superior Staff Officers: Select a Cavalry Patrols order.`)
+					action_order(G.superior_staff_officers_order)
 				} else {
 					prompt(`Select next order to place. (${L.orders_to_place[R].length} remaining)`)
 					L.orders_to_place[R].forEach(action_order)
@@ -4135,8 +4151,8 @@ P.do_place_orders = {
 						prompt(`Place ${get_order_name(G.platov_order)} with ${format_leader(L_PLATOV)} at ${format_area(get_leader_location(L_PLATOV))}.`)
 						action_area(get_leader_location(L_PLATOV))
 					}
-				} else if (!L.has_placed_increased_command_capability_order && does_receive_increased_french_command_capability_free_order(R)) {
-					prompt(`Place ${get_order_name(G.increased_french_command_capability_order)} with ${format_leader(L_NAPOLEON)} at ${format_area(get_leader_location(L_NAPOLEON))}.`)
+				} else if (!L.has_placed_superior_staff_officers_order && does_receive_superior_staff_officers_free_order(R)) {
+					prompt(`Place ${get_order_name(G.superior_staff_officers_order)} with ${format_leader(L_NAPOLEON)} at ${format_area(get_leader_location(L_NAPOLEON))}.`)
 					action_area(get_leader_location(L_NAPOLEON))
 				} else {
 					// French Logistic Preparations special rule.
@@ -4161,8 +4177,8 @@ P.do_place_orders = {
 				} else {
 					if (!L.has_placed_platov_order && does_receive_platov_free_order(R))
 						L.has_placed_platov_order = true
-					else if (!L.has_placed_increased_command_capability_order && does_receive_increased_french_command_capability_free_order(R))
-						L.has_placed_increased_command_capability_order = true
+					else if (!L.has_placed_superior_staff_officers_order && does_receive_superior_staff_officers_free_order(R))
+						L.has_placed_superior_staff_officers_order = true
 					do_place_order(R, area)
 				}
 			},
@@ -4222,9 +4238,8 @@ P.do_place_orders = {
 		case "place_order":
 			if (R === RUSSIA && L.has_placed_platov_order && undo.info.order === G.platov_order)
 				L.has_placed_platov_order = false
-			// TODO
-			// else if (R === FRANCE && L.has_placed_increased_command_capability_order && undo.info.order === G.increased_french_command_capability_order)
-			//	L.has_placed_increased_command_capability_order = false
+			else if (R === FRANCE && L.has_placed_superior_staff_officers_order && undo.info.order === G.superior_staff_officers_order)
+				L.has_placed_superior_staff_officers_order = false
 
 			remove_order(undo.info.order)
 			undo_cleanup_order(R, undo.info.order)
@@ -4288,8 +4303,6 @@ P.end_place_orders_events = {
 }
 
 // === COMMON ORDER EXECUTION STATES ===
-// Determine who goes first, change orders, and generic go to next order state.
-
 
 /* CHANGE ORDERS */
 /*
@@ -4337,11 +4350,12 @@ function can_discard_card_to_place(leader, current_type, type_to) {
 
 function can_change_order(leader, current_type) {
 	if (
-		!is_leader_on_map(leader)
+		is_leader_ability_used(leader)
+		|| !is_leader_on_map(leader)
 		|| !is_seniormost_leader(leader, get_leader_location(leader))
-		|| is_leader_ability_used(leader)
-	)
+	) {
 		return false
+	}
 
 	let area = get_leader_location(leader)
 
@@ -4360,6 +4374,7 @@ function can_change_order(leader, current_type) {
 		return can_discard_card_to_place(L_CHICHAGOV, current_type, FORCED_MARCH)
 	// May change an order to ANY order.
 	case L_NAPOLEON:
+		// RU #7 Indecision: Napoléon may not change orders for the duration of the turn.
 		if (is_event_active(C_INDECISION))
 			return false
 		return (has_order_of_type(FRANCE, current_type, area) && has_switchable_order_in_pool(FRANCE, current_type))
@@ -4394,6 +4409,7 @@ function change_order(leader, order, type_to) {
 	push_local_undo(R, "change_order", { leader, removed: order, placed: replacement })
 	mark_ability_used(leader)
 
+	// If changing an order with Napoléon, France needs to see the warning for RU #7 Indecision.
 	if (leader === L_NAPOLEON) {
 		L.napoleon_change.removed = order
 		L.napoleon_change.placed = replacement
@@ -4575,7 +4591,7 @@ P.change_orders = {
 				} else if (!L.has_changed_order) {
 					prompt(`Select a non-Dummy order to place at ${format_area(area)}.`)
 
-					// May place any order that will be executed in the future phase compared to the current order.
+					// May place any order that will be executed in a future phase compared to the current order.
 					get_orders_at_area(FRANCE, POOL)
 						.filter(order => get_order_type(order) > L.current_type)
 						.forEach(action_order)
@@ -4730,6 +4746,7 @@ P.determine_who_goes_first = {
 		L.first_player = -1
 		L.has_confirmed = false
 
+		// TODO: Add 'pass turn' feature for expediency.
 		if (L.type === FORCED_MARCH && can_play_event(C_EVASIVE_MANEUVERS)) {
 			G.active = RUSSIA
 			L.event = C_EVASIVE_MANEUVERS
@@ -4781,9 +4798,7 @@ P.execute_orders = script(`
 	eval { log_h2(get_order_type_name(L.type)) }
 	call change_orders { current_type: L.type }
 	if (get_placed_orders_of_type(L.type).length === 0) {
-		log
-		eval { log("No " + get_order_type_name(L.type) + " orders placed.") }
-		log
+		goto log_no_orders_placed { type: L.type }
 	} else {
 		call determine_who_goes_first { type: L.type }
 
@@ -4806,6 +4821,13 @@ P.execute_orders = script(`
 	}
 `)
 
+P.log_no_orders_placed = function() {
+	log()
+	log(`No ${get_order_type_name(L.type)} orders placed.`)
+	log()
+	end()
+}
+
 function filter_orders(who, type) {
 	switch(type) {
 	case FORCED_MARCH:
@@ -4826,7 +4848,7 @@ function filter_orders(who, type) {
 		filter_orders_of_type(who, type, (order) => {
 			return has_friendly_troop(G.active, get_order_location(order))
 				&& has_battle(get_order_location(order))
-				&& (!is_event_active(C_UNSUCCESSFUL_DISENGAGEMENT) || (is_event_active(C_UNSUCCESSFUL_DISENGAGEMENT) && !set_has(map_get(G.persistent_events, C_UNSUCCESSFUL_DISENGAGEMENT).cancelled_orders, order)))
+				&& (!is_event_active(C_UNSUCCESSFUL_DISENGAGEMENT) || (is_event_active(C_UNSUCCESSFUL_DISENGAGEMENT) && !set_has(get_event_keyword(C_UNSUCCESSFUL_DISENGAGEMENT, "cancelled_orders"), order)))
 		})
 		return
 	case RALLY:
@@ -4926,7 +4948,7 @@ P.execute_next_order = {
 	},
 }
 
-// TODO: Add 'pass turn' feature for expediency
+// TODO: Add 'pass turn' feature on Exhausting March for expediency
 P.end_order = {
 	prompt() {
 		prompt(`Execute ${get_order_type_name(L.type)} order — All done.`)
@@ -5569,7 +5591,8 @@ function get_move_destinations(current_area, allowance) {
 				&& possible_destinations.some(destination => find_path_distance(area, destination) <= allowance - 1)
 		})
 	}
-	else if (has_battle(current_area) && is_battle_defender(G.active, current_area)) {
+	// Exception to pinning: If the pinning force consists of a single SP with no leader, the defending force may use the connection used by the attacker.
+	else if (has_battle(current_area) && is_battle_defender(G.active, current_area) && (count_num_sps(enemy(G.active), current_area) > 1 || has_friendly_leader(enemy(G.active), current_area))) {
 		return get_all_adjacent_areas(current_area).filter(area => !get_connections_used_by_attacker(current_area).includes(area))
 	}
 	else {
@@ -10003,39 +10026,75 @@ P.increase_devastation = {
 }
 
 // === LINES OF COMMUNICATIONS ===
+function update_next_cluster(player) {
+	L.current_cluster[player] = {}
+	L.current_cluster[player].cluster = L.clustered_depots[player].shift()
+	L.current_cluster[player].count = Math.ceil(L.current_cluster[player].cluster.length / 2)
+}
+
 P.lines_of_communications = {
 	_begin() {
 		log_h2("Lines of Communications")
 		G.active = [RUSSIA, FRANCE]
 
-		L.depots_to_remove = [check_lines_of_communication(RUSSIA), check_lines_of_communication(FRANCE)]
-		L.removed_depots = [[], []]
+		// Depots which cannot trace a valid LoC back to a supply source AND cannot trace a path of 4 or less road connections to another depot.
+		L.unconnected_depots = [[], []]
+		// Depots which cannot trace a valid LoC back to a supply source BUT can trace a path of 4 or less road connections to another depot.
+		L.clustered_depots = [[], []]
+
+		// The current cluster the player is checking Lines of Communications for.
+		// Must remove half of the depots (rounded up) from each cluster.
+		L.current_cluster = [{}, {}]
+
+		// TODO
+		// Undo stack
+		L.undo = [[], []]
+
+		for (let player = RUSSIA; player <= FRANCE; ++player) {
+			let status = check_lines_of_communications(player)
+
+			for (let area of status.remove)
+				L.unconnected_depots[player].push(area)
+			for (let cluster of status.remove_half)
+				L.clustered_depots[player].push(cluster)
+
+			if (L.unconnected_depots[player].length === 0 && L.clustered_depots[player].length > 0)
+				update_next_cluster(player)
+		}
 	},
+	inactive: "check lines of communications",
 	prompt() {
-		if (L.depots_to_remove[R].length > 0) {
-			prompt(`Remove depots at ${join_array_with_and(L.depots_to_remove[R].map(format_area))}.`)
-			for (let area of L.depots_to_remove[R]) action_depot(find_depot_at_location(R, area))
+		if (L.unconnected_depots[R].length > 0) {
+			prompt(`Lines of Communications: Remove depots at ${join_array_with_and(L.unconnected_depots[R].map(format_area))}.`)
+			L.unconnected_depots[R].forEach(area => action_depot(find_depot_at_location(R, area)))
+		} else if (L.current_cluster[R].count && L.current_cluster[R].count > 0) {
+			prompt(`Lines of Communications: Remove ${L.current_cluster[R].count} depots among ${join_array_with_and(L.current_cluster[R].cluster.map(format_area))}`)
+			L.current_cluster[R].cluster.forEach(area => action_depot(find_depot_at_location(R, area)))
 		} else {
-			prompt(`Check Lines of Communications: All done.`)
+			prompt(`Lines of Communications: All done.`)
 			button_confirm()
 		}
 	},
 	depot(depot) {
-		set_delete(L.depots_to_remove[R], get_depot_location(depot))
-		remove_depot(depot, get_depot_location(depot))
+		let area = get_depot_location(depot)
+		remove_depot(depot, area)
+		if (L.unconnected_depots[R].length > 0) {
+			set_delete(L.unconnected_depots[R], area)
+			if (L.unconnected_depots[R].length === 0 && L.clustered_depots[R].length > 0)
+				update_next_cluster(R)
+		} else {
+			if (--L.current_cluster[R].count === 0 && L.clustered_depots[R].length > 0)
+				update_next_cluster(R)
+		}
 	},
 	confirm() {
 		set_delete(G.active, R)
-		if (G.active.length === 0) {
-			for (let who = RUSSIA; who <= FRANCE; ++who)
-				if (L.removed_depots[R].length === 0)
-					log(`All ${ROLES[who]} depots are in supply.`)
+		if (G.active.length === 0)
 			end()
-		}
 	}
 }
 
-// === SUPPLY AND LINES OF COMMUNICATIONS ===
+// === SUPPLY ===
 const MAX_SUPPLY_DISTANCE = 5
 const MAX_LOC_DISTANCE = 4
 
@@ -10074,15 +10133,13 @@ function get_supply_status(who, area) {
 }
 
 /* SUPPLY */
-
-//Returns the distance from each space to its closest node if in supply, greater than 5 if OOS
+// Returns the distance from each space to its closest node if in supply, greater than 5 if OOS
 function calculate_distance_to_nearest_depot(who) {
 	let sources = get_supply_sources_and_depots(who)
 	let distance = new Array(NUM_AREAS).fill(999)
 
-	for (let source of sources) {
+	for (let source of sources)
 		distance[source] = 0
-	}
 
 	for (let source of sources) {
 		let queue = [ source ]
@@ -10090,9 +10147,8 @@ function calculate_distance_to_nearest_depot(who) {
 		while (queue.length > 0) {
 			let current = queue.shift()
 
-			if ((distance[current] > MAX_SUPPLY_DISTANCE) || has_enemy_sp(who, current)) {
+			if ((distance[current] > MAX_SUPPLY_DISTANCE) || has_enemy_sp(who, current))
 				continue
-			}
 
 			//Tracks and Roads are identical for supply purposes except for their modified distance: Road - 1, Track - 2
 			//The TRACK and ROAD constants map to this distance
@@ -10111,53 +10167,105 @@ function calculate_distance_to_nearest_depot(who) {
 	return distance
 }
 
-/* LINES OF COMMUNICATION */
+/* LINES OF COMMUNICATIONS */
+function check_lines_of_communications(player) {
+	let sources = get_supply_sources(player)
 
-//Returns a plain array map with each on-map depot of that side and its corresponding supply status
-function check_lines_of_communication(who) {
-	let sources = get_supply_sources(who) //Starting supply sources without depots
-
-	let depots = [] //Set of depot spaces for efficient lookup
-	for (let depot of get_depots(who).filter(s => (s !== POOL) && (s !== OUT_OF_PLAY))) {
-		set_add(depots, depot)
+	let depots = []
+	for (let depot = get_first_depot(player); depot <= get_last_depot(player); ++depot) {
+		if (is_depot_on_map(depot))
+			set_add(depots, get_depot_location(depot))
 	}
 
-	let out_of_supply_depots = depots.slice()
+	let status = {
+		connected: [],
+		remove_half: [],
+		remove: depots.slice(),
+	}
 
 	let queue = sources.slice()
-	let distance = new Array(NUM_AREAS).fill(999)
-	for (let source of sources) { //Start with supply sources
-		distance[source] = 0
-	}
+	let distance = []
+	for (let source of sources)
+		map_set(distance, source, 0)
 
 	while (queue.length > 0) {
 		let current = queue.shift()
 
-		//Cannot trace through enemy SPs & max. distance of 4
-		if (has_enemy_sp(who, current) || distance[current] > MAX_LOC_DISTANCE)
+		// Cannot trace through areas with enemy SPs.
+		// Maximum distance of 4 road connections to the nearest depot.
+		if (has_enemy_sp(player, current) || map_get(distance, current, 999) > MAX_LOC_DISTANCE)
 			continue
 
-		// Logic inverted from the rules: We start from supply sources and add depots as supply sources as they are encountered
-		for (let s of get_adjacent_areas_by_road(current)) { //Can trace only via road, not track
-			if ((distance[s] > distance[current] + 1)) {
-				queue.push(s)
-				if (set_has(depots, s) && !set_has(sources, s)) { //If a new in-supply depot is encountered, make it a source
-					set_add(sources, s)
-					set_delete(out_of_supply_depots, s)
-					distance[s] = 0
+		// Start with a player's supply sources, and traverse the graph using road connections.
+		// Add depots to sources as they are encountered.
+		for (let area of get_adjacent_areas_by_road(current)) { // Can only trace through road, not track.
+			if (map_get(distance, area, 999) > map_get(distance, current, 999) + 1) {
+				queue.push(area)
+				if (set_has(depots, area) && !set_has(sources, area)) {
+					set_add(sources, area)
+					set_add(status.connected, area)
+					set_delete(status.remove, area)
+					map_set(distance, area, 0)
 				} else {
-					distance[s] = distance[current] + 1
+					map_set(distance, area, map_get(distance, current, 999) + 1)
 				}
 			}
 		}
 	}
 
-	return out_of_supply_depots
+	if (status.remove.length > 0) {
+		let clustered_depots = []
+
+		// TODO: optimize
+		for (let depot of status.remove) {
+			let linkable_depots = get_linkable_depots(player, depot)
+			if (linkable_depots.length > 0) {
+				let cluster = status.remove_half.find(cl => set_has(cl, depot) || linkable_depots.some(a => set_has(cl, a))) ?? null
+				if (cluster !== null) {
+					if (!set_has(cluster, depot))
+						set_add(cluster, depot)
+				} else {
+					status.remove_half.push([ depot, ...linkable_depots ])
+				}
+				set_add(clustered_depots, depot)
+			}
+		}
+
+		clustered_depots.forEach(depot => set_delete(status.remove, depot))
+	}
+
+	return status
+}
+
+function get_linkable_depots(player, area) {
+	let queue = [ area ]
+	let distance = []
+	let depots = []
+	map_set(distance, area, 0)
+
+	while (queue.length > 0) {
+		let current = queue.shift()
+
+		if (has_enemy_sp(player, current) || map_get(distance, current, 999) > MAX_LOC_DISTANCE)
+			continue
+
+		for (let adj of get_adjacent_areas_by_road(current)) {
+			if (map_get(distance, adj, 999) > map_get(distance, current, 999) + 1) {
+				queue.push(adj)
+				if (has_friendly_depot(player, adj))
+					set_add(depots, adj)
+				map_set(distance, adj, map_get(distance, current, 999) + 1)
+			}
+		}
+	}
+
+	return depots
 }
 
 /* PLACE DEPOT ELIGIBILITY */
 function has_depot_within_four_road_connections(who, area) {
-	if (get_adjacent_areas_by_road(area).length === 0) return false
+	if (get_adjacent_areas_by_road(area).length === 0)
+		return false
 
 	let queue = [ area ]
 	let distance = []
@@ -10227,7 +10335,7 @@ function add_event_keyword(evt, keywords) {
 }
 
 function get_event_keyword(evt, keyword, fallback = null) {
-	return map_get(G.persistent_events, evt, fallback)?.[keyword] ?? null
+	return map_get(G.persistent_events, evt)?.[keyword] ?? fallback
 }
 
 function prompt_event_confirmation(evt, info) {
@@ -15417,7 +15525,7 @@ function map_has(map, key) {
 	return false
 }
 
-// WARNING: Added a null fallback for missing
+// NOTE: Added a null fallback for missing
 function map_get(map, key, missing = null) {
 	var a = 0
 	var b = (map.length >> 1) - 1
