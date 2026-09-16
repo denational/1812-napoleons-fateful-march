@@ -1649,13 +1649,24 @@ function on_setup(scenario, options) {
 	G.platov_order = -1
 	G.superior_staff_officers_order = -1
 
+	log_h5("Special Rules")
+	if ([THE_EAGLES_MARCH_ON_SMOLENSK, THE_EAGLES_MARCH_ON_MOSCOW, THE_GRAND_CAMPAIGN].includes(scenario))
+		log(`French Logistic Preparations.`)
+
+	if ([THE_GRAND_CAMPAIGN, BATTLE_OF_SMOLENSK_CAMPAIGN_START, THE_RETREAT_OF_THE_GRANDE_ARMEE].includes(scenario))
+		log(`Winter.`)
+	log()
+
+	if (is_no_unsuccessful_disengagement() || is_superior_staff_officers() || is_russian_disorganization_and_confusion())
+		log_h5("Optional Rules")
+
 	if (
 		is_no_unsuccessful_disengagement()
 		&& G.start_turn === JUNE_5
 	) {
 		array_delete_item(get_deck(FRANCE), C_UNSUCCESSFUL_DISENGAGEMENT)
 		set_add(get_discard(FRANCE), C_UNSUCCESSFUL_DISENGAGEMENT)
-		log(`No ${format_card(C_UNSUCCESSFUL_DISENGAGEMENT)} during Turn 1.`)
+		log(`Less Luck of the Draw.`)
 	}
 
 	if (is_superior_staff_officers())
@@ -5282,7 +5293,25 @@ function move_prompt() {
 		if (G.move.sps[type] > 0)
 			 s += `${G.move.leaders.length > 0 ? ", " : ""}${G.move.sps[type]} ${get_troop_type_name(type)}`
 
-	return s + ")"
+	add_to_prompt(s + ")")
+}
+
+// Alexander ability: Must always, if possible, stack and move with another Russian leader.
+// No Russian leader may leave him behind alone.
+// See can_alexander_be_babysitted() for more clarifications on this
+function update_alexander_prompt(leaders_at_area) {
+	if (set_has(leaders_at_area, L_ALEXANDER) && leaders_at_area.length > 1 && (!set_has(G.move.leaders, L_ALEXANDER) || G.move.leaders.length === 1))
+		add_to_prompt(`${format_leader(L_ALEXANDER)} may not be activated alone or left behind without another leader.`)
+}
+
+// Platov ability: May only command Cavalry and Cossack SPs.
+function update_platov_prompt() {
+	if (G.move.leaders.length === 1 && set_has(G.move.leaders, L_PLATOV))
+		add_to_prompt(`${format_leader(L_PLATOV)} may only command Cavalry and Cossack SPs.`)
+}
+
+function could_platov_select(type) {
+	return is_cavalry(type) || is_cossack(type)
 }
 
 // See select_evade_force for selecting an evade force.
@@ -5333,22 +5362,14 @@ P.select_force = {
 
 			if (G.move.leaders.length > 0) {
 				prompt(`Select any or all leaders and SPs to move from ${format_area(L.area)}.`)
-
-				// Alexander ability: Must always, if possible, stack and move with another Russian leader.
-				// No Russian leader may leave him behind alone.
-				// See can_alexander_be_babysitted() for more clarifications on this
-				if (set_has(L.movable_leaders, L_ALEXANDER) && L.movable_leaders.length > 1 && (!set_has(G.move.leaders, L_ALEXANDER) || G.move.leaders.length === 1))
-					add_to_prompt(`${format_leader(L_ALEXANDER)} may not be activated alone or left behind without another leader.`)
-
-				// Platov ability: May only command Cavalry and Cossack SPs.
-				if (G.move.leaders.length === 1 && set_has(G.move.leaders, L_PLATOV))
-					add_to_prompt(`${format_leader(L_PLATOV)} may only command Cavalry and Cossack SPs.`)
+				update_alexander_prompt(L.movable_leaders)
+				update_platov_prompt()
 			} else {
 				prompt(`Select up to 4 SPs (at least 1) to move from ${format_area(L.area)}`)
 			}
 
 			if (G.move.leaders.length > 0 || L.num_sps_selected > 0)
-				V.prompt += move_prompt()
+				move_prompt()
 
 			// Bagration's Retreat must include Bagration!
 			if (is_event_active(C_BAGRATIONS_RETREAT) && L.area === get_leader_location(L_BAGRATION))
@@ -5357,7 +5378,8 @@ P.select_force = {
 			// Infighting & Intrigue: Russian leaders in the target area may only move if they end their movement in an area with French SPs.
 			if (
 				!is_event_active(C_INFIGHTING_AND_INTRIGUE)
-				|| (is_event_active(C_INFIGHTING_AND_INTRIGUE) && get_event_keyword(C_INFIGHTING_AND_INTRIGUE, "area") === L.area && has_valid_infighting_and_intrigue_destination(G.active, L.area, L.type))
+				|| get_event_keyword(C_INFIGHTING_AND_INTRIGUE, "area") !== L.area
+				|| has_valid_infighting_and_intrigue_destination(G.active, L.area, L.type)
 			) {
 				for (let leader of L.movable_leaders)
 					action_leader(leader)
@@ -5365,9 +5387,13 @@ P.select_force = {
 
 			for (let type = 0; type < G.move.sps.length; ++type) {
 				// Platov leader ability: He may only command Cavalry and Cossack SPs
-				if (G.move.leaders.length === 1 && set_has(G.move.leaders, L_PLATOV)) {
-					if (!is_cavalry(type) && !is_cossack(type))
-						continue
+				if (
+					G.active === RUSSIA
+					&& G.move.leaders.length === 1
+					&& set_has(G.move.leaders, L_PLATOV)
+					&& !could_platov_select(type)
+				) {
+					continue
 				}
 
 				// If a Russian leader in the target Infighting & Intrigue destination is selected, only allow SP type that would be able to move to a French-occupied area to move.
@@ -5375,7 +5401,7 @@ P.select_force = {
 					G.move.leaders.length > 0
 					&& is_event_active(C_INFIGHTING_AND_INTRIGUE)
 					&& get_event_keyword(C_INFIGHTING_AND_INTRIGUE, "area") === L.area
-					&& type !== FRESH_CAVALRY && type !== FRESH_COSSACK
+					&& type !== FRESH_CAVALRY && type !== FRESH_COSSACK		// Force types that have an extended move range
 				) {
 					let dist = L.type === FORCED_MARCH ? 2 : 1
 					if (get_distance_to_closest_infighting_and_intrigue_destination(G.active, L.area, L.type) > dist)
@@ -5428,7 +5454,7 @@ P.select_force = {
 		// If a leader is removed and the only remaining leader is Platov, remove all non-Cavalry and non-Cossack SPs
 		if (G.move.leaders.length === 1 && set_has(G.move.leaders, L_PLATOV)) {
 			for (let type = 0; type < G.move.sps.length; ++type) {
-				if ((!is_cavalry(type) && !is_cossack(type)) && G.move.sps[type] > 0) {
+				if ((!could_platov_select(type) && G.move.sps[type] > 0)) {
 					L.num_sps_selected -= G.move.sps[type]
 					G.move.sps[type] = 0
 				}
@@ -5478,7 +5504,7 @@ P.select_force = {
 		L.num_sps_selected = 0
 		for (let type = 0; type < G.move.sps.length; ++type) {
 			// If Platov is the only leader at the area, don't select SPs that are not Cavalry or Cossack
-			if ((L.movable_leaders.length === 1 && set_has(G.move.leaders, L_PLATOV)) && (!is_cavalry(type) && !is_cossack(type))) {
+			if ((L.movable_leaders.length === 1 && set_has(G.move.leaders, L_PLATOV)) && !could_platov_select(type)) {
 				continue
 			} else if (is_event_active(C_INFIGHTING_AND_INTRIGUE) && G.move.leaders.length > 0) {
 				let dist = L.type === FORCED_MARCH ? 2 : 1
@@ -6184,6 +6210,9 @@ P.execute_evade = script(`
 P.select_evade_destination = {
 	_begin() {
 		L.retreat_destinations = find_retreat_destinations(G.active, L.area)
+		// Handles weird edge cases where the force has a valid retreat destination but the cluster is encircled by enemy SPs.
+		if (L.retreat_destinations.length === 0)
+			L.retreat_destinations = get_all_adjacent_areas(L.area).filter(area => !has_enemy_sp(G.active, area))
 	},
 	prompt() {
 		prompt(`Select destination for Evade from ${format_area(L.area)}. (${join_array_with_or(L.retreat_destinations.map(format_area))})`)
@@ -6233,7 +6262,7 @@ P.select_evade_force = {
 		}
 		L.sps = get_evade_sps(G.active, L.area)
 
-		// Running count of the number of SPs selected (it's not efficient to run a map_for_each for every count)
+		// Running count of the number of SPs selected
 		L.num_sps_selected = 0
 
 		G.move = {
@@ -6252,6 +6281,14 @@ P.select_evade_force = {
 		// Selecting a force: unlimited with a leader, max. 4 without
 		let max_sps_selectable = G.move.leaders.length > 0 ? count_num_sps(G.active, L.area) : 4
 
+		if (G.move.leaders.length > 0) {
+			prompt(`Select any or all leaders and SPs to evade from ${format_area(L.area)}.`)
+			update_alexander_prompt(L.leaders)
+			update_platov_prompt()
+		} else {
+			prompt(`Select up to 4 SPs (at least 1) to move from ${format_area(L.area)}`)
+		}
+
 		prompt(`Select leaders and SPs to evade from ${format_area(L.area)}.`)
 
 		for (let leader of L.leaders)
@@ -6260,7 +6297,18 @@ P.select_evade_force = {
 		map_for_each(L.sps, (from, forces) => {
 			map_for_each(forces, (strength, sps) => {
 				for (let type = 0; type < sps.length; ++type) {
+					// Platov leader ability: He may only command Cavalry and Cossack SPs
+					if (
+						G.active === RUSSIA
+						&& G.move.leaders.length === 1
+						&& set_has(G.move.leaders, L_PLATOV)
+						&& !could_platov_select(type)
+					) {
+						continue
+					}
+
 					if (sps[type] > 0) {
+						// Ignore if all SPs have already been selected.
 						if (map_has(G.move.sps, from) && map_has(map_get(G.move.sps, from), strength) && map_get(map_get(G.move.sps, from), strength)[type] >= sps[type])
 							continue
 						else
@@ -6284,11 +6332,29 @@ P.select_evade_force = {
 			button("select_all")
 		}
 
-		button("evade", L.num_sps_selected > 0)
+		button("evade",
+			L.num_sps_selected > 0
+			&& L.num_sps_selected <= max_sps_selectable
+			&& can_alexander_be_babysitted(true)
+		)
 	},
 	leader(leader) {
 		push_undo()
 		set_toggle(G.move.leaders, leader)
+
+		// If a leader is removed and the only remaining leader is Platov, remove all non-Cavalry and non-Cossack SPs
+		if (G.active === RUSSIA && G.move.leaders.length === 1 && set_has(G.move.leaders, L_PLATOV)) {
+			map_for_each(G.move.sps, (from, forces) => {
+				map_for_each(forces, (strength, sps) => {
+					for (let type = 0; type < sps.length; ++type) {
+						if (!could_platov_select(type) && sps[type] > 0) {
+							L.num_sps_selected -= sps[type]
+							sps[type] = 0
+						}
+					}
+				})
+			})
+		}
 	},
 	troop(entry) {
 		push_undo()
@@ -6314,17 +6380,33 @@ P.select_evade_force = {
 	select_all() {
 		push_undo()
 		G.move.leaders = L.leaders.slice()
-		G.move.sps = []
+		map_clear(G.move.sps)
+
+		L.num_sps_selected = 0
 		map_for_each(L.sps, (from, forces) => {
 			let copy = []
 			map_for_each(forces, (strength, sps) => {
 				copy.push(strength)
-				copy.push(sps.slice())
+				// If Platov is the only leader at the area, do not add SPs that he cannot Command.
+				if (G.active === RUSSIA && L.leaders.length === 1 && set_has(L.leaders, L_PLATOV)) {
+					let selected_sps = Array(NUM_TROOP_TYPES).fill(0)
+					for (let type = 0; type < sps.length; ++type) {
+						if (could_platov_select(type) && sps[type] > 0) {
+							selected_sps[type] += sps[type]
+							L.num_sps_selected += sps[type]
+						}
+					}
+					copy.push(selected_sps)
+				} else {
+					copy.push(sps.slice())
+				}
 			})
 			map_set(G.move.sps, from, copy)
 		})
 
-		if (is_event_active(C_UNEXPECTED_RETREAT))
+		if (G.active === RUSSIA && L.leaders.length === 1 && set_has(L.leaders, L_PLATOV))
+			return
+		else if (is_event_active(C_UNEXPECTED_RETREAT))
 			L.num_sps_selected = count_num_sps_of_type(FRANCE, FRESH_AUSTRIAN_INFANTRY, L.area) + count_num_sps_of_type(FRANCE, EXHAUSTED_AUSTRIAN_INFANTRY, L.area)
 		else
 			L.num_sps_selected = count_num_sps(G.active, L.area)
