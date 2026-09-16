@@ -6199,11 +6199,13 @@ P.execute_evade = script(`
 		goto end_order { type: EVADE }
 	} else {
 		call select_evade_destination { area: L.area }
-		call select_evade_force { area: L.area, destination: L.$ }
-		if (has_battle(L.area)) {
-			call evade { evader: L.evader, area: L.area }
+		if (L.$ > -1) {
+			call select_evade_force { area: L.area, destination: L.$ }
+			if (has_battle(L.area)) {
+				call evade { evader: L.evader, area: L.area }
+			}
+			call finish_evade { evader: L.evader, area: L.area }
 		}
-		call finish_evade { evader: L.evader, area: L.area }
 	}
 `)
 
@@ -6215,12 +6217,24 @@ P.select_evade_destination = {
 			L.retreat_destinations = get_all_adjacent_areas(L.area).filter(area => !has_enemy_sp(G.active, area))
 	},
 	prompt() {
-		prompt(`Select destination for Evade from ${format_area(L.area)}. (${join_array_with_or(L.retreat_destinations.map(format_area))})`)
-		L.retreat_destinations.forEach(action_area)
+		if (L.retreat_destinations.length > 0) {
+			prompt(`Select destination for Evade from ${format_area(L.area)}. (${join_array_with_or(L.retreat_destinations.map(format_area))})`)
+			L.retreat_destinations.forEach(action_area)
+		} else {
+			prompt(`No valid destination for Evade from ${format_area(L.area)}`)
+			button_confirm()
+		}
 	},
 	area(area) {
 		push_undo()
 		L.L.$ = area
+		end()
+	},
+	confirm() {
+		push_undo()
+		log(`No valid Evade destinations.`)
+		log()
+		L.L.$ = -1
 		end()
 	}
 }
@@ -9324,45 +9338,42 @@ P.battle_draw_card_to_hand = script(`
 `)
 
 // === EXECUTE RALLY ORDERS ===
-/*
-	TODO: Russian Rally orders in Kutuzov's area affect an additional SP.
-	if (get_leader_location(L_KUTUZOV) === L.area) {
+P.execute_rally = script(`
+	call rally { area: L.area }
+	if (G.active === RUSSIA && get_leader_location(L_KUTUZOV) === L.area) {
 		call kutuzov_additional_rally { area: L.area }
 	}
-*/
-P.execute_rally = script(`
-	call do_rally { area: L.area }
 	goto end_order { type: RALLY }
 `)
 
-P.do_rally = {
+P.rally = {
 	_begin() {
 		// L.area
+		// L.kutuzov
 		L.count = 0
 		log("Rallied")
 	},
 	prompt() {
 		if (
 			!has_exhausted_sp(G.active, L.area)
+			// Second rally SP must be Infantry!
 			|| (L.count === 1 && !get_all_exhausted_sp_types(G.active, L.area).some(type => is_infantry(type)))
 		) {
 			prompt(`No ${L.count > 0 ? "more" : ""} exhausted SPs at ${format_area(L.area)} to Rally.`)
 			button_confirm()
 		} else {
 			prompt(`You may flip back one of your exhausted SPs back to its fresh side.`)
-			if (has_friendly_depot(G.active, L.area) && count_num_exhausted_infantry(G.active, L.area) >= 2)
+			if (has_friendly_depot(G.active, L.area) && count_num_exhausted_infantry(G.active, L.area) >= 2 && !L.kutuzov)
 				add_to_prompt(` (2 if Infantry)`)
 
 			for (let type of get_all_exhausted_sp_types(G.active, L.area)) {
-				// In a Depot town after rallying one exhausted Infantry
-				if (
-					L.count === 0
-					|| (L.count === 1 && is_infantry(type))
-				) {
+				if (L.count === 0 || is_infantry(type))
 					action_troop_alt(type, L.area)
-				}
 			}
 		}
+
+		if (L.kutuzov)
+			prompt_leader(L_KUTUZOV, V.prompt)
 	},
 	troop(entry) {
 		push_undo()
@@ -9371,7 +9382,7 @@ P.do_rally = {
 		rally_troop(G.active, L.area, type)
 		log_masked(G.active, format_i(`1 ${get_troop_type_name(type)}`), format_i(`1 Exh. SP`))
 
-		if (L.count === 0 && has_friendly_depot(G.active, L.area) && is_infantry(type))
+		if (!L.kutuzov && L.count === 0 && has_friendly_depot(G.active, L.area) && is_infantry(type))
 			++L.count
 		else
 			end()
@@ -9380,6 +9391,15 @@ P.do_rally = {
 		push_undo()
 		if (L.count === 0)
 			logi("Nothing")
+		end()
+	}
+}
+
+P.kutuzov_additional_rally = function() {
+	if (has_exhausted_sp(G.active, L.area)) {
+		log(`${format_leader(L_KUTUZOV)}: Rally an additional SP.`)
+		goto("rally", { area: L.area, kutuzov: true })
+	} else {
 		end()
 	}
 }
