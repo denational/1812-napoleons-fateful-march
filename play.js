@@ -920,15 +920,13 @@ function on_update() {
 	action_button("combine", "Combine")
 	action_button("add_1_to_attrition_distance", "Add 1 to Attrition Distance")
 
-	action_button_with_argument("move_type", -1, "SPs that have not moved")
-	action_button_with_argument("move_type", 0, "Forced March SPs")
-	action_button_with_argument("move_type", 2, "March SPs")
-
-	action_button("place_order", "Place Order")
-	action_button("change_order", "Change Order")
-
+	// FR #14 Skillfull Maneuvers
 	action_button("remove_defend_order", "Remove Defend Order")
 	action_button("cancel_river_effect", "Cancel River Effect")
+
+	// FR #25 Good Leadership
+	action_button("place_order", "Place Order")
+	action_button("change_order", "Change Order")
 
 	action_button("roll", "Roll")
 	action_button("eliminate", "Eliminate")
