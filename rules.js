@@ -157,7 +157,6 @@ const HIDDEN = -2
 const OUT_OF_PLAY = -1
 const POOL = 0
 
-// Unnamed areas are named "Unnamed" + sector
 const S_PRUSSIA_NORTH = 1 // The northern of the two "Prussia" areas
 const S_KALTINENAI = 3
 const S_PRUSSIA_SOUTH = 5
@@ -230,7 +229,7 @@ const S_SMOLENSK = 101
 const S_BABINOVICHI = 102
 const S_ORSHA = 103
 const S_MSTISLAVL = 104
-const S_UNNAMED_E4 = 105
+const S_UNNAMED_E4 = 105 // Unnamed areas are named "Unnamed" + sector
 const S_UKRAINE = 113
 const S_DUKHOVSHCHINA = 115
 const S_VYAZMA = 118
@@ -285,7 +284,7 @@ const L_PLATOV = 7
 
 const L_NAPOLEON = 8
 const L_JEROME = 9
-const L_DE_BEAUHARNAIS = 10 //Used names on counters, he is referred to as 'Eugène' in other places
+const L_DE_BEAUHARNAIS = 10 // Used names on counters, he is referred to as 'Eugène' in other places
 const L_DAVOUT = 11
 const L_MURAT = 12
 const L_SCHWARZENBERG = 13
@@ -2168,6 +2167,7 @@ function place_card_at_the_top_of_the_deck(card) {
 // === MAIN ===
 P.main = script(`
 	for G.turn in G.start_turn to G.end_turn {
+		eval { start_turn(G.turn) }
 		if (is_resource_turn(G.turn)) {
 			call resources_phase
 		} else {
@@ -2177,6 +2177,7 @@ P.main = script(`
 	goto finish_game
 `)
 
+// Called in main script
 // eslint-disable-next-line no-unused-vars
 function start_turn(turn) {
 	if (is_resource_turn(turn))
@@ -2307,7 +2308,6 @@ function count_french_casualties() {
 
 // === RESOURCES PHASE ===
 P.resources_phase = script(`
-	eval { start_turn(G.turn) }
 	if (get_current_month() === OCT) {
 		call add_winter_cards
 	}
@@ -2718,7 +2718,6 @@ function is_order_turn(turn) {
 }
 
 P.turn = script(`
-	eval { start_turn(G.turn) }
 	for G.phase in 0 to (TURN_PHASES.length - 1) {
 		if (is_order_turn(G.phase)) {
 			call execute_orders { type: TURN_PHASES[G.phase] }
@@ -8229,8 +8228,8 @@ P.assign_losses = {
 					map_set(counts, type, count)
 				}
 				push_local_undo(R, "eliminate_all", { eliminated_by_type, counts })
-				//log(`${ROLES[R]} has no more fresh SPs.`)
-				//log(`${ROLES[R]} eliminated!`)
+				// log(`${ROLES[R]} has no more fresh SPs.`)
+				// log(`${ROLES[R]} eliminated!`)
 			},
 			on_confirm() {
 				set_delete(G.active, R)
@@ -8315,10 +8314,9 @@ P.assign_losses = {
 	confirm()		{ this.states[L.state[R]].on_confirm() },
 }
 
-//TODO: Stoic Infantry: Immediately rally first two exhausted RU SPs
 P.determine_battle_winner = function() {
 	// FR #27 Confusions and Delays: The battle is considered tied, and the French MUST retreat from battle.
-	//	Clarification: Supersedes exhaustion victory (if all Russians are eliminated)
+	// Clarification: Supersedes exhaustion victory (if all Russians are eliminated)
 	if (is_battle_event_currently_active(C_CONFUSIONS_AND_DELAYS)) {
 		log_h5("Tied Battle")
 		log(`${format_card(C_CONFUSIONS_AND_DELAYS)}: France must retreat.`)
@@ -8695,6 +8693,7 @@ function losing_force_includes_king(winner, battle) {
 
 // RU: Stoic Infantry
 // FR: The Imperial Guard, Murat's Cavalry, Ney's III Corps
+// Used in P.end_battle script
 // eslint-disable-next-line no-unused-vars
 function could_any_end_battle_events_be_played() {
 	return (is_battle_event_currently_active(C_STOIC_INFANTRY) && has_russian_sp(G.current_battle))
@@ -9198,6 +9197,7 @@ P.eliminate_leader = {
 	}
 }
 
+// Used in P.end_battle script
 // eslint-disable-next-line no-unused-vars
 function calculate_num_post_battle_card_draws() {
 	let num_cards_to_draw = [0, 0]
@@ -12563,7 +12563,7 @@ P.disease_and_starvation_select_losses = {
 // RU #46 Devastated Countryside (must-play event) -- see draw_card_to_hand
 
 // RU #47: Treacherous Allies
-// NOTE: Used in treacherous_allies script
+// Used in treacherous_allies script
 // eslint-disable-next-line no-unused-vars
 function is_russia_within_two_areas_of_vilna() {
 	return map_keys(G.sps).some(area => has_russian_sp(area) && find_path_distance(area, S_VILNA) <= 2)
@@ -14306,6 +14306,7 @@ function decode_troop_action_moving(entry) {
 	return (entry & ACTION_TROOP_MOVING_MASK) >> ACTION_TROOP_MOVING_SHIFT
 }
 
+// Seems good to have for consistency
 // eslint-disable-next-line no-unused-vars
 function decode_troop_action_player(entry) {
 	return (entry & ACTION_TROOP_PLAYER_MASK) >> ACTION_TROOP_PLAYER_SHIFT
@@ -14467,8 +14468,8 @@ function assert_troop_entries() {
 	})
 }
 
+// TODO
 // Leaders are immediately eliminated if they do not have any SPs with them.
-// eslint-disable-next-line no-unused-vars
 function assert_lone_leaders() {
 	if (TURN_PHASES.indexOf("resolve_battles") === G.phase || L === null)
 		return
