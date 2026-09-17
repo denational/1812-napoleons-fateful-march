@@ -113,7 +113,7 @@ const world = {
 
 // === MODIFICATIONS FOR 1812: NAPOLEON'S FATEFUL MARCH ===
 // Holds all the code & constants necessary to decode the special 'troop' action
-// Held separate from play.js since these code segments modify the operation of world.js
+// Placed here since this segment needs access to the world.js-specific scope.
 
 const ACTION_TROOP_MOVING_MASK = 1 << 22
 const ACTION_TROOP_PLAYER_MASK = 1 << 21

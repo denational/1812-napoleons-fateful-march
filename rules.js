@@ -1,7 +1,12 @@
+/* global console */
+
 "use strict"
 
-// IN PROGRESS: New Living Rules updates
-// TODO: Better handling of response events
+// TODO: Give a player VP for eliminating a force, unless the force only consists of Cossack SPs.
+// TODO: Fix place depot phase (does not map to the general pattern).
+// TODO: Add event restrictions on certain orders.
+// TODO: Better handling of response events.
+// TODO: Fully filter view for roles who shouldn't see SP composition.
 
 const data = require("./data")
 
@@ -144,36 +149,6 @@ const OCT = 4
 const NOV = 5
 
 const JUNE_5 = 0
-const JULY_R = 1
-const JULY_1 = 2
-const JULY_2 = 3
-const JULY_3 = 4
-const JULY_4 = 5
-const JULY_5 = 6
-const AUG_R = 7
-const AUG_1 = 8
-const AUG_2 = 9
-const AUG_3 = 10
-const AUG_4 = 11
-const AUG_5 = 12
-const SEPT_R = 13
-const SEPT_1 = 14
-const SEPT_2 = 15
-const SEPT_3 = 16
-const SEPT_4 = 17
-const SEPT_5 = 18
-const OCT_R = 19
-const OCT_1 = 20
-const OCT_2 = 21
-const OCT_3 = 22
-const OCT_4 = 23
-const OCT_5 = 24
-const NOV_R = 25
-const NOV_1 = 26
-const NOV_2 = 27
-const NOV_3 = 28
-const NOV_4 = 29
-const NOV_5 = 30
 
 /* AREAS */
 const areas = data.areas
@@ -182,38 +157,28 @@ const HIDDEN = -2
 const OUT_OF_PLAY = -1
 const POOL = 0
 
-const S_PRUSSIA_NORTH = 1 //The northern of the two "Prussia" areas
-const S_TILSIT = 2
+// Unnamed areas are named "Unnamed" + sector
+const S_PRUSSIA_NORTH = 1 // The northern of the two "Prussia" areas
 const S_KALTINENAI = 3
-const S_NEMAKSCIAI = 4
 const S_PRUSSIA_SOUTH = 5
 const S_KALVARIJA = 6
 const S_SUWALKI = 7
-const S_UNNAMED_A3 = 8 //Unnamed areas are named "Unnamed" + sector
 const S_GRODNO = 9
 const S_SZCZUCZY = 10
 const S_GRAND_DUCHY_OF_WARSAW_NORTH = 11
 const S_BIALYSTOK = 12
-const S_DROHICZYN = 13
 const S_GRAND_DUCHY_OF_WARSAW_SOUTH = 14
-const S_BIALA = 15
 const S_AUSTRIA = 16
-const S_LUBLIN = 17
 const S_ZAMOSC = 18
 const S_RIGA = 19
 const S_VENDEN = 20
-const S_FRIEDRICHSTADT = 21
 const S_MITAU = 22
 const S_ECKAU = 23
 const S_SIAULAI = 24
-const S_PANEVEZYS = 25
-const S_KEDAINIAI = 26
 const S_VILKOMIR = 27
 const S_UNNAMED_B2 = 28
 const S_KOVNO = 29
 const S_VILNA = 30
-const S_ONUSKIS = 31
-const S_MOSTYR = 32
 const S_LIDA = 33
 const S_VOLKOVYSK = 34
 const S_SLONIM = 35
@@ -223,63 +188,42 @@ const S_KOBRYN = 38
 const S_BREST = 39
 const S_RATNO = 40
 const S_KOVEL = 41
-const S_UNNAMED_B5 = 42
-const S_VLADIMIR_GALICIA = 43 //Two areas named Vladimir on map, so added extra identifying info
+const S_VLADIMIR_B6 = 43 // Two areas named Vladimir on map, so added extra identifying info
 const S_LUTSK = 44
 const S_DUBNO = 45
 const S_LIVONIA = 46
 const S_OSTROV = 47
-const S_UNNAMED_C1 = 48
 const S_JAKOBSTADT = 49
-const S_LUDZHA = 50
 const S_DUNABURG = 51
 const S_DRISSA = 52
 const S_VIDZY = 53
 const S_SALAKAS = 54
 const S_SVENCIONYS = 55
 const S_DOKSHITSY = 56
-const S_NASTANISKI = 57
 const S_MOLODECHNO = 58
-const S_VOLOZHIN = 59
 const S_MINSK = 60
 const S_PLESHCHENITSY = 61
 const S_NOVGRUDOK = 62
 const S_NESVICH = 63
 const S_SLUTSK = 64
-const S_KLETSK = 65
 const S_PINSK = 66
-const S_UNNAMED_C6 = 67
 const S_ROVNO = 68
-const S_OSTROG = 69
-const S_NOVOGRAD = 70
 const S_MOLDAVIA = 71
 const S_PSKOV = 72
-const S_OPOCHKA = 73
-const S_UNNAMED_D1 = 74
 const S_SEVEZH = 75
-const S_RUDNYA = 76
 const S_POLOTSK = 77
 const S_DISNA = 78
 const S_KAMEN = 79
-const S_LEPEL = 80
-const S_SENNO = 81
 const S_KOKHANOVO = 82
 const S_BORISOV = 83
 const S_MOGILEV = 84
 const S_BOBRUYSK = 85
-const S_IGUMEN = 86
 const S_RAGOSTOV = 87
 const S_MOZYR = 88
-const S_UNNAMED_D5 = 89
-const S_UNNAMED_D6 = 90
 const S_ZHITOMIR = 91
 const S_KIEV = 92
 const S_BEZHANITZY = 93
-const S_UNNAMED_E1 = 94
-const S_VELIKIYE_LUKI = 95
 const S_TOROPETS = 96
-const S_USVYATY = 97
-const S_UNNAMED_E2 = 98
 const S_PORECZIE = 99
 const S_VITEBSK = 100
 const S_SMOLENSK = 101
@@ -287,57 +231,27 @@ const S_BABINOVICHI = 102
 const S_ORSHA = 103
 const S_MSTISLAVL = 104
 const S_UNNAMED_E4 = 105
-const S_KLIMOVICH = 106
-const S_NOVOZYBKOV = 107
-const S_NOVO_BELITZA = 108
-const S_UNNAMED_E5_WEST = 109
-const S_UNNAMED_E5_EAST = 110
-const S_GORODNYA = 111
-const S_KOZELETS = 112
 const S_UKRAINE = 113
-const S_BELYY = 114
 const S_DUKHOVSHCHINA = 115
-const S_SYCHEVKA = 116
-const S_UNNAMED_F2 = 117
 const S_VYAZMA = 118
 const S_DOROGOBUZH = 119
 const S_SVERSKOVO = 120
-const S_UNNAMED_F3 = 121
 const S_ROSLAVL = 122
 const S_BRYANSK = 123
-const S_SURAZH = 124
-const S_TRUBSHEVSK = 125
-const S_STARODUB = 126
-const S_NOVGOROD_SEVERSKIY = 127
-const S_SOSNITSA = 128
-const S_CHERNIGOV = 129
-const S_NEZHIN = 130
 const S_TORZHOK = 131
 const S_TVER = 132
-const S_STARITSA = 133
-const S_VOSKRESENTSK = 134
-const S_KLIN = 135
 const S_GZHATSK = 136
 const S_MOZHAYSK = 137
-const S_SILENKI = 138
 const S_MALOYAROSLAVET = 139
 const S_TARUTINO = 140
-const S_YUKHNOV = 141
 const S_KALUGA = 142
 const S_KOSELYSK = 143
-const S_BELEV = 144
 const S_OREL = 145
-const S_KARACHEV = 146
 const S_VORONEZH = 147
-const S_KORTSEVA = 148
-const S_VLADIMIR_RUSSIA = 149
+const S_VLADIMIR_H1 = 149
 const S_MOSCOW = 150
 const S_UNNAMED_H2 = 151
-const S_SERPUKHOV = 152
 const S_RYAZAN = 153
-const S_TULA = 154
-const S_UNNAMED_H3 = 155
-const S_UNNAMED_H4 = 156
 const FRENCH_CASUALTIES = 157
 
 const FIRST_AREA = 1
@@ -346,7 +260,7 @@ const NUM_AREAS = 158
 
 // Some precomputed (sorted) groupings of areas
 const SUPPLY_SOURCES = [
-	[ S_RIGA, S_LIVONIA, S_PSKOV, S_UKRAINE, S_TORZHOK, S_VORONEZH, S_VLADIMIR_RUSSIA, S_UNNAMED_H2, S_RYAZAN ],
+	[ S_RIGA, S_LIVONIA, S_PSKOV, S_UKRAINE, S_TORZHOK, S_VORONEZH, S_VLADIMIR_H1, S_UNNAMED_H2, S_RYAZAN ],
 	[ S_PRUSSIA_SOUTH, S_GRAND_DUCHY_OF_WARSAW_NORTH, S_GRAND_DUCHY_OF_WARSAW_SOUTH, S_AUSTRIA ],
 ]
 const FRENCH_OFF_MAP_AREAS = [ S_PRUSSIA_NORTH, S_PRUSSIA_SOUTH, S_GRAND_DUCHY_OF_WARSAW_NORTH, S_GRAND_DUCHY_OF_WARSAW_SOUTH, S_AUSTRIA ]
@@ -561,12 +475,8 @@ function lookup_attrition_table(modified_size, distance_to_nearest_depot) {
 }
 
 // === DATA ACCESSORS ===
-function get_faction(nation) {
-	return (nation === RUSSIA) ? RUSSIA : FRANCE
-}
-
 function enemy(who) {
-	return (who === RUSSIA) ? FRANCE : RUSSIA
+	return 1 - who
 }
 
 /* CARDS */
@@ -576,10 +486,6 @@ function get_card_owner(c) {
 
 function is_card_dummy(c) {
 	return c === C_DUMMY_RU || c === C_DUMMY_FR
-}
-
-function is_card_friendly(who, c) {
-	return who === cards[c].who
 }
 
 function get_card_season(c) {
@@ -647,10 +553,6 @@ function get_area_nation(a) { //If it is exclusive to one side
 	return areas[a].nation
 }
 
-function is_supply_source(a) {
-	return areas[a].supply
-}
-
 function is_depot_town(a) {
 	return areas[a].depot
 }
@@ -708,10 +610,6 @@ function get_all_adjacent_areas(area) {
 /* LEADERS */
 function get_leader_faction(leader) {
 	return leaders[leader].faction
-}
-
-function get_leader_name(leader) {
-	return leaders[leader].name
 }
 
 function get_leader_seniority(leader) {
@@ -858,6 +756,7 @@ function has_non_dummy_order_at_area(who, area) {
 */
 const TROOP_ENTRY_WHO_SHIFT = 10
 const TROOP_ENTRY_TYPE_SHIFT = 6
+// eslint-disable-next-line no-unused-vars
 const TROOP_ENTRY_NUM_SHIFT = 0
 
 const TROOP_ENTRY_WHO_MASK = 1024
@@ -991,7 +890,7 @@ function count_num_sps(who, area) {
 function find_areas_with_most_ru_sps() {
 	let area_with_most_sps = []
 	let count = 0
-	map_for_each(G.sps, (area, set) => {
+	map_for_each_key(G.sps, (area) => {
 		if (has_russian_sp(area) && (count_num_sps(RUSSIA, area) > count)) {
 			set_add(area_with_most_sps, area)
 			count = count_num_sps(RUSSIA, area)
@@ -1012,10 +911,6 @@ function is_cavalry(troop_type) {
 
 function is_cossack(troop_type) {
 	return (troop_type === FRESH_COSSACK) || (troop_type === EXHAUSTED_COSSACK)
-}
-
-function is_guard(troop_type) {
-	return (troop_type === FRESH_GUARD) || (troop_type === EXHAUSTED_GUARD)
 }
 
 function has_russian_sp(area) {
@@ -1049,12 +944,6 @@ function get_move_strength(move_type) {
 	if (move_type === FORCED_MARCH)
 		return HALF_STRENGTH
 	return FULL_STRENGTH
-}
-
-function get_strength_move(strength) {
-	if (strength === HALF_STRENGTH)
-		return FORCED_MARCH
-	return MARCH
 }
 
 /* TIME */
@@ -1114,6 +1003,10 @@ function shift_initiative(in_favor_of, amount = 1) {
 	log(`Initiative to ${ROLES[get_who_has_initiative()]} ${get_current_initiative_level()}.`)
 }
 
+function get_who_has_initiative() {
+	return (G.initiative > 0) ? FRANCE : RUSSIA
+}
+
 /* DEPOTS */
 function get_first_depot(who) {
 	return (who === RUSSIA) ? first_russia_depot : first_france_depot
@@ -1147,10 +1040,6 @@ function find_depot_at_location(who, area) {
 		if (get_depot_location(depot) === area) return depot
 	}
 	return -1
-}
-
-function remove_depot_from_area(who, where) {
-	remove_depot(find_depot_at_location(who, where), where)
 }
 
 function add_depot(who, where) {
@@ -1379,16 +1268,6 @@ function add_order_of_type_from_pool(who, type, where) {
 	let id = get_orders_at_area(who, POOL).find(order => get_order_type(order) === type)
 	place_order(id, where)
 	return id
-}
-
-function get_areas_with_orders(who) {
-	let areas = []
-	for (let order = get_first_order(who); order <= get_last_order(who); ++order) {
-		let location = get_order_location(order)
-		if (location !== POOL && location !== OUT_OF_PLAY && !set_has(areas, location))
-			set_add(areas, location)
-	}
-	return areas
 }
 
 // === VIEW ===
@@ -1824,7 +1703,7 @@ function setup_july() {
 	move_leader(L_TORMASOV, S_BREST)
 	set_troop(RUSSIA, S_BREST, FRESH_INFANTRY, 1)
 	set_troop(RUSSIA, S_BREST, EXHAUSTED_INFANTRY, 1)
-	set_troop(RUSSIA, S_VLADIMIR_GALICIA, FRESH_INFANTRY, 1)
+	set_troop(RUSSIA, S_VLADIMIR_B6, FRESH_INFANTRY, 1)
 	set_troop(RUSSIA, S_KOBRYN, FRESH_CAVALRY, 1)
 	set_troop(RUSSIA, S_KOBRYN, EXHAUSTED_CAVALRY, 1)
 	add_depot(RUSSIA, S_LUTSK)
@@ -2074,7 +1953,7 @@ function setup_oct() {
 	set_troop(RUSSIA, S_KALUGA, EXHAUSTED_INFANTRY, 3)
 	set_troop(RUSSIA, S_KALUGA, EXHAUSTED_CAVALRY, 1)
 	add_depot(RUSSIA, S_KALUGA)
-	set_troop(RUSSIA, S_VLADIMIR_RUSSIA, FRESH_COSSACK, 1)
+	set_troop(RUSSIA, S_VLADIMIR_H1, FRESH_COSSACK, 1)
 	set_troop(RUSSIA, S_VORONEZH, FRESH_COSSACK, 1)
 
 	set_troop(RUSSIA, S_BREST, FRESH_INFANTRY, 2)
@@ -2298,6 +2177,7 @@ P.main = script(`
 	goto finish_game
 `)
 
+// eslint-disable-next-line no-unused-vars
 function start_turn(turn) {
 	if (is_resource_turn(turn))
 		log_h1(`${get_month_name(G.turn)} – Resources Phase`, get_season(turn))
@@ -2549,7 +2429,7 @@ function count_total_sp_amount_on_map(who, type) {
 	let count = 0
 	let exhausted_version = type + 1
 
-	map_for_each(G.sps, (area, entries) => {
+	map_for_each_value(G.sps, (entries) => {
 		for (let entry of entries) {
 			if ((decode_troop_entry_who(entry) === who) && [type, exhausted_version].includes(decode_troop_entry_type(entry)))
 				count += decode_troop_entry_num(entry)
@@ -2813,7 +2693,7 @@ P.select_new_cards = {
 }
 
 // === NORMAL TURNS ===
-// Orders are defined as numbers so that they can easily be funnelled into their specific order execution handler
+// Orders are defined as numbers instead of strings so that they can easily be funnelled into their specific order execution handler
 const TURN_PHASES = [
 	"draw_card_to_hand",
 	"play_card_for_additional_orders",
@@ -2831,7 +2711,8 @@ const TURN_PHASES = [
 	"lines_of_communications"
 ]
 
-// WARNING: Called in P.turn script
+// Used in P.turn script
+// eslint-disable-next-line no-unused-vars
 function is_order_turn(turn) {
 	return [FORCED_MARCH, CAVALRY_PATROLS, MARCH, EVADE, RALLY, COSSACK_RAID, PLACE_DEPOT].includes(TURN_PHASES[turn])
 }
@@ -2851,11 +2732,12 @@ P.turn = script(`
 P.end_turn = function() {
 	log_h2(`End of Turn`)
 
+	// Reset turn-specific trackers.
 	clear_moved()
 	map_clear(G.battles)
 	G.abilities_used = 0
 
-	//Reset orders
+	// Reset orders.
 	log("Removed all orders.")
 	G.orders_by_type = Array.from({ length: NUM_ORDER_TYPES }, () => [[], []])
 	for (let order = FIRST_ORDER; order <= LAST_ORDER; ++order) {
@@ -2863,17 +2745,20 @@ P.end_turn = function() {
 			G.orders[order] = POOL
 	}
 
+	// RU #11 Holy Mother Russia: The side controlling the designated key at the end of the turn gains 1 VP.
 	if (is_event_active(C_HOLY_MOTHER_RUSSIA_RU)) {
 		let key_controller = is_fr_controlled(get_event_keyword(C_HOLY_MOTHER_RUSSIA_RU, "key")) ? FRANCE : RUSSIA
 		log(`${format_card(C_HOLY_MOTHER_RUSSIA_RU)}`)
 		increase_vp(key_controller, 1)
 	}
 
+	// Check French occupation of Moscow.
 	if (G.scenario !== THE_EAGLES_MARCH_ON_SMOLENSK && has_friendly_troop(FRANCE, S_MOSCOW) && is_area_in_supply(FRANCE, S_MOSCOW)) {
 		log(`France occupies ${format_area(S_MOSCOW)} with an in-supply SP.`)
 		increase_vp(FRANCE, get_current_season() == SUMMER ? 1 : 2)
 	}
 
+	// Clear all persistent events whose effect expires at the end of this turn.
 	let events_to_clear = []
 	map_for_each(G.persistent_events, (evt, info) => {
 		if (info.remove <= G.turn)
@@ -2881,6 +2766,8 @@ P.end_turn = function() {
 	})
 	events_to_clear.forEach(evt => map_delete(G.persistent_events, evt))
 
+	// New rule in version 1.3 of the living rules.
+	// If a side has Initiative level 4 at the end of the turn, they gain 1 VP.
 	if (get_current_initiative_level() === 4) {
 		log(`Initiative is at ${ROLES[get_who_has_initiative()]} 4.`)
 		increase_vp(get_who_has_initiative())
@@ -2900,22 +2787,22 @@ P.end_turn = function() {
 	Other events are more complex and require more individual sequencing.
 	Note that I have repeated some code from other sections of the rules (particularly attrition) so as to work around the limitation of the game being in a single state at each time.
 
-	See the FRAMEWORK EXTENSIONS section above for more info on some of the syntax I use in this state.
+	See the FRAMEWORK EXTENSIONS section above for more info on some of the custom syntax I use in this state.
 
 	Must-play events:
 		RUSSIA:
 			#11: Holy Mother Russia				"holy_mother_russia_ru"
 			#14: Extreme Weather				"extreme_weather_ru"
 			#42: Command Friction				"command_friction"
-			#45: Poor Logistics					"poor_logistics"
+			#45: Poor Logistics				"poor_logistics"
 			#46: Devastated Countryside			"devastated_countryside"
-			#52: Barclay de Tolly Resigns		"barclay_de_tolly_resigns"
+			#52: Barclay de Tolly Resigns			"barclay_de_tolly_resigns"
 
 		FRANCE:
 			#22: Poor Communications			"poor_communications"
 			#24: Jérôme Goes Home				"jerome_goes_home"
-			#39: Chaos in the Rear Areas		"chaos_in_the_rear_areas"
-			#40: Vulnerable Supply Lines		"vulnerable_supply_lines"
+			#39: Chaos in the Rear Areas			"chaos_in_the_rear_areas"
+			#40: Vulnerable Supply Lines		"	vulnerable_supply_lines"
 			#41: Freezing Weather				"freezing_weather"
 			#42: Extreme Weather				"extreme_weather_fr"
 			#43: Logistics Collapse				"logistics_collapse"
@@ -3004,6 +2891,8 @@ P.draw_card_to_hand = {
 				}
 			},
 		},
+		// Sequencing this event is a bit tricky, and I have bent some rules to make this work.
+		// Note to self: Beware touching G.active and R in this sub-state, since they can get mixed up between single-active and multi-active situations.
 		"holy_mother_russia_ru": {
 			on_begin() {
 				get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key = -1
@@ -3063,8 +2952,8 @@ P.draw_card_to_hand = {
 					get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key = -1
 			},
 		},
+		// Minor modification: Russia draws a card after confirming the card's effects (in order to maintain a constant flow in case another must-play is drawn)
 		"extreme_weather_ru": {
-			//MODIFICATION: Russia draws a card after confirming the card's effects (in order to maintain a constant flow in case another must-play is drawn)
 			on_prompt() {
 				switch(get_event_step(C_EXTREME_WEATHER_RU)) {
 				case -1:
@@ -3074,13 +2963,12 @@ P.draw_card_to_hand = {
 				case 0:
 					prompt_card(C_EXTREME_WEATHER_RU, "1 fresh SP in each force that uses 'Forced March' or 'March' orders this turn is exhausted.")
 					button_next()
-					button_undo()
 					return
 				case 1:
 					prompt_card(C_EXTREME_WEATHER_RU, "Draw a card to your hand.")
 					button_draw()
-					button_undo()
 				}
+				button_undo(get_event_step(C_EXTREME_WEATHER_RU) > -1)
 			},
 			on_next() { increment_event_tracker(C_EXTREME_WEATHER_RU) },
 			on_undo() { decrement_event_tracker(C_EXTREME_WEATHER_RU) },
@@ -3183,6 +3071,7 @@ P.draw_card_to_hand = {
 				discard_or_remove_card(C_JEROME_GOES_HOME)
 			},
 		},
+		// NOTE: contains duplicated code from the Attrition section (working around not being able to be in multiple states at once)
 		"chaos_in_the_rear_areas": {
 			on_begin() {
 				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining 	= Math.min(get_devastated_areas_with_french_troops().length, 2)
@@ -3223,7 +3112,8 @@ P.draw_card_to_hand = {
 						else
 							areas = get_devastated_areas_with_french_troops().filter(area => has_exhausted_sp(FRANCE, area))
 
-						if (areas.length <= 5) V.prompt += ` (${join_array_with_or(areas.map(format_area))})`
+						if (areas.length <= 5)
+							V.prompt += ` (${join_array_with_or(areas.map(format_area))})`
 						areas.forEach(action_area)
 					} else if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count > 0) {
 						V.prompt = `Select an SP to ${get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice}.`
@@ -3493,7 +3383,8 @@ P.draw_card_to_hand = {
 				increment_event_tracker(C_CHAOTIC_FOOD_DISTRIBUTION)
 			},
 			on_draw() {
-				log_must_play_event(C_CHAOTIC_FOOD_DISTRIBUTION, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area) //Handling here since another must-play could be drawn
+				// Handling here since another must-play could be drawn
+				log_must_play_event(C_CHAOTIC_FOOD_DISTRIBUTION, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)
 				discard_or_remove_card(C_CHAOTIC_FOOD_DISTRIBUTION)
 				draw_a_card(R)
 			},
@@ -3518,9 +3409,9 @@ P.draw_card_to_hand = {
 		},
 	},
 	prompt() 		{ this.states[L.state[R]].on_prompt() },
-	draw() 			{ this.states[L.state[R]].on_draw() },
+	draw() 		{ this.states[L.state[R]].on_draw() },
 	confirm() 		{ this.states[L.state[R]].on_confirm() },
-	next() 			{ this.states[L.state[R]].on_next() },
+	next() 		{ this.states[L.state[R]].on_next() },
 	exhaust()		{ this.states[L.state[R]].on_exhaust() },
 	eliminate_2()	{ this.states[L.state[R]].on_eliminate_2() },
 	area(area) 		{ this.states[L.state[R]].on_area(area) },
@@ -3528,14 +3419,15 @@ P.draw_card_to_hand = {
 	depot(depot) 	{ this.states[L.state[R]].on_depot(depot)},
 	leader(leader) 	{ this.states[L.state[R]].on_leader(leader) },
 	troop(type) 	{ this.states[L.state[R]].on_troop(type) },
-	done() 			{ this.states[L.state[R]].on_done() },
-	undo() 			{ this.states[L.state[R]].on_undo() },
+	done() 		{ this.states[L.state[R]].on_done() },
+	undo() 		{ this.states[L.state[R]].on_undo() },
 	finish_state() {
 		if (--L.num_cards_to_draw[R] > 0) {
 			goto_local_state(R, "draw_card")
 			return
 		}
 
+		// If France just finished (in a multi-active situation), and Russia has confimed drawing Holy Mother Russia, adjust France's local state.
 		if (R === FRANCE && map_has(L.event_tracker, C_HOLY_MOTHER_RUSSIA_RU) && (get_event_step(C_HOLY_MOTHER_RUSSIA_RU) === 1)) {
 			goto_local_state(FRANCE, "holy_mother_russia_ru")
 			return
@@ -3544,6 +3436,8 @@ P.draw_card_to_hand = {
 		if (Array.isArray(G.active))
 			set_delete(G.active, R)
 
+		// Check R === FRANCE since we want France to have performed the last action.
+		// G.active is set to FRANCE in a single-active situation when Russia draws Holy Mother Russia.
 		if (
 			(!Array.isArray(G.active) && (!set_has(L.persistent_events, C_HOLY_MOTHER_RUSSIA_RU) || R === FRANCE))
 			|| G.active.length === 0
@@ -3574,10 +3468,6 @@ P.play_card_for_additional_orders = script(`
 	set G.active L.initiative
 	call play_events_with_ops_card
 `)
-
-function get_who_has_initiative() {
-	return (G.initiative > 0) ? FRANCE : RUSSIA
-}
 
 function commit_card(card) {
 	set_add(G.committed_cards[get_card_owner(card)], card)
@@ -4057,6 +3947,7 @@ P.select_orders = {
 
 // === PLACE ORDERS ===
 // TODO: Allow alternating placing orders (implementing simultaneous optional rule as default for expediency)
+// Alternating would be simple to program (since it would be single active), but would slow things down a LOT.
 P.place_orders = script(`
 	eval { log_h2("Place Orders") }
 
@@ -4128,7 +4019,6 @@ function undo_cleanup_order(player, order) {
 	G.selected_orders[player].push(order)
 }
 
-// TODO: Handle edge case where Russia has no card, Command Friction is active, and Platov is in the designated Command Friction area.
 P.do_place_orders = {
 	_begin() {
 		L.orders_to_place = [G.selected_orders[RUSSIA].slice(), G.selected_orders[FRANCE].slice()]
@@ -4330,20 +4220,22 @@ P.end_place_orders_events = {
 /* CHANGE ORDERS */
 /*
 	Napoléon 			May change any order to any order.
-	Davout 				May change an order to March.
+	Davout 			May change an order to March.
 	Schwarzenberg		May discard a card to place an Evade order during that step.
 
-	Kutuzov				May change any order to Rally.
+	Kutuzov			May change any order to Rally.
 	de Tolly			May change an order to Evade.
 	Bagration			May change an order to Defend.
 	Chichagov			May discard a card to place a Forced March order during that step.
 */
 
+// Though not in the rules, Brian has noted on multiple BGG forums that each leader may only change one order per turn.
 function mark_ability_used(leader) {
 	set_delete(L.leaders_who_can_use_abilities[R], leader)
 	G.abilities_used |= (1 << leader)
 }
 
+// For undo
 function mark_ability_unused(leader) {
 	set_add(L.leaders_who_can_use_abilities[R], leader)
 	G.abilities_used &= ~(1 << leader)
@@ -5560,7 +5452,7 @@ function filter_areas(callback) {
 	return areas
 }
 
-function get_movable_areas_in_radius(source, radius, callback = function(area) { return true }) {
+function get_movable_areas_in_radius(source, radius, callback = function(_) { return true }) {
 	let queue = [ source ]
 	let distance = []
 	map_set(distance, source, 0)
@@ -5832,7 +5724,7 @@ function conduct_movement(from, to) {
 	// Remove SPs from the battle in the origin area, if any.
 	if (has_battle(from)) {
 		if (!has_friendly_troop(G.active, from)) {
-			map_delete(G.battles, from)
+			delete_battle_entry(from)
 		} else {
 			// Only defenders who started the turn in the area would be eligible to move.
 			get_player_battle_data(G.active, from).forces.forEach(force => {
@@ -6369,8 +6261,8 @@ P.select_evade_force = {
 
 		// If a leader is removed and the only remaining leader is Platov, remove all non-Cavalry and non-Cossack SPs
 		if (G.active === RUSSIA && G.move.leaders.length === 1 && set_has(G.move.leaders, L_PLATOV)) {
-			map_for_each(G.move.sps, (from, forces) => {
-				map_for_each(forces, (strength, sps) => {
+			map_for_each_value(G.move.sps, (forces) => {
+				map_for_each_value(forces, (sps) => {
 					for (let type = 0; type < sps.length; ++type) {
 						if (!could_platov_select(type) && sps[type] > 0) {
 							L.num_sps_selected -= sps[type]
@@ -6515,25 +6407,12 @@ P.evade_pursuit = {
 
 function get_evading_sps() {
 	let list = Array(NUM_TROOP_TYPES).fill(0)
-	map_for_each(G.move.sps, (from, forces) => {
-		map_for_each(forces, (strength, sps) => {
-			for (let type = 0; type < sps.length; ++type)
-				if (sps[type] > 0) {
+	map_for_each_value(G.move.sps, (forces) => {
+		map_for_each_value(forces, (sps) => {
+			for (let type = 0; type < sps.length; ++type) {
+				if (sps[type] > 0)
 					list[type] += sps[type]
-				}
-		})
-	})
-	return list
-}
-
-function get_evading_sp_types() {
-	let list = []
-	map_for_each(G.move.sps, (from, forces) => {
-		map_for_each(forces, (strength, sps) => {
-			for (let type = 0; type < sps.length; ++type)
-				if (sps[type] > 0) {
-					set_add(list, type)
-				}
+			}
 		})
 	})
 	return list
@@ -6628,7 +6507,7 @@ P.eliminate_all_sps = {
 			eliminate_troop(G.active, L.area, type, count_num_sps_of_type(G.active, type, L.area))
 		L.has_eliminated_sps = true
 		if (G.phase === TURN_PHASES.findIndex(phase => phase === EVADE))
-			map_delete(G.battles, L.area)
+			delete_battle_entry(L.area)
 	},
 	leader(leader) {
 		push_undo()
@@ -6677,7 +6556,7 @@ P.evade = function() {
 	})
 
 	if (battle_data.forces.every(force => force.troops.every(type => type === 0)))
-		map_delete(G.battles, L.area)
+		delete_battle_entry(L.area)
 
 	if (is_event_active(C_HOLY_MOTHER_RUSSIA_FR) && get_event_keyword(C_HOLY_MOTHER_RUSSIA_FR, "area") === L.area) {
 		log(`${format_card(C_HOLY_MOTHER_RUSSIA_FR)}`)
@@ -7231,7 +7110,7 @@ const BATTLES_WHERE_BOTH_SIDES_HAVE_LEADERS = 2
 function sort_battles_by_type() {
 	let battles_by_type = [[], [], []]
 
-	map_for_each(G.battles, (area, battle) => {
+	map_for_each_key(G.battles, (area) => {
 		if (has_leader_in_battle(get_battle_attacker(area)) && has_leader_in_battle(get_battle_defender(area)))
 			set_add(battles_by_type[BATTLES_WHERE_BOTH_SIDES_HAVE_LEADERS], area)
 		else if (has_leader_in_battle(get_battle_attacker(area)) || has_leader_in_battle(get_battle_defender(area)))
@@ -8712,7 +8591,7 @@ P.end_battle = script(`
 		G.played_cards[RUSSIA].length = 0
 		G.played_cards[FRANCE].length = 0
 		if (map_has(G.battles, G.current_battle)) {
-			map_delete(G.battles, G.current_battle)
+			delete_battle_entry(G.current_battle)
 		}
 		G.active = get_who_has_initiative()
 	}
@@ -8816,7 +8695,7 @@ function losing_force_includes_king(winner, battle) {
 
 // RU: Stoic Infantry
 // FR: The Imperial Guard, Murat's Cavalry, Ney's III Corps
-// WARNING: Called in end_battle script
+// eslint-disable-next-line no-unused-vars
 function could_any_end_battle_events_be_played() {
 	return (is_battle_event_currently_active(C_STOIC_INFANTRY) && has_russian_sp(G.current_battle))
 			|| (is_battle_event_currently_active(C_THE_IMPERIAL_GUARD) && get_battle_loser(G.current_battle) === FRANCE)
@@ -9319,6 +9198,7 @@ P.eliminate_leader = {
 	}
 }
 
+// eslint-disable-next-line no-unused-vars
 function calculate_num_post_battle_card_draws() {
 	let num_cards_to_draw = [0, 0]
 
@@ -9427,15 +9307,6 @@ P.kutuzov_additional_rally = function() {
 // === EXECUTE COSSACK RAID ORDERS ===
 P.execute_cossack_raid = function() {
 	goto("select_cossack_raid_target", { area: L.area })
-}
-
-function count_num_cossack(area) {
-	let count = 0
-	for (let entry of get_area_troop_set(area, null)) {
-		if (is_cossack(decode_troop_entry_type(entry)))
-			count += decode_troop_entry_num(entry)
-	}
-	return count
 }
 
 function has_french_order(area) {
@@ -10240,10 +10111,6 @@ function get_supply_sources_and_depots(who) {
 	return sources
 }
 
-function is_in_supply(who, area) {
-	return get_supply_status(who, area) <= MAX_SUPPLY_DISTANCE
-}
-
 function has_enemy_sp(who, space) {
 	return (who === RUSSIA && has_friendly_troop(FRANCE, space)) || (who === FRANCE && has_friendly_troop(RUSSIA, space))
 }
@@ -10420,7 +10287,6 @@ function has_depot_within_four_road_connections(who, area) {
 		event removal turn
 		area it applies to (only some events)
 
-	Use add_event_keyword to add any keywords necessary to store the event's effect
 	Use get_event_keyword to read specific keywords attached to the event
 */
 
@@ -10450,19 +10316,8 @@ function add_persistent_event(evt, keywords) {
 	map_set(G.persistent_events, key, value)
 }
 
-function add_event_keyword(evt, keywords) {
-	let evt_data = map_get(G.persistent_events, evt, null)
-	if (evt_data !== null) {
-		evt_data = Object.assign(evt_data, keywords)
-	}
-}
-
 function get_event_keyword(evt, keyword, fallback = null) {
 	return map_get(G.persistent_events, evt)?.[keyword] ?? fallback
-}
-
-function prompt_event_confirmation(evt, info) {
-	E[get_event_state_name(evt)].confirm_prompt()
 }
 
 function log_must_play_event(card, info) {
@@ -14279,12 +14134,6 @@ function map_increment(map, key, amount = 1) {
 		map_set(map, key, current + amount)
 }
 
-function map_decrement(map, key, amount = 1) {
-	let current = map_get(map, key, null)
-	if (current !== null)
-		map_set(map, key, current - amount)
-}
-
 // Like Object.keys but for plain array maps
 function map_keys(map) {
 	let keys = []
@@ -14293,11 +14142,22 @@ function map_keys(map) {
 	return keys
 }
 
+function map_for_each_key(map, f) {
+	for (let i = 0; i < map.length; i += 2)
+		f(map[i])
+}
+
+function map_for_each_value(map, f) {
+	for (let i = 1; i < map.length; i += 2)
+		f(map[i])
+}
+
 function roll_d6() {
 	return random(6) + 1
 }
 
 // DEBUG: For quickly printing deeply nested objects (G.moved, G.battles)
+// eslint-disable-next-line no-unused-vars
 function print(msg) {
 	console.log(JSON.stringify(msg, null, 2))
 }
@@ -14446,6 +14306,7 @@ function decode_troop_action_moving(entry) {
 	return (entry & ACTION_TROOP_MOVING_MASK) >> ACTION_TROOP_MOVING_SHIFT
 }
 
+// eslint-disable-next-line no-unused-vars
 function decode_troop_action_player(entry) {
 	return (entry & ACTION_TROOP_PLAYER_MASK) >> ACTION_TROOP_PLAYER_SHIFT
 }
@@ -14587,10 +14448,6 @@ function log_masked(who, text1, text2) {
 	log(`E${who === FRANCE ? "F" : "R"}` + text2)
 }
 
-function log_roll(roll) { //Uses fallback white die defined in world.js
-	log(`W${roll}`)
-}
-
 // === TESTS & ASSERTIONS ===
 // NOTE: Only runs in the fuzzer!
 
@@ -14611,6 +14468,7 @@ function assert_troop_entries() {
 }
 
 // Leaders are immediately eliminated if they do not have any SPs with them.
+// eslint-disable-next-line no-unused-vars
 function assert_lone_leaders() {
 	if (TURN_PHASES.indexOf("resolve_battles") === G.phase || L === null)
 		return
