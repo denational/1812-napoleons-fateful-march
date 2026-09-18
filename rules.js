@@ -3,8 +3,6 @@
 "use strict"
 
 // TODO: Give a player VP for eliminating a force, unless the force only consists of Cossack SPs.
-// TODO: Fix place depot phase (does not map to the general pattern).
-// TODO: Add event restrictions on certain orders.
 // TODO: Better handling of response events.
 // TODO: Fully filter view for roles who shouldn't see SP composition.
 
@@ -3243,10 +3241,13 @@ P.draw_card_to_hand = {
 				increment_event_tracker(C_VULNERABLE_SUPPLY_LINES, 2)
 			},
 			on_confirm() {
-				if (get_event_step(C_VULNERABLE_SUPPLY_LINES) === 0)
+				if (get_event_step(C_VULNERABLE_SUPPLY_LINES) === 0) {
 					increment_event_tracker(C_VULNERABLE_SUPPLY_LINES)
-				else
+				} else {
+					discard_or_remove_card(C_VULNERABLE_SUPPLY_LINES)
+					log_must_play_event(C_VULNERABLE_SUPPLY_LINES)
 					end_local_state(R)
+				}
 			},
 			on_depot(depot) {
 				set_delete(get_event_data(C_VULNERABLE_SUPPLY_LINES).depots_to_remove, get_depot_location(depot))
@@ -3328,7 +3329,11 @@ P.draw_card_to_hand = {
 				prompt_card(C_LOGISTICS_COLLAPSE, "For the rest of the game, France must discard a card from hand to execute a 'Place Depot' order.")
 				button_confirm()
 			},
-			on_confirm() { end_local_state(R) }
+			on_confirm() {
+				log_must_play_event(C_LOGISTICS_COLLAPSE)
+				discard_or_remove_card(C_LOGISTICS_COLLAPSE)
+				end_local_state(R)
+			}
 		},
 		"chaotic_food_distribution": {
 			on_begin() {
@@ -3621,30 +3626,6 @@ function calculate_num_orders() {
 	}
 
 	return orders
-}
-
-function find_forbidden_orders(who) {
-	let forbidden_orders = []
-
-	// RU #45 Poor Logistics -- Russia may not use 'Place Depot' orders.
-	if (who === RUSSIA && is_event_active(C_POOR_LOGISTICS))
-		set_add(forbidden_orders, PLACE_DEPOT)
-
-	// FR #41 Freezing Weather -- France may not use 'Place Depot' or 'Forage' orders.
-	if (who === FRANCE && is_event_active(C_FREEZING_WEATHER)) {
-		set_add(forbidden_orders, PLACE_DEPOT)
-		set_add(forbidden_orders, FORAGE)
-	}
-
-	// FR #42 Extreme Weather -- Neither side may use 'Forced March' orders.
-	if (is_event_active(C_EXTREME_WEATHER_FR))
-		set_add(forbidden_orders, FORCED_MARCH)
-
-	return forbidden_orders
-}
-
-function is_order_forbidden(who, type) {
-	return set_has(find_forbidden_orders(who), type)
 }
 
 /*
@@ -4072,15 +4053,24 @@ P.do_place_orders = {
 					if (is_french_logistic_preparations(R) && get_order_type(L.selected_order[R]) === PLACE_DEPOT) {
 						V.prompt = `French Logistic Preparations: You may place ${get_order_name(L.selected_order[R])} in any area with friendly SPs, or ${format_area(S_KOVNO)}.`
 						action_area(S_KOVNO)
+						get_areas_with_sps(R).forEach(action_area)
 					} else {
-						V.prompt = `Select an area with friendly SPs to place ${get_order_name(L.selected_order[R])}.`
+						// FR #41 Freezing Weather: Neither side may place Forced March orders.
+						if (get_order_type(L.selected_order[R]) === FORCED_MARCH && is_event_active(C_FREEZING_WEATHER)) {
+							V.prompt = prompt_card(C_FREEZING_WEATHER, `May not place Forced March orders this turn.`)
+							button_next()
+						} else {
+							V.prompt = `Select an area with friendly SPs to place ${get_order_name(L.selected_order[R])}.`
+							get_areas_with_sps(R).forEach(action_area)
+						}
 					}
-					get_areas_with_sps(R).forEach(action_area)
+
 				}
 			},
 			on_next() {
 				push_local_undo(R, "next", { order: L.selected_order[R] })
-				L.has_placed_platov_order = true
+				if (!L.has_placed_platov_order && does_receive_platov_free_order(R))
+					L.has_placed_platov_order = true
 				cleanup_order(R)
 			},
 			on_area(area) {
@@ -4139,7 +4129,8 @@ P.do_place_orders = {
 			G.selected_orders[R].pop()
 			return
 		case "next":
-			L.has_placed_platov_order = false
+			if (R === RUSSIA && !L.has_placed_platov_order && get_order_type(undo.info.order) !== FORCED_MARCH)
+				L.has_placed_platov_order = false
 			undo_cleanup_order(R, undo.info.order)
 			return
 		case "discard":
@@ -4709,6 +4700,27 @@ P.determine_who_goes_first = {
 
 P.execute_orders = script(`
 	eval { log_h2(get_order_type_name(L.type)) }
+
+	if (L.type === PLACE_DEPOT) {
+		// RU #45 Poor Logistics: Russia may not use Place Depot orders.
+		if (is_event_active(C_POOR_LOGISTICS)) {
+			eval {
+				log_card(C_POOR_LOGISTICS)
+				get_executable_orders(RUSSIA, PLACE_DEPOT).length = 0
+				logi("Russia may not execute Place Depot orders.")
+			}
+		}
+
+		// FR #41 Freezing Weather: France may not use Place Depot orders.
+		if (is_event_active(C_FREEZING_WEATHER)) {
+			eval {
+				log_card(C_FREEZING_WEATHER)
+				get_executable_orders(FRANCE, PLACE_DEPOT).length = 0
+				logi("France may not execute Place Depot orders.")
+			}
+		}
+	}
+
 	call change_orders { current_type: L.type }
 	if (get_placed_orders_of_type(L.type).length === 0) {
 		goto log_no_orders_placed { type: L.type }
@@ -4724,8 +4736,16 @@ P.execute_orders = script(`
 			call may_play_evade_events
 		}
 
-		set G.active L.$
-		call execute_next_order { type: L.type }
+		// Place Depot orders are slightly different in that both players may choose to remove any on-map depots.
+		if (L.type !== PLACE_DEPOT) {
+			set G.active L.$
+			call execute_next_order { type: L.type }
+		} else {
+			set G.active L.$
+			call execute_place_depot
+			set G.active (1 - L.$)
+			call execute_place_depot
+		}
 
 		if (L.type === CAVALRY_PATROLS) {
 			set G.active FRANCE
@@ -4773,11 +4793,6 @@ function filter_orders(who, type) {
 		filter_orders_of_type(who, type, (order) => {
 			return has_cossack_sp(get_order_location(order))
 			&& get_all_adjacent_areas(get_order_location(order)).some(area => has_enemy_sp(who, area))
-		})
-		return
-	case PLACE_DEPOT:
-		filter_orders_of_type(who, type, (order) => {
-			return has_friendly_troop(G.active, get_order_location(order)) && is_depot_town(get_order_location(order)) && has_depot_within_four_road_connections(who, get_order_location(order))
 		})
 		return
 	}
@@ -4829,12 +4844,6 @@ P.execute_next_order = {
 			V.prompt = `Execute ${get_order_type_name(L.type)} orders — All done.`
 			button_done()
 		}
-
-		// The fuzzer loves to pull out all depots on map: This will wipe out all troops on map with attrition!
-		if (L.type === PLACE_DEPOT && !globalThis.RTT_FUZZER)
-			for (let depot = get_first_depot(G.active); depot <= get_last_depot(G.active); ++depot)
-				if (is_depot_on_map(depot))
-					action("depot", depot)
 	},
 	order(order) {
 		push_undo()
@@ -4853,11 +4862,6 @@ P.execute_next_order = {
 			G.active = enemy(G.active)
 			goto("execute_next_order", { type: L.type })
 		}
-	},
-	depot(depot) {
-		push_undo()
-		log_h4(format_area(get_depot_location(depot)), G.active)
-		remove_depot(depot, get_depot_location(depot))
 	},
 }
 
@@ -9406,17 +9410,61 @@ P.apply_cossack_raid_done = {
 }
 
 // === EXECUTE PLACE DEPOT ORDERS ===
-P.execute_place_depot = function() {
-	goto("do_place_depot", { area: L.area })
+
+// Called in execute_place_depot
+// eslint-disable-next-line no-unused-vars
+function has_executable_place_depot_order(who) {
+	if (!has_executable_order(who, PLACE_DEPOT))
+		return false
+
+	let order = get_placed_orders_of_type(PLACE_DEPOT).find(order => get_order_owner(order) === who)
+
+	return has_friendly_troop(who, get_order_location(order))
+		&& is_depot_town(get_order_location(order))
+		&& has_depot_within_four_road_connections(who, get_order_location(order))
+		&& (!is_event_active(C_LOGISTICS_COLLAPSE) || who !== FRANCE || has_card_in_hand(who))
 }
+
+P.execute_place_depot = script(`
+	if (has_executable_place_depot_order(G.active)) {
+		if (is_event_active(C_LOGISTICS_COLLAPSE) && G.active === FRANCE) {
+			call logistics_collapse_discard_card
+		} else {
+			call do_place_depot
+		}
+	}
+	call may_remove_place_depot_orders
+`)
 
 function has_depot_in_pool(who) {
 	return has_friendly_depot(who, POOL)
 }
 
-P.do_place_depot = {
+P.do_place_depot = script(`
+	call reveal_place_depot
+	call place_depot { area: L.$ }
+`)
+
+P.reveal_place_depot = {
+	_begin() {
+		L.order = get_placed_orders_of_type(PLACE_DEPOT).find(order => get_order_owner(order) === G.active)
+	},
+	prompt() {
+		V.prompt = `Select next place depot order to execute. (${format_area(get_order_location(L.order))}).`
+		action_order(L.order)
+	},
+	order(order) {
+		push_undo()
+		L.L.$ = get_order_location(order)
+		remove_order(order)
+		end()
+	}
+}
+
+P.place_depot = {
 	_begin() {
 		//L.area
+		log_h4(format_area(L.area), G.active)
 		L.has_friendly_depot_in_range = false
 		for (let depot of get_supply_sources_and_depots(G.active)) {
 			if (find_path_distance(depot, L.area, ROAD) <= 4) {
@@ -9440,17 +9488,19 @@ P.do_place_depot = {
 		}
 
 		// The fuzzer loves to pull out all depots on map: This will wipe out all troops on map with attrition!
-		if (!globalThis.RTT_FUZZER)
-			for (let depot = get_first_depot(G.active); depot <= get_last_depot(G.active); ++depot)
+		if (!globalThis.RTT_FUZZER) {
+			for (let depot = get_first_depot(G.active); depot <= get_last_depot(G.active); ++depot) {
 				if (is_depot_on_map(depot))
 					action("depot", depot)
+			}
+		}
 	},
 	area(area) {
 		push_undo()
 		add_depot(G.active, area)
 		log("Placed depot")
 		logi(`${format_area(area)}`)
-		goto("end_order", { type: PLACE_DEPOT })
+		end()
 	},
 	depot(depot) {
 		push_undo()
@@ -9459,11 +9509,34 @@ P.do_place_depot = {
 	},
 	confirm() {
 		log("Cannot trace a line of 4 or less road connections to another depot.")
-		goto("end_order", { type: PLACE_DEPOT })
+		end()
 	},
 	pass() {
 		log("No depots in pool.")
-		goto("end_order", { type: PLACE_DEPOT })
+		end()
+	}
+}
+
+P.may_remove_place_depot_orders = {
+	prompt() {
+		V.prompt = `Execute Place Depot orders: All done. You may remove any depots on map.`
+		button_done()
+
+		// The fuzzer loves to pull out all depots on map: This will wipe out all troops on map with attrition!
+		if (!globalThis.RTT_FUZZER) {
+			for (let depot = get_first_depot(G.active); depot <= get_last_depot(G.active); ++depot) {
+				if (is_depot_on_map(depot))
+					action("depot", depot)
+			}
+		}
+	},
+	done() {
+		end()
+	},
+	depot(depot) {
+		push_undo()
+		log_h4(format_area(get_depot_location(depot)), G.active)
+		remove_depot(depot, get_depot_location(depot))
 	}
 }
 
@@ -9491,8 +9564,15 @@ P.attrition = script(`
 		log_h2("Attrition")
 		L.player_with_initiative = get_who_has_initiative()
 	}
-
 	call change_orders { current_type: FORAGE }
+
+	// FR #41 Freezing Weather: France may not use Forage orders.
+	if (is_event_active(C_FREEZING_WEATHER)) {
+		eval {
+			log_card(C_FREEZING_WEATHER)
+			logi("France may not execute Forage orders.")
+		}
+	}
 
 	set G.active (1 - L.player_with_initiative)
 	call attrition_events
@@ -9796,7 +9876,7 @@ P.do_attrition = {
 
 		log_attrition_info(G.active, area)
 
-		if (has_order_of_type(G.active, FORAGE, area))
+		if (has_order_of_type(G.active, FORAGE, area) && (G.active !== FRANCE || !is_event_active(C_FREEZING_WEATHER)))
 			call("reveal_forage_order", { area })
 		else if (has_attrition_losses_remaining())
 			call("assign_attrition_losses", { area })
@@ -13825,6 +13905,27 @@ P.inferior_gunpowder = function() {
 // FR #42 Extreme Weather (must-play event) -- see draw_card_to_hand
 
 // FR #43 Logistics Collapse -- see draw_card_to_hand
+P.logistics_collapse_discard_card = {
+	_begin() {
+		log_card(C_LOGISTICS_COLLAPSE)
+	},
+	prompt() {
+		prompt_card(C_LOGISTICS_COLLAPSE, `Discard a card from your hand to execute next Place Depot order.`)
+		get_non_dummy_cards_in_hand(G.active).forEach(action_card)
+	},
+	card(card) {
+		push_undo()
+		discard_card(card)
+		log_masked(FRANCE, format_i(`Discarded`), format_i(`Discarded a card.`))
+		log_only(FRANCE, format_ii(format_card(card)))
+		goto("do_place_depot")
+	},
+	pass() {
+		push_undo()
+		logi(`Did not discard a card.`)
+		end()
+	}
+}
 
 // FR #44 Chaotic Food Distribution -- see draw_card_to_hand
 
@@ -14055,8 +14156,8 @@ P.courage_of_desperation_confirm = function() {
 E.the_old_guard = function() { return count_num_guard(FRANCE, G.current_battle) > 0 }
 
 P.the_old_guard = script(`
-	call old_guard_confirm
-	if (is_outflanking_active(enemy(G.active))) {
+	call the_old_guard_confirm
+	if (is_outflanking_currently_active(enemy(G.active))) {
 		goto cancel_outflanking { card: THE_OLD_GUARD }
 	}
 `)
