@@ -10495,8 +10495,18 @@ function is_event_active(event) {
 	return map_has(G.persistent_events, event)
 }
 
+function get_event_removal_turn(event) {
+	if (event === C_LOGISTICS_COLLAPSE)
+		return G.end_turn
+	if (event === C_WELL_DISCIPLINED_RETREAT || event === C_EXTREME_WEATHER_FR)
+		return G.turn + 1
+	if (is_must_play_event(event) && TURN_PHASES.indexOf(G.phase) > TURN_PHASES.indexOf("draw_card_to_hand"))
+		return G.turn + 1
+	return G.turn
+}
+
 function add_persistent_event(evt, keywords) {
-	let removal_turn = (evt === C_WELL_DISCIPLINED_RETREAT || evt === C_EXTREME_WEATHER_FR) ? G.turn + 1 : G.turn
+	let removal_turn = get_event_removal_turn(evt)
 	let key = evt
 	let value = Object.assign({remove: removal_turn}, keywords)
 	map_set(G.persistent_events, key, value)
