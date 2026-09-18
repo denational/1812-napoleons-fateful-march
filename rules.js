@@ -2,7 +2,6 @@
 
 "use strict"
 
-// TODO: Give a player VP for eliminating a force, unless the force only consists of Cossack SPs.
 // TODO: Undo for Lines of Communications.
 // TODO: Better handling of response events.
 // IN PROGRESS: Fully filter view for roles who shouldn't see SP composition.
@@ -7503,8 +7502,16 @@ function is_outflanking_currently_active(who) {
 		return is_battle_event_currently_active(C_OUTFLANKING_FR_1) || is_battle_event_currently_active(C_OUTFLANKING_FR_2)
 }
 
+function count_num_cossack(area) {
+	return count_num_sps_of_type(RUSSIA, FRESH_COSSACK, area) + count_num_sps_of_type(RUSSIA, EXHAUSTED_COSSACK, area)
+}
+
 P.do_combat_value_calculations = function() {
 	var combat_value = [0, 0]
+
+	// Forces consisting solely of Cossacks do not give Initiative if eliminated.
+	if (count_num_cossack(G.current_battle) === count_num_sps(RUSSIA, G.current_battle))
+		get_player_battle_data(RUSSIA, G.current_battle).only_cossack = true
 
 	const attacker = get_attacker_data(G.current_battle)
 	const attacker_who = get_battle_attacker(G.current_battle)
@@ -8337,7 +8344,9 @@ P.assign_losses = {
 					map_set(eliminated_by_type, type, connections)
 					map_set(counts, type, count)
 				}
-				push_local_undo(R, "eliminate_all", { eliminated_by_type, counts })
+				push_local_undo(R, "eliminate_all", { eliminated_by_type, counts, initiative: G.initiative })
+				if (R !== RUSSIA || !(get_player_battle_data(RUSSIA, G.current_battle)?.only_cossack ?? false))
+					shift_initiative(enemy(R))
 				// log(`${ROLES[R]} has no more fresh SPs.`)
 				// log(`${ROLES[R]} eliminated!`)
 			},
@@ -8352,7 +8361,8 @@ P.assign_losses = {
 						}
 					}
 					log()
-					goto("determine_battle_winner", { count: L.count })
+					if (!sudden_death())
+						goto("determine_battle_winner", { count: L.count })
 				}
 			},
 		},
@@ -8412,6 +8422,10 @@ P.assign_losses = {
 					battle_data.forces[ix].troops[type] += amount
 				})
 			})
+			if (R !== RUSSIA || !(get_player_battle_data(RUSSIA, G.current_battle)?.only_cossack ?? false)) {
+				G.initiatve = undo.info.initiative
+				G.log.pop()
+			}
 			return
 		default:
 			throw new Error(`Unknown action: ${undo.action}`)
