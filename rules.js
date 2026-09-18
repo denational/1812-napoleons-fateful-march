@@ -3,8 +3,9 @@
 "use strict"
 
 // TODO: Give a player VP for eliminating a force, unless the force only consists of Cossack SPs.
+// TODO: Undo for Lines of Communications.
 // TODO: Better handling of response events.
-// TODO: Fully filter view for roles who shouldn't see SP composition.
+// IN PROGRESS: Fully filter view for roles who shouldn't see SP composition.
 
 const data = require("./data")
 
@@ -1298,7 +1299,107 @@ function filter_leaders(leaders, player) {
 	return filtered_leaders
 }
 
-// Needs more cleanup, especially for the observer view.
+function get_visible_type(who, area) {
+	return map_get(G.visible_sp_type, area)?.[who] ?? -1
+}
+
+function set_visible_type(who, area) {
+	let types = get_troop_types_at_area(who, area)
+	let random_type = types[random(types.length)]
+
+	if (!map_has(G.visible_sp_type, area))
+		map_set(G.visible_sp_type, area, [-1, -1])
+	map_get(G.visible_sp_type, area)[who] = random_type
+
+	return random_type
+}
+
+function reset_visible_type(who, area) {
+	if (get_visible_type(enemy(who), area) === -1)
+		map_delete(G.visible_sp_type, area)
+	else
+		map_get(G.visible_sp_type, area)[who] = -1
+}
+
+// This method is fairly simplistic and doesn't account for battles with multiple connections.
+// Needs more work, but I think that this is a good foundation.
+function filter_sps(player) {
+	let sps = []
+
+	map_for_each(G.sps, (area, entries) => {
+		let filtered_entries = []
+
+		for (let entry of entries) {
+			if (decode_troop_entry_who(entry) === player)
+				set_add(filtered_entries, entry)
+		}
+
+		if (player !== RUSSIA && has_friendly_troop(RUSSIA, area) && !has_friendly_leader(RUSSIA, area)) {
+			if (get_visible_type(RUSSIA, area) === -1 || !has_sp_of_type(RUSSIA, get_visible_type(RUSSIA, area), area))
+				set_visible_type(RUSSIA, area)
+			set_add(filtered_entries, entries.find(entry => decode_troop_entry_who(entry) === RUSSIA && decode_troop_entry_type(entry) === get_visible_type(RUSSIA, area)))
+		}
+
+		if (player !== FRANCE && has_friendly_troop(FRANCE, area) && !has_friendly_leader(FRANCE, area)) {
+			if (get_visible_type(FRANCE, area) === -1 || !has_sp_of_type(FRANCE, get_visible_type(FRANCE, area), area))
+				set_visible_type(FRANCE, area)
+			set_add(filtered_entries, entries.find(entry => decode_troop_entry_who(entry) === FRANCE && decode_troop_entry_type(entry) === get_visible_type(FRANCE, area)))
+		}
+
+		if ((!has_friendly_troop(RUSSIA, area) || has_friendly_leader(RUSSIA, area)) && get_visible_type(RUSSIA, area) > -1)
+			reset_visible_type(RUSSIA, area)
+
+		if ((!has_friendly_troop(FRANCE, area) || has_friendly_leader(FRANCE, area)) && get_visible_type(FRANCE, area) > -1)
+			reset_visible_type(FRANCE, area)
+
+		map_set(sps, area, filtered_entries)
+	})
+
+	return sps
+}
+
+function filter_moved(player) {
+	let moved = {
+		leaders: [],
+		sps: []
+	}
+
+	map_for_each(G.moved.leaders, (leader, info) => {
+		if (is_seniormost_leader(leader, get_leader_location(leader)))
+			map_set(moved.leaders, object_copy(info))
+	})
+
+	map_for_each(G.moved.sps, (area, entries) => {
+		let filtered_entries = []
+		for (let entry of entries) {
+			if (decode_troop_moved_player(entry) === player || decode_troop_moved_type(entry) === get_visible_type(decode_troop_moved_player(entry), area))
+				set_add(filtered_entries, entry)
+		}
+		map_set(moved.sps, area, filtered_entries)
+	})
+
+	return moved
+}
+
+// TODO (needs rework on client side to account for missing entries)
+function filter_battles(player) {
+	let battles = []
+
+	map_for_each(G.battles, (area, battle) => {
+		let filtered_battle = object_copy(battle)
+
+		if (!is_battle_attacker(player, area))
+			delete filtered_battle.attacker.troops
+
+		if (!is_battle_defender(player, area))
+			delete filtered_battle.defender.troops
+
+		map_set(battles, area, filtered_battle)
+	})
+
+	return battles
+}
+
 function on_view() {
 	// Global stuff
 	// G.turn will be undefined before the 'main' script is called.
@@ -1336,9 +1437,9 @@ function on_view() {
 	V.log = filter_log(V.log, R)
 	V.leaders = filter_leaders(G.leaders, R)
 	// TODO: Filter these based on role
-	V.sps = G.sps
-	V.battles = G.battles
-	V.moved = G.moved
+	V.sps = filter_sps(R)
+	V.battles = G.battles // filter_battles(R)
+	V.moved = filter_moved(R)
 	V.move = G.move
 }
 
@@ -1537,36 +1638,7 @@ function on_setup(scenario, options) {
 	G.platov_order = -1
 	G.superior_staff_officers_order = -1
 
-	log_h5("Special Rules")
-	if ([THE_EAGLES_MARCH_ON_SMOLENSK, THE_EAGLES_MARCH_ON_MOSCOW, THE_GRAND_CAMPAIGN].includes(scenario))
-		log(`French Logistic Preparations.`)
-
-	if ([THE_GRAND_CAMPAIGN, BATTLE_OF_SMOLENSK_CAMPAIGN_START, THE_RETREAT_OF_THE_GRANDE_ARMEE].includes(scenario))
-		log(`Winter.`)
-	log()
-
-	if (is_no_unsuccessful_disengagement() || is_superior_staff_officers() || is_russian_disorganization_and_confusion())
-		log_h5("Optional Rules")
-
-	if (
-		is_no_unsuccessful_disengagement()
-		&& G.start_turn === JUNE_5
-	) {
-		array_delete_item(get_deck(FRANCE), C_UNSUCCESSFUL_DISENGAGEMENT)
-		set_add(get_discard(FRANCE), C_UNSUCCESSFUL_DISENGAGEMENT)
-		log(`Less Luck of the Draw.`)
-	}
-
-	if (is_superior_staff_officers())
-		log(`Superior Staff Officers.`)
-
-	if (
-		is_russian_disorganization_and_confusion()
-		&& scenario !== THE_RETREAT_OF_THE_GRANDE_ARMEE
-	) {
-		add_order_of_type_from_pool(RUSSIA, RALLY, OUT_OF_PLAY)
-		log(`Russian Disorganization & Confusion.`)
-	}
+	log_special_and_optional_rules(scenario)
 
 	switch(get_month(G.start_turn)) {
 	case JUNE: setup_june(); break
@@ -1577,6 +1649,36 @@ function on_setup(scenario, options) {
 
 	G.active = [RUSSIA, FRANCE]
 	call("setup_hand", {scenario, hand_size: SCENARIO_DATA.hand_size.slice()})
+}
+
+function log_special_and_optional_rules(scenario) {
+	if (scenario !== HOLLOW_VICTORIES)
+	log_h5("Special Rules")
+	if ([THE_EAGLES_MARCH_ON_SMOLENSK, THE_EAGLES_MARCH_ON_MOSCOW, THE_GRAND_CAMPAIGN].includes(scenario))
+		log(`French Logistic Preparations.`)
+	if ([THE_GRAND_CAMPAIGN, BATTLE_OF_SMOLENSK_CAMPAIGN_START, THE_RETREAT_OF_THE_GRANDE_ARMEE].includes(scenario))
+		log(`Winter.`)
+	log()
+
+	if (is_no_unsuccessful_disengagement() || is_superior_staff_officers() || is_russian_disorganization_and_confusion())
+		log_h5("Optional Rules")
+	if (
+		is_no_unsuccessful_disengagement()
+		&& G.start_turn === JUNE_5
+	) {
+		array_delete_item(get_deck(FRANCE), C_UNSUCCESSFUL_DISENGAGEMENT)
+		set_add(get_discard(FRANCE), C_UNSUCCESSFUL_DISENGAGEMENT)
+		log(`Less Luck of the Draw.`)
+	}
+	if (is_superior_staff_officers())
+		log(`Superior Staff Officers.`)
+	if (
+		is_russian_disorganization_and_confusion()
+		&& scenario !== THE_RETREAT_OF_THE_GRANDE_ARMEE
+	) {
+		add_order_of_type_from_pool(RUSSIA, RALLY, OUT_OF_PLAY)
+		log(`Russian Disorganization & Confusion.`)
+	}
 }
 
 function update_supply(player) {
@@ -4840,10 +4942,14 @@ P.execute_next_order = {
 		if (has_executable_order(G.active, L.type)) {
 			V.prompt = `Select next ${get_order_type_name(L.type)} order to execute. (${join_array_with_or(get_executable_orders(G.active, L.type).map(order => format_area(get_order_location(order))))})`
 			get_executable_orders(G.active, L.type).forEach(action_order)
+			button_next()
 		} else {
 			V.prompt = `Execute ${get_order_type_name(L.type)} orders — All done.`
 			button_done()
 		}
+	},
+	next() {
+		this.order(get_executable_orders(G.active, L.type)[0])
 	},
 	order(order) {
 		push_undo()
@@ -10557,10 +10663,10 @@ P.may_play_event = {
 	_resume() {
 		card_box_end()
 		discard_or_remove_card(L.current_event)
-		if (L.$ === undefined)
+		if (L.current_event !== C_EVASIVE_MANEUVERS)
 			goto("event_done", { card: L.current_event })
 		else
-			end(L.$)
+			end(RUSSIA)
 	}
 }
 
