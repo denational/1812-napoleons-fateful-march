@@ -10,6 +10,10 @@ const FRANCE = 1
 const PRUSSIA = 2
 const AUSTRIA = 3
 
+function get_faction(nation) {
+	return (nation === RUSSIA) ? RUSSIA : FRANCE
+}
+
 // Standard SP types
 const FRESH_INFANTRY = 0
 const EXHAUSTED_INFANTRY = 1
