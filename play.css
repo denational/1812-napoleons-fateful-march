@@ -229,7 +229,7 @@ body.France header.your_turn {background-color: var(--france);}
 	min-height: 350px;
 }
 
-.piece, .troop {
+.piece, .sp {
 		position: absolute;
 		background-size: cover;
 		background-repeat: no-repeat;
@@ -392,16 +392,16 @@ body.France header.your_turn {background-color: var(--france);}
 .piece.order.hidden.fr { background-image: url(pieces/fr\ order\ back.png);}
 
 /* TROOPS */
-body.hide-pieces .troop { display: none }
+body.hide-pieces .sp { display: none }
 
-.troop {
+.sp {
 	width: 67px;
 	height: 67px;
 	position: relative;
 	background-size: contain;
 }
 
-.troop.action {
+.sp.action {
 	filter:
 		drop-shadow(0 -1px 0 yellow)
 		drop-shadow(0 1px 0 yellow)
@@ -413,13 +413,13 @@ body.hide-pieces .troop { display: none }
 	z-index: 5;
 }
 
-.troop > .half_strength_ru, .troop > .half_strength_fr {
+.sp > .half_strength_ru, .sp > .half_strength_fr {
 	position: absolute;
 	bottom: 30px;
 	left: 20px;
 }
 
-.troop-text {
+.sp-text {
 	position: absolute;
 	color: rgb(255, 255, 255);
 	background-color: rgb(0, 0, 0);
@@ -432,32 +432,32 @@ body.hide-pieces .troop { display: none }
 	align-items: center;
 }
 
-.stack > .troop {
+.stack > .sp {
 	position: absolute;
 }
 
-.layout > .troop {
+.layout > .sp {
 	position: relative;
 }
 
-.troop.infantry.ru.fresh 		{ background-image: url(pieces/fresh-infantry_ru.png);}
-.troop.infantry.ru.exhausted 	{ background-image: url(pieces/exhausted-infantry_ru.png);}
-.troop.infantry.fr.fresh 		{ background-image: url(pieces/fresh-infantry_fr.png);}
-.troop.infantry.fr.exhausted 	{ background-image: url(pieces/exhausted-infantry_fr.png);}
-.troop.infantry.pr.fresh 		{ background-image: url(pieces/fresh-infantry_pr.png);}
-.troop.infantry.pr.exhausted 	{ background-image: url(pieces/exhausted-infantry_pr.png);}
-.troop.infantry.au.fresh 		{ background-image: url(pieces/fresh-infantry_au.png);}
-.troop.infantry.au.exhausted 	{ background-image: url(pieces/exhausted-infantry_au.png);}
+.sp.infantry.ru.fresh 		{ background-image: url(pieces/fresh-infantry_ru.png);}
+.sp.infantry.ru.exhausted 	{ background-image: url(pieces/exhausted-infantry_ru.png);}
+.sp.infantry.fr.fresh 		{ background-image: url(pieces/fresh-infantry_fr.png);}
+.sp.infantry.fr.exhausted 	{ background-image: url(pieces/exhausted-infantry_fr.png);}
+.sp.infantry.pr.fresh 		{ background-image: url(pieces/fresh-infantry_pr.png);}
+.sp.infantry.pr.exhausted 	{ background-image: url(pieces/exhausted-infantry_pr.png);}
+.sp.infantry.au.fresh 		{ background-image: url(pieces/fresh-infantry_au.png);}
+.sp.infantry.au.exhausted 	{ background-image: url(pieces/exhausted-infantry_au.png);}
 
-.troop.cavalry.ru.fresh 		{ background-image: url(pieces/fresh-cavalry_ru.png);}
-.troop.cavalry.ru.exhausted 	{ background-image: url(pieces/exhausted-cavalry_ru.png);}
-.troop.cavalry.fr.fresh 		{ background-image: url(pieces/fresh-cavalry_fr.png);}
-.troop.cavalry.fr.exhausted 	{ background-image: url(pieces/exhausted-cavalry_fr.png);}
+.sp.cavalry.ru.fresh 		{ background-image: url(pieces/fresh-cavalry_ru.png);}
+.sp.cavalry.ru.exhausted 	{ background-image: url(pieces/exhausted-cavalry_ru.png);}
+.sp.cavalry.fr.fresh 		{ background-image: url(pieces/fresh-cavalry_fr.png);}
+.sp.cavalry.fr.exhausted 	{ background-image: url(pieces/exhausted-cavalry_fr.png);}
 
-.troop.cossack.ru.fresh 		{ background-image: url(pieces/fresh-cossack.png);}
-.troop.cossack.ru.exhausted 	{ background-image: url(pieces/exhausted-cossack.png);}
-.troop.guard.fr.fresh 			{ background-image: url(pieces/fresh-guard.png);}
-.troop.guard.fr.exhausted 		{ background-image: url(pieces/exhausted-guard.png);}
+.sp.cossack.ru.fresh 		{ background-image: url(pieces/fresh-cossack.png);}
+.sp.cossack.ru.exhausted 	{ background-image: url(pieces/exhausted-cossack.png);}
+.sp.guard.fr.fresh 			{ background-image: url(pieces/fresh-guard.png);}
+.sp.guard.fr.exhausted 		{ background-image: url(pieces/exhausted-guard.png);}
 
 /* TRACKS */
 .marker {

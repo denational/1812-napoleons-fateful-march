@@ -589,7 +589,7 @@ function is_french_off_map_area(a) {
 
 function is_fr_controlled(a) {
 	if (is_french_off_map_area(a)) return true
-	return has_troop(a) && has_friendly_troop(FRANCE, a) && !has_friendly_troop(RUSSIA, a)
+	return has_sp(a) && has_friendly_sp(FRANCE, a) && !has_friendly_sp(RUSSIA, a)
 }
 
 function is_ru_controlled(a) {
@@ -741,101 +741,72 @@ function has_non_dummy_order_at_area(who, area) {
 /* TROOPS */
 /*
 	G.sps is a plain array map, using the map functions from the framework.
-	Each key in the 'map' corresponds to an area id where there are troops present. Areas with no troops will be culled.
+	Each key in the 'map' corresponds to an area id where there are sps present. Areas with no sps will be culled.
 	Each value in the 'map' is a 'set', using the set functions in the framework.
 
-	Each set is a sorted plain array of bitpacked troop data.
+	Each set is a sorted plain array of bitpacked sp data.
 
-	Each bitpacked entry follows the following format: (NOTE: For programming simplicity, I've fudged the Prussian and Austrian SPs as separate 'types' of troops, not separate nationalities.)
+	Each bitpacked entry follows the following format: (NOTE: For programming simplicity, I've fudged the Prussian and Austrian SPs as separate 'types' of sps, not separate nationalities.)
 		Player owner		1 bit 		Uses player mnemonics RUSSIA and FRANCE.
 		Type 				4 bits 		Corresponds to the 12 (8 type + 4 allies) constants defined in the "Troops" section of constants
-		Number of troops		6 bits  		Safe estimate of max. troops of a specific nationality and type in an area.
+		Number of sps		6 bits  		Safe estimate of max. sps of a specific nationality and type in an area.
 */
-const TROOP_ENTRY_WHO_SHIFT = 10
-const TROOP_ENTRY_TYPE_SHIFT = 6
-// eslint-disable-next-line no-unused-vars
-const TROOP_ENTRY_NUM_SHIFT = 0
-
-const TROOP_ENTRY_WHO_MASK = 1024
-const TROOP_ENTRY_TYPE_MASK = 960
-const TROOP_ENTRY_NUM_MASK = 63
-
-function init_troop_entry(area) {
+function init_sp_entry(area) {
 	map_set(G.sps, area, [])
 }
 
-function delete_troop_entry(area) {
+function delete_sp_entry(area) {
 	map_delete(G.sps, area)
 }
 
-function decode_troop_entry_who(entry) {
-	return (entry & TROOP_ENTRY_WHO_MASK) >> TROOP_ENTRY_WHO_SHIFT
+function get_sp_entry(who, area, type, fallback) {
+	return get_area_sp_set(area, fallback)?.find(entry => (decode_sp_player(entry) === who) && (decode_sp_type(entry) === type)) ?? fallback
 }
 
-function decode_troop_entry_type(entry) {
-	return (entry & TROOP_ENTRY_TYPE_MASK) >> TROOP_ENTRY_TYPE_SHIFT
-}
-
-function decode_troop_entry_num(entry) {
-	return entry & TROOP_ENTRY_NUM_MASK
-}
-
-function get_troop_entry(who, area, type, fallback) {
-	return get_area_troop_set(area, fallback)?.find(entry => (decode_troop_entry_who(entry) === who) && (decode_troop_entry_type(entry) === type)) ?? fallback
-}
-
-function has_troop(area) {
+function has_sp(area) {
 	return map_has(G.sps, area)
 }
 
-function get_area_troop_set(area, fallback = null) {
+function get_area_sp_set(area, fallback = null) {
 	return map_get(G.sps, area, fallback)
 }
 
-function construct_troop_entry(who, type, num) {
-	let entry = 0
-	entry += who << TROOP_ENTRY_WHO_SHIFT
-	entry += type << TROOP_ENTRY_TYPE_SHIFT
-	entry += num
-	return entry
-}
-
-function has_friendly_troop(who, area) {
-	if (!has_troop(area)) return false
-	for (let entry of get_area_troop_set(area))
-		if (decode_troop_entry_who(entry) === who) return true
+function has_friendly_sp(who, area) {
+	if (!has_sp(area)) return false
+	for (let entry of get_area_sp_set(area))
+		if (decode_sp_player(entry) === who) return true
 	return false
 }
 
-function get_troop_types_at_area(who, area) {
+function get_sp_types_at_area(who, area) {
 	let types = []
-	for (let entry of get_area_troop_set(area, [])) {
-		let owner = decode_troop_entry_who(entry)
+	for (let entry of get_area_sp_set(area, [])) {
+		let owner = decode_sp_player(entry)
 		if (who === owner) {
-			let type = decode_troop_entry_type(entry)
+			let type = decode_sp_type(entry)
 			if (!set_has(types, type)) { set_add(types, type) }
 		}
 	}
 	return types
 }
 
-function is_troop_type_exhausted(type) {
+function is_sp_type_exhausted(type) {
 	return !!(type & 1)
 }
 
-function is_troop_type_fresh(type) {
-	return !is_troop_type_exhausted(type)
+function is_sp_type_fresh(type) {
+	return !is_sp_type_exhausted(type)
 }
 
-function has_troop_in_area(who, area) {
-	return get_area_troop_set(area, null)?.some(entry => decode_troop_entry_who(entry) === who) ?? false
+function has_sp_in_area(who, area) {
+	return get_area_sp_set(area)?.some(entry => decode_sp_player(entry) === who) ?? false
 }
 
 function has_exhausted_sp(who, area) {
-	return get_area_troop_set(area, undefined)?.some(entry => (decode_troop_entry_who(entry) === who) && (is_troop_type_exhausted(decode_troop_entry_type(entry))))
+	return get_area_sp_set(area)?.some(entry => (decode_sp_player(entry) === who) && (is_sp_type_exhausted(decode_sp_type(entry))))
 }
 
-function get_troop_type_name(type) {
+function get_sp_type_name(type) {
 	switch(type) {
 	case FRESH_INFANTRY: return "Infantry"
 	case EXHAUSTED_INFANTRY: return "Exh. Infantry"
@@ -854,33 +825,33 @@ function get_troop_type_name(type) {
 	}
 }
 
-function is_fresh_infantry(troop_type) {
-	return is_infantry(troop_type) && is_troop_type_fresh(troop_type)
+function is_fresh_infantry(sp_type) {
+	return is_infantry(sp_type) && is_sp_type_fresh(sp_type)
 }
 
-function is_fresh_cavalry(troop_type) {
-	return troop_type === FRESH_CAVALRY
+function is_fresh_cavalry(sp_type) {
+	return sp_type === FRESH_CAVALRY
 }
 
 function has_french_sp(area) {
-	return get_area_troop_set(area)?.some(entry => (decode_troop_entry_who(entry) === FRANCE) && (decode_troop_entry_type(entry) < FRESH_PRUSSIAN_INFANTRY)) ?? false
+	return get_area_sp_set(area)?.some(entry => (decode_sp_player(entry) === FRANCE) && (decode_sp_type(entry) < FRESH_PRUSSIAN_INFANTRY)) ?? false
 }
 
 function has_prussian_sp(area) {
-	return get_area_troop_set(area).some(entry => (decode_troop_entry_type(entry) === FRESH_PRUSSIAN_INFANTRY) || (decode_troop_entry_type(entry) === EXHAUSTED_PRUSSIAN_INFANTRY))
+	return get_area_sp_set(area).some(entry => (decode_sp_type(entry) === FRESH_PRUSSIAN_INFANTRY) || (decode_sp_type(entry) === EXHAUSTED_PRUSSIAN_INFANTRY))
 }
 
 function has_austrian_sp(area) {
-	return get_area_troop_set(area).some(entry => (decode_troop_entry_type(entry) === FRESH_AUSTRIAN_INFANTRY) || (decode_troop_entry_type(entry) === EXHAUSTED_AUSTRIAN_INFANTRY))
+	return get_area_sp_set(area).some(entry => (decode_sp_type(entry) === FRESH_AUSTRIAN_INFANTRY) || (decode_sp_type(entry) === EXHAUSTED_AUSTRIAN_INFANTRY))
 }
 
 function count_num_sps(who, area) {
-	if (!has_troop(area)) return 0
+	if (!has_sp(area)) return 0
 
 	let count = 0
-	for (let entry of get_area_troop_set(area, null))
-		if (decode_troop_entry_who(entry) === who)
-			count += decode_troop_entry_num(entry)
+	for (let entry of get_area_sp_set(area, null))
+		if (decode_sp_player(entry) === who)
+			count += decode_sp_num(entry)
 	return count
 }
 
@@ -898,30 +869,30 @@ function find_areas_with_most_ru_sps() {
 	return area_with_most_sps
 }
 
-function is_infantry(troop_type) {
-	return set_has([FRESH_INFANTRY, EXHAUSTED_INFANTRY, FRESH_PRUSSIAN_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, FRESH_AUSTRIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY], troop_type)
+function is_infantry(sp_type) {
+	return set_has([FRESH_INFANTRY, EXHAUSTED_INFANTRY, FRESH_PRUSSIAN_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, FRESH_AUSTRIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY], sp_type)
 }
 
-function is_cavalry(troop_type) {
-	return (troop_type === FRESH_CAVALRY) || (troop_type === EXHAUSTED_CAVALRY)
+function is_cavalry(sp_type) {
+	return (sp_type === FRESH_CAVALRY) || (sp_type === EXHAUSTED_CAVALRY)
 }
 
-function is_cossack(troop_type) {
-	return (troop_type === FRESH_COSSACK) || (troop_type === EXHAUSTED_COSSACK)
+function is_cossack(sp_type) {
+	return (sp_type === FRESH_COSSACK) || (sp_type === EXHAUSTED_COSSACK)
 }
 
 function has_russian_sp(area) {
-	return has_friendly_troop(RUSSIA, area)
+	return has_friendly_sp(RUSSIA, area)
 }
 
-function get_troop_list_by_type(who, area) {
+function get_sp_list_by_type(who, area) {
 	let list = Array(NUM_TROOP_TYPES).fill(0)
-	if (!has_friendly_troop(who, area)) return list
+	if (!has_friendly_sp(who, area)) return list
 
-	for (let entry of get_area_troop_set(area)) {
-		if (decode_troop_entry_who(entry) === who) {
-			let type = decode_troop_entry_type(entry)
-			let num = decode_troop_entry_num(entry)
+	for (let entry of get_area_sp_set(area)) {
+		if (decode_sp_player(entry) === who) {
+			let type = decode_sp_type(entry)
+			let num = decode_sp_num(entry)
 			list[type] = num
 		}
 	}
@@ -930,10 +901,10 @@ function get_troop_list_by_type(who, area) {
 }
 
 function has_sp_of_type(who, type, area) {
-	if (!has_troop(area)) return false
-	return get_area_troop_set(area).some(entry => {
-		return decode_troop_entry_who(entry) === who
-		&& decode_troop_entry_type(entry) === type
+	if (!has_sp(area)) return false
+	return get_area_sp_set(area).some(entry => {
+		return decode_sp_player(entry) === who
+		&& decode_sp_type(entry) === type
 	})
 }
 
@@ -1075,7 +1046,7 @@ function count_num_french_depots_on_map() {
 function get_all_unoccupied_depots(who) {
 	let unoccupied_depots = []
 	for (let area of get_areas_with_depots(who)) {
-		if (!has_troop_in_area(FRANCE, area)) {
+		if (!has_sp_in_area(FRANCE, area)) {
 			set_add(unoccupied_depots, area)
 		}
 	}
@@ -1111,8 +1082,8 @@ function get_areas_with_devastation() {
 	return areas
 }
 
-function get_devastated_areas_with_french_troops() {
-	return get_areas_with_devastation().filter(area => has_troop_in_area(FRANCE, area))
+function get_devastated_areas_with_french_sps() {
+	return get_areas_with_devastation().filter(area => has_sp_in_area(FRANCE, area))
 }
 
 function find_connection(a, b) {
@@ -1204,55 +1175,55 @@ function has_card_in_hand(who) {
 }
 
 /* TROOPS */
-//Sets the number of troops at a given area to a specific number.
-function set_troop(who, area, type, num) {
-	if (!has_troop(area)) init_troop_entry(area)
+//Sets the number of sps at a given area to a specific number.
+function set_sp(who, area, type, num) {
+	if (!has_sp(area)) init_sp_entry(area)
 
-	let entry = get_troop_entry(who, area, type, -1)
+	let entry = get_sp_entry(who, area, type, -1)
 	if (entry > -1)
-		set_delete(get_area_troop_set(area), entry)
+		set_delete(get_area_sp_set(area), entry)
 
-	set_add(get_area_troop_set(area, null), construct_troop_entry(who, type, num))
+	set_add(get_area_sp_set(area, null), package_sp_entry(who, type, num))
 }
 
-//Adds X troops of a specific type to a given area.
-function add_troop(who, area, type, num) {
-	if (!has_troop(area)) init_troop_entry(area)
+//Adds X sps of a specific type to a given area.
+function add_sp(who, area, type, num) {
+	if (!has_sp(area)) init_sp_entry(area)
 
-	let entry = get_troop_entry(who, area, type, null)
+	let entry = get_sp_entry(who, area, type, null)
 	if (entry !== null)
-		set_troop(who, area, type, decode_troop_entry_num(entry) + num)
+		set_sp(who, area, type, decode_sp_num(entry) + num)
 	else
-		set_troop(who, area, type, num)
+		set_sp(who, area, type, num)
 }
 
-function remove_troop(who, area, type, num) {
-	let entry = get_troop_entry(who, area, type, null)
+function remove_sp(who, area, type, num) {
+	let entry = get_sp_entry(who, area, type, null)
 	if (entry !== null) {
-		let remaining_troop_count = decode_troop_entry_num(entry)
-		if (remaining_troop_count < num) {
-			throw new Error(`Need to remove ${num} ${ROLES[who]} ${get_troop_type_name(type)} at ${get_area_name(area)}. Only ${remaining_troop_count} found.`)
+		let remaining_sp_count = decode_sp_num(entry)
+		if (remaining_sp_count < num) {
+			throw new Error(`Need to remove ${num} ${ROLES[who]} ${get_sp_type_name(type)} at ${get_area_name(area)}. Only ${remaining_sp_count} found.`)
 		}
 
-		set_delete(get_area_troop_set(area), entry)
-		if (remaining_troop_count !== num) {
-			set_troop(who, area, type, remaining_troop_count - num)
+		set_delete(get_area_sp_set(area), entry)
+		if (remaining_sp_count !== num) {
+			set_sp(who, area, type, remaining_sp_count - num)
 		}
 
-		if (get_area_troop_set(area).length === 0 || get_area_troop_set(area).every(val => decode_troop_entry_num(val) === 0)) {
-			delete_troop_entry(area)
+		if (get_area_sp_set(area).length === 0 || get_area_sp_set(area).every(val => decode_sp_num(val) === 0)) {
+			delete_sp_entry(area)
 		}
 	}
 }
 
-function move_troop(who, from, to, type, num) {
-	remove_troop(who, from, type, num)
-	add_troop(who, to, type, num)
+function move_sp(who, from, to, type, num) {
+	remove_sp(who, from, type, num)
+	add_sp(who, to, type, num)
 }
 
-function rally_troop(who, area, type, num = 1) {
-	remove_troop(who, area, type, num)
-	add_troop(who, area, type - 1, num)
+function rally_sp(who, area, type, num = 1) {
+	remove_sp(who, area, type, num)
+	add_sp(who, area, type - 1, num)
 }
 
 /* ORDERS */
@@ -1265,6 +1236,107 @@ function add_order_of_type_from_pool(who, type, where) {
 	let id = get_orders_at_area(who, POOL).find(order => get_order_type(order) === type)
 	place_order(id, where)
 	return id
+}
+
+// === SP BITPACKING ===
+/*
+	29 bits
+		Moving?			1 bit			0 or 1
+		Area				8 bits		needs to accomodate at least 157
+		From				8 bits		needs to accomodate at least 156
+		Strength			1 bits		FULL_STRENGTH or HALF_STRENGTH
+		Player			1 bit			RUSSIA or FRANCE
+		Type				4 bits		One of the 12 SP types
+		Num				6 bits		Count of SPs. (max. set to 63)
+
+
+	G.sps uses Player, Type, Num
+	G.moved uses From, Strength, Player, Type, Num
+	Troop action uses the entire field except Num
+*/
+
+const SP_MOVING_SHIFT 	= 28
+const SP_AREA_SHIFT 	= 20
+const SP_FROM_SHIFT 	= 12
+const SP_STRENGTH_SHIFT = 11
+const SP_PLAYER_SHIFT 	= 10
+const SP_TYPE_SHIFT 	= 6
+const SP_NUM_SHIFT 	= 0
+
+const SP_MOVING_MASK	= 1 << SP_MOVING_SHIFT
+const SP_AREA_MASK 	= 0xFF << SP_AREA_SHIFT
+const SP_FROM_MASK 	= 0xFF << SP_FROM_SHIFT
+const SP_STRENGTH_MASK 	= 1 << SP_STRENGTH_SHIFT
+const SP_PLAYER_MASK 	= 1 << SP_PLAYER_SHIFT
+const SP_TYPE_MASK	= 0xF << SP_TYPE_SHIFT
+const SP_NUM_MASK 	= 0b111111 << SP_NUM_SHIFT
+
+// Whether an SP is selected to move (for UI purposes)
+function decode_sp_moving(entry) {
+	return (entry & SP_MOVING_MASK) >>> SP_MOVING_SHIFT
+}
+
+// Where the SP is (for the special Troop action)
+function decode_sp_area(entry) {
+	return (entry & SP_AREA_MASK) >>> SP_AREA_SHIFT
+}
+
+// Where the SP entered its current location from
+function decode_sp_from(entry) {
+	return (entry & SP_FROM_MASK) >>> SP_FROM_SHIFT
+}
+
+// The SP's current strength (HALF_STRENGTH or FULL_STRENGTH)
+function decode_sp_strength(entry) {
+	return (entry & SP_STRENGTH_MASK) >>> SP_STRENGTH_SHIFT
+}
+
+// The SP's owner (RUSSIA or FRANCE)
+function decode_sp_player(entry) {
+	return (entry & SP_PLAYER_MASK) >>> SP_PLAYER_SHIFT
+}
+
+// The SP's type (matches one of the 12 types)
+function decode_sp_type(entry) {
+	return (entry & SP_TYPE_MASK) >>> SP_TYPE_SHIFT
+}
+
+// The number of SPs of a specific nationality and type in an area. Max. of 63 (should be more than enough, even for the fuzzer)
+function decode_sp_num(entry) {
+	return (entry & SP_NUM_MASK) >>> SP_NUM_SHIFT
+}
+
+// G.sps
+function package_sp_entry(player, type, num) {
+	let p = player << SP_PLAYER_SHIFT
+	let t = type << SP_TYPE_SHIFT
+	let n = num << SP_NUM_SHIFT
+
+	return p | t | n
+}
+
+// G.moved
+function package_sp_moved(player, from, strength, type, num) {
+	let f = from << SP_FROM_SHIFT
+	let s = strength << SP_STRENGTH_SHIFT
+	let p = player << SP_PLAYER_SHIFT
+	let t = type << SP_TYPE_SHIFT
+	let n = num << SP_NUM_SHIFT
+
+	return f | s | p | t | n
+}
+
+// Troop action
+function package_sp_action(player, type, strength, area, from, moving) {
+	let m = moving << SP_MOVING_SHIFT
+	let a = area << SP_AREA_SHIFT
+	let f = from << SP_FROM_SHIFT
+	let s = strength << SP_STRENGTH_SHIFT
+	let p = player << SP_PLAYER_SHIFT
+	let t = type << SP_TYPE_SHIFT
+	let n = 0 << SP_NUM_SHIFT // Not used
+
+	return m | a | f | s | p | t | n
 }
 
 // === VIEW ===
@@ -1303,7 +1375,7 @@ function get_visible_type(who, area) {
 }
 
 function set_visible_type(who, area) {
-	let types = get_troop_types_at_area(who, area)
+	let types = get_sp_types_at_area(who, area)
 	let random_type = types[random(types.length)]
 
 	if (!map_has(G.visible_sp_type, area))
@@ -1329,26 +1401,26 @@ function filter_sps(player) {
 		let filtered_entries = []
 
 		for (let entry of entries) {
-			if (decode_troop_entry_who(entry) === player)
+			if (decode_sp_player(entry) === player)
 				set_add(filtered_entries, entry)
 		}
 
-		if (player !== RUSSIA && has_friendly_troop(RUSSIA, area) && !has_friendly_leader(RUSSIA, area)) {
+		if (player !== RUSSIA && has_friendly_sp(RUSSIA, area) && !has_friendly_leader(RUSSIA, area)) {
 			if (get_visible_type(RUSSIA, area) === -1 || !has_sp_of_type(RUSSIA, get_visible_type(RUSSIA, area), area))
 				set_visible_type(RUSSIA, area)
-			set_add(filtered_entries, entries.find(entry => decode_troop_entry_who(entry) === RUSSIA && decode_troop_entry_type(entry) === get_visible_type(RUSSIA, area)))
+			set_add(filtered_entries, entries.find(entry => decode_sp_player(entry) === RUSSIA && decode_sp_type(entry) === get_visible_type(RUSSIA, area)))
 		}
 
-		if (player !== FRANCE && has_friendly_troop(FRANCE, area) && !has_friendly_leader(FRANCE, area)) {
+		if (player !== FRANCE && has_friendly_sp(FRANCE, area) && !has_friendly_leader(FRANCE, area)) {
 			if (get_visible_type(FRANCE, area) === -1 || !has_sp_of_type(FRANCE, get_visible_type(FRANCE, area), area))
 				set_visible_type(FRANCE, area)
-			set_add(filtered_entries, entries.find(entry => decode_troop_entry_who(entry) === FRANCE && decode_troop_entry_type(entry) === get_visible_type(FRANCE, area)))
+			set_add(filtered_entries, entries.find(entry => decode_sp_player(entry) === FRANCE && decode_sp_type(entry) === get_visible_type(FRANCE, area)))
 		}
 
-		if ((!has_friendly_troop(RUSSIA, area) || has_friendly_leader(RUSSIA, area)) && get_visible_type(RUSSIA, area) > -1)
+		if ((!has_friendly_sp(RUSSIA, area) || has_friendly_leader(RUSSIA, area)) && get_visible_type(RUSSIA, area) > -1)
 			reset_visible_type(RUSSIA, area)
 
-		if ((!has_friendly_troop(FRANCE, area) || has_friendly_leader(FRANCE, area)) && get_visible_type(FRANCE, area) > -1)
+		if ((!has_friendly_sp(FRANCE, area) || has_friendly_leader(FRANCE, area)) && get_visible_type(FRANCE, area) > -1)
 			reset_visible_type(FRANCE, area)
 
 		map_set(sps, area, filtered_entries)
@@ -1371,7 +1443,7 @@ function filter_moved(player) {
 	map_for_each(G.moved.sps, (area, entries) => {
 		let filtered_entries = []
 		for (let entry of entries) {
-			if (decode_troop_moved_player(entry) === player || decode_troop_moved_type(entry) === get_visible_type(decode_troop_moved_player(entry), area))
+			if (decode_sp_player(entry) === player || decode_sp_type(entry) === get_visible_type(decode_sp_player(entry), area))
 				set_add(filtered_entries, entry)
 		}
 		map_set(moved.sps, area, filtered_entries)
@@ -1388,10 +1460,10 @@ function filter_battles(player) {
 		let filtered_battle = object_copy(battle)
 
 		if (!is_battle_attacker(player, area))
-			delete filtered_battle.attacker.troops
+			delete filtered_battle.attacker.sps
 
 		if (!is_battle_defender(player, area))
-			delete filtered_battle.defender.troops
+			delete filtered_battle.defender.sps
 
 		map_set(battles, area, filtered_battle)
 	})
@@ -1652,7 +1724,7 @@ function on_setup(scenario, options) {
 
 function log_special_and_optional_rules(scenario) {
 	if (scenario !== HOLLOW_VICTORIES)
-	log_h5("Special Rules")
+		log_h5("Special Rules")
 	if ([THE_EAGLES_MARCH_ON_SMOLENSK, THE_EAGLES_MARCH_ON_MOSCOW, THE_GRAND_CAMPAIGN].includes(scenario))
 		log(`French Logistic Preparations.`)
 	if ([THE_GRAND_CAMPAIGN, BATTLE_OF_SMOLENSK_CAMPAIGN_START, THE_RETREAT_OF_THE_GRANDE_ARMEE].includes(scenario))
@@ -1690,80 +1762,80 @@ function update_supply(player) {
 function setup_june() {
 	log_h1("June Setup", SUMMER)
 	/* RUSSIA */
-	set_troop(RUSSIA, S_RIGA, FRESH_INFANTRY, 2)
-	set_troop(RUSSIA, S_DUNABURG, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_RIGA, FRESH_INFANTRY, 2)
+	set_sp(RUSSIA, S_DUNABURG, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_DUNABURG)
 	move_leader(L_WITTGENSTEIN, S_KALTINENAI)
-	set_troop(RUSSIA, S_KALTINENAI, FRESH_INFANTRY, 3)
-	set_troop(RUSSIA, S_VILKOMIR, FRESH_CAVALRY, 2)
-	set_troop(RUSSIA, S_VILKOMIR, FRESH_INFANTRY, 2)
+	set_sp(RUSSIA, S_KALTINENAI, FRESH_INFANTRY, 3)
+	set_sp(RUSSIA, S_VILKOMIR, FRESH_CAVALRY, 2)
+	set_sp(RUSSIA, S_VILKOMIR, FRESH_INFANTRY, 2)
 	move_leader(L_ALEXANDER, S_VILNA)
 	move_leader(L_DE_TOLLY, S_VILNA)
-	set_troop(RUSSIA, S_VILNA, FRESH_INFANTRY, 6)
+	set_sp(RUSSIA, S_VILNA, FRESH_INFANTRY, 6)
 	add_depot(RUSSIA, S_VILNA)
-	set_troop(RUSSIA, S_SVENCIONYS, FRESH_INFANTRY, 3)
-	set_troop(RUSSIA, S_MOLODECHNO, FRESH_CAVALRY, 1)
-	set_troop(RUSSIA, S_MOLODECHNO, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_SVENCIONYS, FRESH_INFANTRY, 3)
+	set_sp(RUSSIA, S_MOLODECHNO, FRESH_CAVALRY, 1)
+	set_sp(RUSSIA, S_MOLODECHNO, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_MINSK)
-	set_troop(RUSSIA, S_LIDA, FRESH_CAVALRY, 1)
-	set_troop(RUSSIA, S_LIDA, FRESH_INFANTRY, 2)
+	set_sp(RUSSIA, S_LIDA, FRESH_CAVALRY, 1)
+	set_sp(RUSSIA, S_LIDA, FRESH_INFANTRY, 2)
 	move_leader(L_PLATOV, S_GRODNO)
-	set_troop(RUSSIA, S_GRODNO, FRESH_COSSACK, 2)
-	set_troop(RUSSIA, S_BIALYSTOK, FRESH_CAVALRY, 1)
+	set_sp(RUSSIA, S_GRODNO, FRESH_COSSACK, 2)
+	set_sp(RUSSIA, S_BIALYSTOK, FRESH_CAVALRY, 1)
 	move_leader(L_BAGRATION, S_VOLKOVYSK)
-	set_troop(RUSSIA, S_VOLKOVYSK, FRESH_INFANTRY, 4)
-	set_troop(RUSSIA, S_BREST, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_VOLKOVYSK, FRESH_INFANTRY, 4)
+	set_sp(RUSSIA, S_BREST, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_BREST)
-	set_troop(RUSSIA, S_KOVEL, FRESH_CAVALRY, 1)
-	set_troop(RUSSIA, S_KOVEL, EXHAUSTED_CAVALRY, 1)
+	set_sp(RUSSIA, S_KOVEL, FRESH_CAVALRY, 1)
+	set_sp(RUSSIA, S_KOVEL, EXHAUSTED_CAVALRY, 1)
 	move_leader(L_TORMASOV, S_LUTSK)
-	set_troop(RUSSIA, S_LUTSK, FRESH_INFANTRY, 1)
-	set_troop(RUSSIA, S_LUTSK, EXHAUSTED_INFANTRY, 1)
+	set_sp(RUSSIA, S_LUTSK, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_LUTSK, EXHAUSTED_INFANTRY, 1)
 	add_depot(RUSSIA, S_LUTSK)
-	set_troop(RUSSIA, S_ROVNO, FRESH_INFANTRY, 1)
-	set_troop(RUSSIA, S_DUBNO, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_ROVNO, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_DUBNO, FRESH_INFANTRY, 1)
 
-	set_troop(RUSSIA, S_TOROPETS, FRESH_INFANTRY, 2)
-	set_troop(RUSSIA, S_POLOTSK, FRESH_INFANTRY, 1)
-	set_troop(RUSSIA, S_VITEBSK, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_TOROPETS, FRESH_INFANTRY, 2)
+	set_sp(RUSSIA, S_POLOTSK, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_VITEBSK, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_VITEBSK)
 	add_depot(RUSSIA, S_SMOLENSK)
-	set_troop(RUSSIA, S_BORISOV, FRESH_INFANTRY, 1)
-	set_troop(RUSSIA, S_MOGILEV, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_BORISOV, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_MOGILEV, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_MOGILEV)
-	set_troop(RUSSIA, S_BOBRUYSK, FRESH_INFANTRY, 1)
-	set_troop(RUSSIA, S_MOZYR, FRESH_INFANTRY, 1)
-	set_troop(RUSSIA, S_KIEV, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_BOBRUYSK, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_MOZYR, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_KIEV, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_KIEV)
 	add_depot(RUSSIA, S_ZHITOMIR)
 
-	set_troop(RUSSIA, S_MOSCOW, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_MOSCOW, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_MOSCOW)
 	add_depot(RUSSIA, S_VYAZMA)
-	set_troop(RUSSIA, S_KALUGA, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_KALUGA, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_KALUGA)
-	set_troop(RUSSIA, S_OREL, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_OREL, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_OREL)
-	set_troop(RUSSIA, S_VORONEZH, FRESH_COSSACK, 1)
+	set_sp(RUSSIA, S_VORONEZH, FRESH_COSSACK, 1)
 
 	/* FRANCE */
-	set_troop(FRANCE, S_PRUSSIA_NORTH, FRESH_PRUSSIAN_INFANTRY, 3)
+	set_sp(FRANCE, S_PRUSSIA_NORTH, FRESH_PRUSSIAN_INFANTRY, 3)
 	move_leader(L_NAPOLEON, S_KALVARIJA)
 	move_leader(L_MURAT, S_KALVARIJA)
-	set_troop(FRANCE, S_KALVARIJA, FRESH_GUARD, 4)
-	set_troop(FRANCE, S_KALVARIJA, FRESH_CAVALRY, 5)
-	set_troop(FRANCE, S_KALVARIJA, FRESH_INFANTRY, 19)
+	set_sp(FRANCE, S_KALVARIJA, FRESH_GUARD, 4)
+	set_sp(FRANCE, S_KALVARIJA, FRESH_CAVALRY, 5)
+	set_sp(FRANCE, S_KALVARIJA, FRESH_INFANTRY, 19)
 	move_leader(L_DE_BEAUHARNAIS, S_SUWALKI)
-	set_troop(FRANCE, S_SUWALKI, FRESH_CAVALRY, 1)
-	set_troop(FRANCE, S_SUWALKI, FRESH_INFANTRY, 7)
+	set_sp(FRANCE, S_SUWALKI, FRESH_CAVALRY, 1)
+	set_sp(FRANCE, S_SUWALKI, FRESH_INFANTRY, 7)
 	move_leader(L_JEROME, S_SZCZUCZY)
-	set_troop(FRANCE, S_SZCZUCZY, FRESH_CAVALRY, 2)
-	set_troop(FRANCE, S_SZCZUCZY, FRESH_INFANTRY, 6)
-	set_troop(FRANCE, S_SUWALKI, FRESH_CAVALRY, 1)
-	set_troop(FRANCE, S_GRAND_DUCHY_OF_WARSAW_NORTH, FRESH_INFANTRY, 2)
+	set_sp(FRANCE, S_SZCZUCZY, FRESH_CAVALRY, 2)
+	set_sp(FRANCE, S_SZCZUCZY, FRESH_INFANTRY, 6)
+	set_sp(FRANCE, S_SUWALKI, FRESH_CAVALRY, 1)
+	set_sp(FRANCE, S_GRAND_DUCHY_OF_WARSAW_NORTH, FRESH_INFANTRY, 2)
 	move_leader(L_SCHWARZENBERG, S_GRAND_DUCHY_OF_WARSAW_SOUTH)
-	set_troop(FRANCE, S_GRAND_DUCHY_OF_WARSAW_SOUTH, FRESH_AUSTRIAN_INFANTRY, 3)
-	set_troop(FRANCE, S_AUSTRIA, FRESH_AUSTRIAN_INFANTRY, 1)
+	set_sp(FRANCE, S_GRAND_DUCHY_OF_WARSAW_SOUTH, FRESH_AUSTRIAN_INFANTRY, 3)
+	set_sp(FRANCE, S_AUSTRIA, FRESH_AUSTRIAN_INFANTRY, 1)
 
 	set_devastation(S_KALVARIJA, 1)
 	set_devastation(S_SUWALKI, 1)
@@ -1773,91 +1845,91 @@ function setup_june() {
 function setup_july() {
 	log_h1("July Setup", SUMMER)
 	/* RUSSIA */
-	set_troop(RUSSIA, S_RIGA, FRESH_INFANTRY, 2)
-	set_troop(RUSSIA, S_DUNABURG, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_RIGA, FRESH_INFANTRY, 2)
+	set_sp(RUSSIA, S_DUNABURG, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_DUNABURG)
 	move_leader(L_WITTGENSTEIN, S_SEVEZH)
-	set_troop(RUSSIA, S_SEVEZH, FRESH_INFANTRY, 2)
-	set_troop(RUSSIA, S_SEVEZH, EXHAUSTED_INFANTRY, 1)
+	set_sp(RUSSIA, S_SEVEZH, FRESH_INFANTRY, 2)
+	set_sp(RUSSIA, S_SEVEZH, EXHAUSTED_INFANTRY, 1)
 	move_leader(L_DE_TOLLY, S_VITEBSK)
-	set_troop(RUSSIA, S_VITEBSK, FRESH_INFANTRY, 7)
-	set_troop(RUSSIA, S_VITEBSK, FRESH_CAVALRY, 2)
-	set_troop(RUSSIA, S_VITEBSK, EXHAUSTED_INFANTRY, 5)
-	set_troop(RUSSIA, S_VITEBSK, EXHAUSTED_CAVALRY, 1)
+	set_sp(RUSSIA, S_VITEBSK, FRESH_INFANTRY, 7)
+	set_sp(RUSSIA, S_VITEBSK, FRESH_CAVALRY, 2)
+	set_sp(RUSSIA, S_VITEBSK, EXHAUSTED_INFANTRY, 5)
+	set_sp(RUSSIA, S_VITEBSK, EXHAUSTED_CAVALRY, 1)
 	add_depot(RUSSIA, S_VITEBSK)
 	move_leader(L_PLATOV, S_BABINOVICHI)
-	set_troop(RUSSIA, S_BABINOVICHI, FRESH_COSSACK, 1)
-	set_troop(RUSSIA, S_SMOLENSK, FRESH_INFANTRY, 2)
+	set_sp(RUSSIA, S_BABINOVICHI, FRESH_COSSACK, 1)
+	set_sp(RUSSIA, S_SMOLENSK, FRESH_INFANTRY, 2)
 	add_depot(RUSSIA, S_SMOLENSK)
-	set_troop(RUSSIA, S_DUKHOVSHCHINA, FRESH_INFANTRY, 2)
-	set_troop(RUSSIA, S_RAGOSTOV, FRESH_INFANTRY, 1)
-	set_troop(RUSSIA, S_RAGOSTOV, EXHAUSTED_INFANTRY, 1)
+	set_sp(RUSSIA, S_DUKHOVSHCHINA, FRESH_INFANTRY, 2)
+	set_sp(RUSSIA, S_RAGOSTOV, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_RAGOSTOV, EXHAUSTED_INFANTRY, 1)
 	move_leader(L_BAGRATION, S_UNNAMED_E4)
-	set_troop(RUSSIA, S_UNNAMED_E4, FRESH_INFANTRY, 2)
-	set_troop(RUSSIA, S_UNNAMED_E4, FRESH_CAVALRY, 1)
-	set_troop(RUSSIA, S_UNNAMED_E4, EXHAUSTED_INFANTRY, 1)
-	set_troop(RUSSIA, S_MSTISLAVL, FRESH_COSSACK, 1)
+	set_sp(RUSSIA, S_UNNAMED_E4, FRESH_INFANTRY, 2)
+	set_sp(RUSSIA, S_UNNAMED_E4, FRESH_CAVALRY, 1)
+	set_sp(RUSSIA, S_UNNAMED_E4, EXHAUSTED_INFANTRY, 1)
+	set_sp(RUSSIA, S_MSTISLAVL, FRESH_COSSACK, 1)
 
 	move_leader(L_TORMASOV, S_BREST)
-	set_troop(RUSSIA, S_BREST, FRESH_INFANTRY, 1)
-	set_troop(RUSSIA, S_BREST, EXHAUSTED_INFANTRY, 1)
-	set_troop(RUSSIA, S_VLADIMIR_B6, FRESH_INFANTRY, 1)
-	set_troop(RUSSIA, S_KOBRYN, FRESH_CAVALRY, 1)
-	set_troop(RUSSIA, S_KOBRYN, EXHAUSTED_CAVALRY, 1)
+	set_sp(RUSSIA, S_BREST, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_BREST, EXHAUSTED_INFANTRY, 1)
+	set_sp(RUSSIA, S_VLADIMIR_B6, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_KOBRYN, FRESH_CAVALRY, 1)
+	set_sp(RUSSIA, S_KOBRYN, EXHAUSTED_CAVALRY, 1)
 	add_depot(RUSSIA, S_LUTSK)
-	set_troop(RUSSIA, S_PINSK, FRESH_INFANTRY, 1)
-	set_troop(RUSSIA, S_MOZYR, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_PINSK, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_MOZYR, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_MOZYR)
 	add_depot(RUSSIA, S_ZHITOMIR)
-	set_troop(RUSSIA, S_KIEV, FRESH_INFANTRY, 2)
+	set_sp(RUSSIA, S_KIEV, FRESH_INFANTRY, 2)
 	add_depot(RUSSIA, S_KIEV)
 
-	set_troop(RUSSIA, S_MOSCOW, FRESH_INFANTRY, 2)
+	set_sp(RUSSIA, S_MOSCOW, FRESH_INFANTRY, 2)
 	add_depot(RUSSIA, S_MOSCOW)
 	add_depot(RUSSIA, S_VYAZMA)
-	set_troop(RUSSIA, S_KALUGA, FRESH_INFANTRY, 2)
+	set_sp(RUSSIA, S_KALUGA, FRESH_INFANTRY, 2)
 	add_depot(RUSSIA, S_KALUGA)
-	set_troop(RUSSIA, S_OREL, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_OREL, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_OREL)
-	set_troop(RUSSIA, S_VORONEZH, FRESH_COSSACK, 2)
+	set_sp(RUSSIA, S_VORONEZH, FRESH_COSSACK, 2)
 
 	/* FRANCE */
-	set_troop(FRANCE, S_MITAU, FRESH_PRUSSIAN_INFANTRY, 1)
-	set_troop(FRANCE, S_UNNAMED_B2, FRESH_PRUSSIAN_INFANTRY, 2)
-	set_troop(FRANCE, S_VIDZY, FRESH_INFANTRY, 1)
-	set_troop(FRANCE, S_DISNA, FRESH_INFANTRY, 1)
-	set_troop(FRANCE, S_POLOTSK, FRESH_INFANTRY, 2)
-	set_troop(FRANCE, S_POLOTSK, EXHAUSTED_INFANTRY, 1)
+	set_sp(FRANCE, S_MITAU, FRESH_PRUSSIAN_INFANTRY, 1)
+	set_sp(FRANCE, S_UNNAMED_B2, FRESH_PRUSSIAN_INFANTRY, 2)
+	set_sp(FRANCE, S_VIDZY, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_DISNA, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_POLOTSK, FRESH_INFANTRY, 2)
+	set_sp(FRANCE, S_POLOTSK, EXHAUSTED_INFANTRY, 1)
 	move_leader(L_NAPOLEON, S_KAMEN)
 	move_leader(L_MURAT, S_KAMEN)
 	move_leader(L_DE_BEAUHARNAIS, S_KAMEN)
-	set_troop(FRANCE, S_KAMEN, FRESH_GUARD, 4)
-	set_troop(FRANCE, S_KAMEN, FRESH_CAVALRY, 3)
-	set_troop(FRANCE, S_KAMEN, FRESH_INFANTRY, 5)
-	set_troop(FRANCE, S_KAMEN, EXHAUSTED_INFANTRY, 4)
-	set_troop(FRANCE, S_KAMEN, EXHAUSTED_CAVALRY, 2)
-	set_troop(FRANCE, S_KOVNO, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_KAMEN, FRESH_GUARD, 4)
+	set_sp(FRANCE, S_KAMEN, FRESH_CAVALRY, 3)
+	set_sp(FRANCE, S_KAMEN, FRESH_INFANTRY, 5)
+	set_sp(FRANCE, S_KAMEN, EXHAUSTED_INFANTRY, 4)
+	set_sp(FRANCE, S_KAMEN, EXHAUSTED_CAVALRY, 2)
+	set_sp(FRANCE, S_KOVNO, FRESH_INFANTRY, 1)
 	add_depot(FRANCE, S_KOVNO)
-	set_troop(FRANCE, S_VILNA, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_VILNA, FRESH_INFANTRY, 1)
 	add_depot(FRANCE, S_VILNA)
-	set_troop(FRANCE, S_MINSK, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_MINSK, FRESH_INFANTRY, 1)
 	add_depot(FRANCE, S_MINSK)
-	set_troop(FRANCE, S_BORISOV, FRESH_INFANTRY, 3)
-	set_troop(FRANCE, S_BORISOV, EXHAUSTED_INFANTRY, 1)
+	set_sp(FRANCE, S_BORISOV, FRESH_INFANTRY, 3)
+	set_sp(FRANCE, S_BORISOV, EXHAUSTED_INFANTRY, 1)
 	move_leader(L_DAVOUT, S_MOGILEV)
-	set_troop(FRANCE, S_MOGILEV, FRESH_INFANTRY, 2)
-	set_troop(FRANCE, S_MOGILEV, EXHAUSTED_INFANTRY, 1)
-	set_troop(FRANCE, S_KOKHANOVO, FRESH_INFANTRY, 3)
-	set_troop(FRANCE, S_KOKHANOVO, EXHAUSTED_INFANTRY, 1)
-	set_troop(FRANCE, S_ORSHA, FRESH_CAVALRY, 1)
+	set_sp(FRANCE, S_MOGILEV, FRESH_INFANTRY, 2)
+	set_sp(FRANCE, S_MOGILEV, EXHAUSTED_INFANTRY, 1)
+	set_sp(FRANCE, S_KOKHANOVO, FRESH_INFANTRY, 3)
+	set_sp(FRANCE, S_KOKHANOVO, EXHAUSTED_INFANTRY, 1)
+	set_sp(FRANCE, S_ORSHA, FRESH_CAVALRY, 1)
 	move_leader(L_SCHWARZENBERG, S_NESVICH)
-	set_troop(FRANCE, S_NESVICH, FRESH_AUSTRIAN_INFANTRY, 1)
-	set_troop(FRANCE, S_NESVICH, EXHAUSTED_AUSTRIAN_INFANTRY, 1)
-	set_troop(FRANCE, S_SLUTSK, FRESH_CAVALRY, 1)
-	set_troop(FRANCE, S_PRUZHANY, FRESH_INFANTRY, 2)
-	set_troop(FRANCE, S_ZAMOSC, FRESH_AUSTRIAN_INFANTRY, 1)
-	set_troop(FRANCE, FRENCH_CASUALTIES, FRESH_INFANTRY, 6)
-	set_troop(FRANCE, FRENCH_CASUALTIES, FRESH_CAVALRY, 1)
+	set_sp(FRANCE, S_NESVICH, FRESH_AUSTRIAN_INFANTRY, 1)
+	set_sp(FRANCE, S_NESVICH, EXHAUSTED_AUSTRIAN_INFANTRY, 1)
+	set_sp(FRANCE, S_SLUTSK, FRESH_CAVALRY, 1)
+	set_sp(FRANCE, S_PRUZHANY, FRESH_INFANTRY, 2)
+	set_sp(FRANCE, S_ZAMOSC, FRESH_AUSTRIAN_INFANTRY, 1)
+	set_sp(FRANCE, FRENCH_CASUALTIES, FRESH_INFANTRY, 6)
+	set_sp(FRANCE, FRENCH_CASUALTIES, FRESH_CAVALRY, 1)
 
 	/* DEVASTATION */
 	set_devastation(S_KALVARIJA, 1)
@@ -1898,88 +1970,88 @@ function setup_july() {
 function setup_aug() {
 	log_h1("August Setup", SUMMER)
 	/* RUSSIA */
-	set_troop(RUSSIA, S_RIGA, FRESH_INFANTRY, 1)
-	set_troop(RUSSIA, S_MITAU, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_RIGA, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_MITAU, FRESH_INFANTRY, 1)
 	move_leader(L_WITTGENSTEIN, S_SEVEZH)
-	set_troop(RUSSIA, S_SEVEZH, FRESH_INFANTRY, 2)
-	set_troop(RUSSIA, S_SEVEZH, EXHAUSTED_INFANTRY, 1)
+	set_sp(RUSSIA, S_SEVEZH, FRESH_INFANTRY, 2)
+	set_sp(RUSSIA, S_SEVEZH, EXHAUSTED_INFANTRY, 1)
 	move_leader(L_DE_TOLLY, S_SMOLENSK)
-	set_troop(RUSSIA, S_SMOLENSK, FRESH_INFANTRY, 8)
-	set_troop(RUSSIA, S_SMOLENSK, FRESH_CAVALRY, 2)
-	set_troop(RUSSIA, S_SMOLENSK, EXHAUSTED_INFANTRY, 5)
-	set_troop(RUSSIA, S_SMOLENSK, EXHAUSTED_CAVALRY, 1)
+	set_sp(RUSSIA, S_SMOLENSK, FRESH_INFANTRY, 8)
+	set_sp(RUSSIA, S_SMOLENSK, FRESH_CAVALRY, 2)
+	set_sp(RUSSIA, S_SMOLENSK, EXHAUSTED_INFANTRY, 5)
+	set_sp(RUSSIA, S_SMOLENSK, EXHAUSTED_CAVALRY, 1)
 	add_depot(RUSSIA, S_SMOLENSK)
 	move_leader(L_BAGRATION, S_SVERSKOVO)
-	set_troop(RUSSIA, S_SVERSKOVO, FRESH_INFANTRY, 3)
-	set_troop(RUSSIA, S_SVERSKOVO, FRESH_CAVALRY, 1)
-	set_troop(RUSSIA, S_SVERSKOVO, EXHAUSTED_INFANTRY, 2)
-	set_troop(RUSSIA, S_ROSLAVL, FRESH_COSSACK, 1)
+	set_sp(RUSSIA, S_SVERSKOVO, FRESH_INFANTRY, 3)
+	set_sp(RUSSIA, S_SVERSKOVO, FRESH_CAVALRY, 1)
+	set_sp(RUSSIA, S_SVERSKOVO, EXHAUSTED_INFANTRY, 2)
+	set_sp(RUSSIA, S_ROSLAVL, FRESH_COSSACK, 1)
 	move_leader(L_PLATOV, S_DUKHOVSHCHINA)
-	set_troop(RUSSIA, S_DUKHOVSHCHINA, FRESH_COSSACK, 2)
+	set_sp(RUSSIA, S_DUKHOVSHCHINA, FRESH_COSSACK, 2)
 
-	set_troop(RUSSIA, S_MOSCOW, FRESH_INFANTRY, 3)
+	set_sp(RUSSIA, S_MOSCOW, FRESH_INFANTRY, 3)
 	add_depot(RUSSIA, S_MOSCOW)
 	add_depot(RUSSIA, S_VYAZMA)
-	set_troop(RUSSIA, S_KALUGA, FRESH_INFANTRY, 3)
+	set_sp(RUSSIA, S_KALUGA, FRESH_INFANTRY, 3)
 	add_depot(RUSSIA, S_KALUGA)
-	set_troop(RUSSIA, S_OREL, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_OREL, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_OREL)
-	set_troop(RUSSIA, S_VORONEZH, FRESH_COSSACK, 2)
+	set_sp(RUSSIA, S_VORONEZH, FRESH_COSSACK, 2)
 
 	move_leader(L_TORMASOV, S_KOBRYN)
-	set_troop(RUSSIA, S_KOBRYN, FRESH_INFANTRY, 2)
-	set_troop(RUSSIA, S_KOBRYN, FRESH_CAVALRY, 2)
-	set_troop(RUSSIA, S_KOBRYN, EXHAUSTED_INFANTRY, 1)
-	set_troop(RUSSIA, S_PINSK, FRESH_INFANTRY, 1)
-	set_troop(RUSSIA, S_LUTSK, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_KOBRYN, FRESH_INFANTRY, 2)
+	set_sp(RUSSIA, S_KOBRYN, FRESH_CAVALRY, 2)
+	set_sp(RUSSIA, S_KOBRYN, EXHAUSTED_INFANTRY, 1)
+	set_sp(RUSSIA, S_PINSK, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_LUTSK, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_LUTSK)
-	set_troop(RUSSIA, S_MOZYR, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_MOZYR, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_MOZYR)
 	add_depot(RUSSIA, S_ZHITOMIR)
-	set_troop(RUSSIA, S_KIEV, FRESH_INFANTRY, 3)
+	set_sp(RUSSIA, S_KIEV, FRESH_INFANTRY, 3)
 	add_depot(RUSSIA, S_KIEV)
 
 	/* FRANCE */
-	set_troop(FRANCE, S_ECKAU, FRESH_PRUSSIAN_INFANTRY, 1)
-	set_troop(FRANCE, S_JAKOBSTADT, FRESH_PRUSSIAN_INFANTRY, 1)
-	set_troop(FRANCE, S_JAKOBSTADT, EXHAUSTED_PRUSSIAN_INFANTRY, 1)
-	set_troop(FRANCE, S_DUNABURG, FRESH_INFANTRY, 1)
-	set_troop(FRANCE, S_DRISSA, FRESH_INFANTRY, 1)
-	set_troop(FRANCE, S_POLOTSK, FRESH_INFANTRY, 1)
-	set_troop(FRANCE, S_POLOTSK, EXHAUSTED_INFANTRY, 1)
+	set_sp(FRANCE, S_ECKAU, FRESH_PRUSSIAN_INFANTRY, 1)
+	set_sp(FRANCE, S_JAKOBSTADT, FRESH_PRUSSIAN_INFANTRY, 1)
+	set_sp(FRANCE, S_JAKOBSTADT, EXHAUSTED_PRUSSIAN_INFANTRY, 1)
+	set_sp(FRANCE, S_DUNABURG, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_DRISSA, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_POLOTSK, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_POLOTSK, EXHAUSTED_INFANTRY, 1)
 	add_depot(FRANCE, S_POLOTSK)
 	move_leader(L_NAPOLEON, S_VITEBSK)
-	set_troop(FRANCE, S_VITEBSK, FRESH_GUARD, 3)
-	set_troop(FRANCE, S_VITEBSK, FRESH_INFANTRY, 3)
-	set_troop(FRANCE, S_VITEBSK, FRESH_CAVALRY, 1)
-	set_troop(FRANCE, S_VITEBSK, EXHAUSTED_INFANTRY, 2)
-	set_troop(FRANCE, S_VITEBSK, EXHAUSTED_GUARD, 1)
+	set_sp(FRANCE, S_VITEBSK, FRESH_GUARD, 3)
+	set_sp(FRANCE, S_VITEBSK, FRESH_INFANTRY, 3)
+	set_sp(FRANCE, S_VITEBSK, FRESH_CAVALRY, 1)
+	set_sp(FRANCE, S_VITEBSK, EXHAUSTED_INFANTRY, 2)
+	set_sp(FRANCE, S_VITEBSK, EXHAUSTED_GUARD, 1)
 	move_leader(L_DE_BEAUHARNAIS, S_PORECZIE)
-	set_troop(FRANCE, S_PORECZIE, FRESH_INFANTRY, 3)
+	set_sp(FRANCE, S_PORECZIE, FRESH_INFANTRY, 3)
 	move_leader(L_MURAT, S_BABINOVICHI)
 	move_leader(L_DAVOUT, S_BABINOVICHI)
-	set_troop(FRANCE, S_BABINOVICHI, FRESH_INFANTRY, 7)
-	set_troop(FRANCE, S_BABINOVICHI, FRESH_CAVALRY, 2)
-	set_troop(FRANCE, S_BABINOVICHI, EXHAUSTED_INFANTRY, 3)
-	set_troop(FRANCE, S_BABINOVICHI, EXHAUSTED_CAVALRY, 2)
-	set_troop(FRANCE, S_KOKHANOVO, FRESH_CAVALRY, 1)
-	set_troop(FRANCE, S_MOGILEV, FRESH_INFANTRY, 2)
-	set_troop(FRANCE, S_RAGOSTOV, FRESH_CAVALRY, 1)
-	set_troop(FRANCE, S_BOBRUYSK, FRESH_INFANTRY, 1)
-	set_troop(FRANCE, S_MINSK, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_BABINOVICHI, FRESH_INFANTRY, 7)
+	set_sp(FRANCE, S_BABINOVICHI, FRESH_CAVALRY, 2)
+	set_sp(FRANCE, S_BABINOVICHI, EXHAUSTED_INFANTRY, 3)
+	set_sp(FRANCE, S_BABINOVICHI, EXHAUSTED_CAVALRY, 2)
+	set_sp(FRANCE, S_KOKHANOVO, FRESH_CAVALRY, 1)
+	set_sp(FRANCE, S_MOGILEV, FRESH_INFANTRY, 2)
+	set_sp(FRANCE, S_RAGOSTOV, FRESH_CAVALRY, 1)
+	set_sp(FRANCE, S_BOBRUYSK, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_MINSK, FRESH_INFANTRY, 1)
 	add_depot(FRANCE, S_MINSK)
-	set_troop(FRANCE, S_VILNA, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_VILNA, FRESH_INFANTRY, 1)
 	add_depot(FRANCE, S_VILNA)
-	set_troop(FRANCE, S_KOVNO, FRESH_INFANTRY, 2)
+	set_sp(FRANCE, S_KOVNO, FRESH_INFANTRY, 2)
 	add_depot(FRANCE, S_KOVNO)
-	set_troop(FRANCE, S_MOLODECHNO, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_MOLODECHNO, FRESH_INFANTRY, 1)
 	move_leader(L_SCHWARZENBERG, S_PRUZHANY)
-	set_troop(FRANCE, S_PRUZHANY, FRESH_AUSTRIAN_INFANTRY, 2)
-	set_troop(FRANCE, S_PRUZHANY, FRESH_INFANTRY, 2)
-	set_troop(FRANCE, S_PRUZHANY, EXHAUSTED_AUSTRIAN_INFANTRY, 1)
-	set_troop(FRANCE, S_ZAMOSC, FRESH_AUSTRIAN_INFANTRY, 1)
-	set_troop(FRANCE, FRENCH_CASUALTIES, FRESH_INFANTRY, 7)
-	set_troop(FRANCE, FRENCH_CASUALTIES, FRESH_CAVALRY, 1)
+	set_sp(FRANCE, S_PRUZHANY, FRESH_AUSTRIAN_INFANTRY, 2)
+	set_sp(FRANCE, S_PRUZHANY, FRESH_INFANTRY, 2)
+	set_sp(FRANCE, S_PRUZHANY, EXHAUSTED_AUSTRIAN_INFANTRY, 1)
+	set_sp(FRANCE, S_ZAMOSC, FRESH_AUSTRIAN_INFANTRY, 1)
+	set_sp(FRANCE, FRENCH_CASUALTIES, FRESH_INFANTRY, 7)
+	set_sp(FRANCE, FRENCH_CASUALTIES, FRESH_CAVALRY, 1)
 
 	/* DEVASTATION */
 	set_devastation(S_SUWALKI, 1)
@@ -2027,46 +2099,46 @@ function setup_aug() {
 function setup_oct() {
 	log_h1("October Setup", WINTER)
 	/* RUSSIA */
-	set_troop(RUSSIA, S_RIGA, FRESH_INFANTRY, 2)
-	set_troop(RUSSIA, S_DRISSA, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_RIGA, FRESH_INFANTRY, 2)
+	set_sp(RUSSIA, S_DRISSA, FRESH_INFANTRY, 1)
 	move_leader(L_WITTGENSTEIN, S_SEVEZH)
-	set_troop(RUSSIA, S_SEVEZH, FRESH_INFANTRY, 3)
-	set_troop(RUSSIA, S_SEVEZH, EXHAUSTED_INFANTRY, 1)
-	set_troop(RUSSIA, S_OSTROV, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_SEVEZH, FRESH_INFANTRY, 3)
+	set_sp(RUSSIA, S_SEVEZH, EXHAUSTED_INFANTRY, 1)
+	set_sp(RUSSIA, S_OSTROV, FRESH_INFANTRY, 1)
 
-	set_troop(RUSSIA, S_BRYANSK, FRESH_COSSACK, 1)
+	set_sp(RUSSIA, S_BRYANSK, FRESH_COSSACK, 1)
 	move_leader(L_PLATOV, S_KOSELYSK)
-	set_troop(RUSSIA, S_KOSELYSK, FRESH_COSSACK, 2)
-	set_troop(RUSSIA, S_OREL, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_KOSELYSK, FRESH_COSSACK, 2)
+	set_sp(RUSSIA, S_OREL, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_OREL)
-	set_troop(RUSSIA, S_MALOYAROSLAVET, FRESH_INFANTRY, 1)
-	set_troop(RUSSIA, S_MALOYAROSLAVET, FRESH_CAVALRY, 2)
-	set_troop(RUSSIA, S_MALOYAROSLAVET, FRESH_COSSACK, 1)
-	set_troop(RUSSIA, S_MALOYAROSLAVET, EXHAUSTED_INFANTRY, 1)
+	set_sp(RUSSIA, S_MALOYAROSLAVET, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_MALOYAROSLAVET, FRESH_CAVALRY, 2)
+	set_sp(RUSSIA, S_MALOYAROSLAVET, FRESH_COSSACK, 1)
+	set_sp(RUSSIA, S_MALOYAROSLAVET, EXHAUSTED_INFANTRY, 1)
 	move_leader(L_KUTUZOV, S_KALUGA)
 	move_leader(L_TORMASOV, S_KALUGA)
-	set_troop(RUSSIA, S_KALUGA, FRESH_INFANTRY, 7)
-	set_troop(RUSSIA, S_KALUGA, FRESH_CAVALRY, 1)
-	set_troop(RUSSIA, S_KALUGA, FRESH_COSSACK, 1)
-	set_troop(RUSSIA, S_KALUGA, EXHAUSTED_INFANTRY, 3)
-	set_troop(RUSSIA, S_KALUGA, EXHAUSTED_CAVALRY, 1)
+	set_sp(RUSSIA, S_KALUGA, FRESH_INFANTRY, 7)
+	set_sp(RUSSIA, S_KALUGA, FRESH_CAVALRY, 1)
+	set_sp(RUSSIA, S_KALUGA, FRESH_COSSACK, 1)
+	set_sp(RUSSIA, S_KALUGA, EXHAUSTED_INFANTRY, 3)
+	set_sp(RUSSIA, S_KALUGA, EXHAUSTED_CAVALRY, 1)
 	add_depot(RUSSIA, S_KALUGA)
-	set_troop(RUSSIA, S_VLADIMIR_H1, FRESH_COSSACK, 1)
-	set_troop(RUSSIA, S_VORONEZH, FRESH_COSSACK, 1)
+	set_sp(RUSSIA, S_VLADIMIR_H1, FRESH_COSSACK, 1)
+	set_sp(RUSSIA, S_VORONEZH, FRESH_COSSACK, 1)
 
-	set_troop(RUSSIA, S_BREST, FRESH_INFANTRY, 2)
+	set_sp(RUSSIA, S_BREST, FRESH_INFANTRY, 2)
 	add_depot(RUSSIA, S_BREST)
 	move_leader(L_CHICHAGOV, S_PRUZHANY)
-	set_troop(RUSSIA, S_PRUZHANY, FRESH_INFANTRY, 3)
-	set_troop(RUSSIA, S_PRUZHANY, FRESH_CAVALRY, 1)
-	set_troop(RUSSIA,S_PRUZHANY, EXHAUSTED_INFANTRY, 2)
-	set_troop(RUSSIA, S_PRUZHANY, EXHAUSTED_CAVALRY, 1)
-	set_troop(RUSSIA, S_KOVEL, FRESH_INFANTRY, 1)
-	set_troop(RUSSIA, S_LUTSK, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_PRUZHANY, FRESH_INFANTRY, 3)
+	set_sp(RUSSIA, S_PRUZHANY, FRESH_CAVALRY, 1)
+	set_sp(RUSSIA,S_PRUZHANY, EXHAUSTED_INFANTRY, 2)
+	set_sp(RUSSIA, S_PRUZHANY, EXHAUSTED_CAVALRY, 1)
+	set_sp(RUSSIA, S_KOVEL, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_LUTSK, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_LUTSK)
-	set_troop(RUSSIA, S_MOZYR, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_MOZYR, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_MOZYR)
-	set_troop(RUSSIA, S_KIEV, FRESH_INFANTRY, 1)
+	set_sp(RUSSIA, S_KIEV, FRESH_INFANTRY, 1)
 	add_depot(RUSSIA, S_KIEV)
 
 	move_leader(L_ALEXANDER, POOL)
@@ -2074,50 +2146,50 @@ function setup_oct() {
 	move_leader(L_BAGRATION, POOL)
 
 	/* FRANCE */
-	set_troop(FRANCE, S_PRUSSIA_SOUTH, FRESH_INFANTRY, 1)
-	set_troop(FRANCE, S_MITAU, FRESH_PRUSSIAN_INFANTRY, 1)
-	set_troop(FRANCE, S_KOVNO, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_PRUSSIA_SOUTH, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_MITAU, FRESH_PRUSSIAN_INFANTRY, 1)
+	set_sp(FRANCE, S_KOVNO, FRESH_INFANTRY, 1)
 	add_depot(FRANCE, S_KOVNO)
 	move_leader(L_SCHWARZENBERG, S_BIALYSTOK)
-	set_troop(FRANCE, S_BIALYSTOK, FRESH_AUSTRIAN_INFANTRY, 1)
-	set_troop(FRANCE, S_BIALYSTOK, FRESH_INFANTRY, 1)
-	set_troop(FRANCE, S_BIALYSTOK, EXHAUSTED_AUSTRIAN_INFANTRY, 1)
-	set_troop(FRANCE, S_ZAMOSC, FRESH_AUSTRIAN_INFANTRY, 1)
-	set_troop(FRANCE, S_VILNA, FRESH_INFANTRY, 5)
+	set_sp(FRANCE, S_BIALYSTOK, FRESH_AUSTRIAN_INFANTRY, 1)
+	set_sp(FRANCE, S_BIALYSTOK, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_BIALYSTOK, EXHAUSTED_AUSTRIAN_INFANTRY, 1)
+	set_sp(FRANCE, S_ZAMOSC, FRESH_AUSTRIAN_INFANTRY, 1)
+	set_sp(FRANCE, S_VILNA, FRESH_INFANTRY, 5)
 	add_depot(FRANCE, S_VILNA)
-	set_troop(FRANCE, S_SVENCIONYS, FRESH_INFANTRY, 1)
-	set_troop(FRANCE, S_DUNABURG, FRESH_PRUSSIAN_INFANTRY, 1)
-	set_troop(FRANCE, S_DUNABURG, EXHAUSTED_PRUSSIAN_INFANTRY, 1)
-	set_troop(FRANCE, S_DOKSHITSY, FRESH_INFANTRY, 1)
-	set_troop(FRANCE, S_MINSK, FRESH_INFANTRY, 1)
-	set_troop(FRANCE, S_POLOTSK, FRESH_INFANTRY, 2)
-	set_troop(FRANCE, S_POLOTSK, EXHAUSTED_INFANTRY, 1)
+	set_sp(FRANCE, S_SVENCIONYS, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_DUNABURG, FRESH_PRUSSIAN_INFANTRY, 1)
+	set_sp(FRANCE, S_DUNABURG, EXHAUSTED_PRUSSIAN_INFANTRY, 1)
+	set_sp(FRANCE, S_DOKSHITSY, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_MINSK, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_POLOTSK, FRESH_INFANTRY, 2)
+	set_sp(FRANCE, S_POLOTSK, EXHAUSTED_INFANTRY, 1)
 	add_depot(FRANCE, S_POLOTSK)
-	set_troop(FRANCE, S_KAMEN, FRESH_INFANTRY, 1)
-	set_troop(FRANCE, S_VITEBSK, EXHAUSTED_INFANTRY, 1)
-	set_troop(FRANCE, S_ORSHA, FRESH_INFANTRY, 1)
-	set_troop(FRANCE, S_MOGILEV, EXHAUSTED_INFANTRY, 1)
-	set_troop(FRANCE, S_RAGOSTOV, FRESH_INFANTRY, 1)
-	set_troop(FRANCE, S_SMOLENSK, FRESH_INFANTRY, 4)
+	set_sp(FRANCE, S_KAMEN, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_VITEBSK, EXHAUSTED_INFANTRY, 1)
+	set_sp(FRANCE, S_ORSHA, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_MOGILEV, EXHAUSTED_INFANTRY, 1)
+	set_sp(FRANCE, S_RAGOSTOV, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_SMOLENSK, FRESH_INFANTRY, 4)
 	add_depot(FRANCE, S_SMOLENSK)
 	add_depot(FRANCE, S_DOROGOBUZH)
-	set_troop(FRANCE, S_VYAZMA, FRESH_INFANTRY, 1)
-	set_troop(FRANCE, S_MOZHAYSK, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_VYAZMA, FRESH_INFANTRY, 1)
+	set_sp(FRANCE, S_MOZHAYSK, FRESH_INFANTRY, 1)
 	move_leader(L_MURAT, S_TARUTINO)
-	set_troop(FRANCE, S_TARUTINO, FRESH_INFANTRY, 2)
-	set_troop(FRANCE, S_TARUTINO, FRESH_CAVALRY, 1)
-	set_troop(FRANCE, S_TARUTINO, EXHAUSTED_INFANTRY, 1)
-	set_troop(FRANCE, S_TARUTINO, EXHAUSTED_CAVALRY, 1)
+	set_sp(FRANCE, S_TARUTINO, FRESH_INFANTRY, 2)
+	set_sp(FRANCE, S_TARUTINO, FRESH_CAVALRY, 1)
+	set_sp(FRANCE, S_TARUTINO, EXHAUSTED_INFANTRY, 1)
+	set_sp(FRANCE, S_TARUTINO, EXHAUSTED_CAVALRY, 1)
 	move_leader(L_NAPOLEON, S_MOSCOW)
 	move_leader(L_DAVOUT, S_MOSCOW)
 	move_leader(L_DE_BEAUHARNAIS, S_MOSCOW)
-	set_troop(FRANCE, S_MOSCOW, FRESH_GUARD, 3)
-	set_troop(FRANCE, S_MOSCOW, FRESH_INFANTRY, 4)
-	set_troop(FRANCE, S_MOSCOW, EXHAUSTED_GUARD, 1)
-	set_troop(FRANCE, S_MOSCOW, EXHAUSTED_INFANTRY, 2)
+	set_sp(FRANCE, S_MOSCOW, FRESH_GUARD, 3)
+	set_sp(FRANCE, S_MOSCOW, FRESH_INFANTRY, 4)
+	set_sp(FRANCE, S_MOSCOW, EXHAUSTED_GUARD, 1)
+	set_sp(FRANCE, S_MOSCOW, EXHAUSTED_INFANTRY, 2)
 	add_depot(FRANCE, S_MOSCOW)
-	set_troop(FRANCE, FRENCH_CASUALTIES, FRESH_INFANTRY, 16)
-	set_troop(FRANCE, FRENCH_CASUALTIES, FRESH_CAVALRY, 6)
+	set_sp(FRANCE, FRENCH_CASUALTIES, FRESH_INFANTRY, 16)
+	set_sp(FRANCE, FRENCH_CASUALTIES, FRESH_CAVALRY, 6)
 
 	/* DEVASTATION */
 	set_devastation(S_SUWALKI, 1)
@@ -2400,8 +2472,8 @@ function has_france_ever_controlled_moscow() {
 function count_french_casualties() {
 	let count = count_num_sps(FRANCE, FRENCH_CASUALTIES)
 	log(`${count} French Casualties.`)
-	for (let type of get_troop_types_at_area(FRANCE, FRENCH_CASUALTIES))
-		logi(`${count_num_sps_of_type(FRANCE, type, FRENCH_CASUALTIES)} ${get_troop_type_name(type)}`)
+	for (let type of get_sp_types_at_area(FRANCE, FRENCH_CASUALTIES))
+		logi(`${count_num_sps_of_type(FRANCE, type, FRENCH_CASUALTIES)} ${get_sp_type_name(type)}`)
 	increase_vp(RUSSIA, Math.floor(count / 3))
 }
 
@@ -2480,21 +2552,21 @@ P.free_replacements = {
 	},
 	area(area) {
 		if (L.areas[R].length > 0) {
-			add_troop(R, area, FRESH_INFANTRY, 1)
+			add_sp(R, area, FRESH_INFANTRY, 1)
 			set_delete(L.areas[R], area)
 			L.areas_received[R].push(area)
 		} else {
-			add_troop(R, area, FRESH_COSSACK, 1)
+			add_sp(R, area, FRESH_COSSACK, 1)
 			L.has_gained_free_cossack = true
 		}
 	},
 	undo() {
 		if (R === RUSSIA && L.has_gained_free_cossack) {
-			remove_troop(R, S_VORONEZH, FRESH_COSSACK, 1)
+			remove_sp(R, S_VORONEZH, FRESH_COSSACK, 1)
 			L.has_gained_free_cossack = false
 		} else {
 			let area = L.areas_received[R].pop()
-			remove_troop(R, area, FRESH_INFANTRY, 1)
+			remove_sp(R, area, FRESH_INFANTRY, 1)
 			set_add(L.areas[R], area)
 		}
 	},
@@ -2530,8 +2602,8 @@ function count_total_sp_amount_on_map(who, type) {
 
 	map_for_each_value(G.sps, (entries) => {
 		for (let entry of entries) {
-			if ((decode_troop_entry_who(entry) === who) && [type, exhausted_version].includes(decode_troop_entry_type(entry)))
-				count += decode_troop_entry_num(entry)
+			if ((decode_sp_player(entry) === who) && [type, exhausted_version].includes(decode_sp_type(entry)))
+				count += decode_sp_num(entry)
 		}
 	})
 
@@ -2540,9 +2612,9 @@ function count_total_sp_amount_on_map(who, type) {
 
 function could_receive_sp(who, type) {
 	if (is_infantry(type))
-		return count_total_sp_amount_on_map(who, type) + 2 <= data.max_sp_amounts[who][get_troop_type_name(type)]
+		return count_total_sp_amount_on_map(who, type) + 2 <= data.max_sp_amounts[who][get_sp_type_name(type)]
 
-	return count_total_sp_amount_on_map(who, type) + 1 <= data.max_sp_amounts[who][get_troop_type_name(type)]
+	return count_total_sp_amount_on_map(who, type) + 1 <= data.max_sp_amounts[who][get_sp_type_name(type)]
 }
 
 P.additional_replacements = {
@@ -2585,27 +2657,27 @@ P.additional_replacements = {
 			on_prompt() {
 				V.prompt = `Select an SP type to reinforce.`
 				for (let type = 0; type < NUM_TROOP_TYPES; ++type) {
-					if (is_troop_type_fresh(type) && could_receive_sp(R, type)) {
+					if (is_sp_type_fresh(type) && could_receive_sp(R, type)) {
 						if (is_infantry(type))
-							action("troop_2x", type)
+							action("sp_2x", type)
 						else
-							button_troop(type)
+							button_sp(type)
 					}
 				}
 			},
-			on_troop_button(type) {
+			on_sp_button(type) {
 				push_local_undo(R, "select_reinforcement_type")
 				L.selected_type[R] = type
 				L.count[R] = is_infantry(type) ? 2 : 1
 				goto_local_state(R, "place_sp")
 			},
-			on_troop_2x(type) {
-				this.on_troop_button(type)
+			on_sp_2x(type) {
+				this.on_sp_button(type)
 			}
 		},
 		"place_sp": {
 			on_prompt() {
-				V.prompt = `Select an area to place ${get_troop_type_name(L.selected_type[R])}. (${L.count[R]} remaining)`
+				V.prompt = `Select an area to place ${get_sp_type_name(L.selected_type[R])}. (${L.count[R]} remaining)`
 				let areas = filter_areas(area => {
 					return (has_friendly_leader(R, area) || is_key_city(area) || has_friendly_depot(R, area))
 					&& is_area_in_supply(R, area)
@@ -2621,7 +2693,7 @@ P.additional_replacements = {
 			on_area(area) {
 				push_local_undo(R, "place_sp", { area, type: L.selected_type[R] })
 				L.reinforced[R].push({area, type: L.selected_type[R]})
-				add_troop(R, area, L.selected_type[R], 1)
+				add_sp(R, area, L.selected_type[R], 1)
 				if (--L.count[R] === 0) {
 					if (has_card_in_hand(R))
 						goto_local_state(R, "discard_card")
@@ -2658,7 +2730,7 @@ P.additional_replacements = {
 			L.count[R] = 0
 			return
 		case "place_sp":
-			remove_troop(R, undo.info.area, undo.info.type, 1)
+			remove_sp(R, undo.info.area, undo.info.type, 1)
 			++L.count[R]
 			return
 		}
@@ -2678,7 +2750,7 @@ P.additional_replacements = {
 					log_only(player, `Reinforced`)
 					for (let entry of L.reinforced[player]) {
 						log_only(player, format_i(format_area(entry.area)))
-						log_only(player, format_ii(`1 ${get_troop_type_name(entry.type)}`))
+						log_only(player, format_ii(`1 ${get_sp_type_name(entry.type)}`))
 					}
 				}
 			}
@@ -2688,8 +2760,8 @@ P.additional_replacements = {
 	},
 	card(card)			{ this.states[L.state[R]].on_card(card) },
 	area(area)			{ this.states[L.state[R]].on_area(area) },
-	troop_button(type)	{ this.states[L.state[R]].on_troop_button(type) },
-	troop_2x(type)		{ this.states[L.state[R]].on_troop_2x(type) },
+	sp_button(type)	{ this.states[L.state[R]].on_sp_button(type) },
+	sp_2x(type)		{ this.states[L.state[R]].on_sp_2x(type) },
 }
 
 // TODO: Maybe move to data?
@@ -2851,7 +2923,7 @@ P.end_turn = function() {
 	}
 
 	// Check French occupation of Moscow.
-	if (G.scenario !== THE_EAGLES_MARCH_ON_SMOLENSK && has_friendly_troop(FRANCE, S_MOSCOW) && is_area_in_supply(FRANCE, S_MOSCOW)) {
+	if (G.scenario !== THE_EAGLES_MARCH_ON_SMOLENSK && has_friendly_sp(FRANCE, S_MOSCOW) && is_area_in_supply(FRANCE, S_MOSCOW)) {
 		log(`France occupies ${format_area(S_MOSCOW)} with an in-supply SP.`)
 		increase_vp(FRANCE, get_current_season() == SUMMER ? 1 : 2)
 	}
@@ -3172,7 +3244,7 @@ P.draw_card_to_hand = {
 		// NOTE: contains duplicated code from the Attrition section (working around not being able to be in multiple states at once)
 		"chaos_in_the_rear_areas": {
 			on_begin() {
-				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining 	= Math.min(get_devastated_areas_with_french_troops().length, 2)
+				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining 	= Math.min(get_devastated_areas_with_french_sps().length, 2)
 				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice 		= null
 				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area 	= -1
 				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count 		= 0
@@ -3184,13 +3256,13 @@ P.draw_card_to_hand = {
 						V.prompt = `Assign attrition losses: ${get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining} remaining.`
 						let any_action = false
 
-						if (get_devastated_areas_with_french_troops().some(area => has_fresh_sp(FRANCE, area))) {
+						if (get_devastated_areas_with_french_sps().some(area => has_fresh_sp(FRANCE, area))) {
 							button("exhaust")
 							any_action = true
 						}
 
 						let num_exhausted = 0
-						for (let area of get_devastated_areas_with_french_troops()) {
+						for (let area of get_devastated_areas_with_french_sps()) {
 							if (has_exhausted_sp(FRANCE, area))
 								num_exhausted += count_num_exhausted_sps(FRANCE, area)
 							if (num_exhausted >= 2) {
@@ -3206,9 +3278,9 @@ P.draw_card_to_hand = {
 						V.prompt = `Select an area to ${get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice } a SP.`
 						let areas
 						if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "exhaust")
-							areas = get_devastated_areas_with_french_troops().filter(area => has_fresh_sp(FRANCE, area))
+							areas = get_devastated_areas_with_french_sps().filter(area => has_fresh_sp(FRANCE, area))
 						else
-							areas = get_devastated_areas_with_french_troops().filter(area => has_exhausted_sp(FRANCE, area))
+							areas = get_devastated_areas_with_french_sps().filter(area => has_exhausted_sp(FRANCE, area))
 
 						if (areas.length <= 5)
 							V.prompt += ` (${join_array_with_or(areas.map(format_area))})`
@@ -3217,10 +3289,10 @@ P.draw_card_to_hand = {
 						V.prompt = `Select an SP to ${get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice}.`
 						if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "exhaust") {
 							for (let type of get_all_fresh_sp_types(FRANCE, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area))
-								action_troop_alt(type, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area)
+								action_sp_alt(type, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area)
 						} else {
 							for (let type of get_all_exhausted_sp_types(FRANCE, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area))
-								action_troop_alt(type, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area)
+								action_sp_alt(type, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area)
 						}
 					}
 				} else {
@@ -3243,14 +3315,14 @@ P.draw_card_to_hand = {
 				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.push({action: "select_area", area })
 				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area = area
 			},
-			on_troop(entry) {
-				let type = decode_troop_action_type(entry)
+			on_sp(entry) {
+				let type = decode_sp_type(entry)
 				if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "exhaust") {
 					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.push({action: "exhaust", area: get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area, type })
 					exhaust_sp(FRANCE, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area, type)
 				} else {
 					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.push({action: "eliminate", area: get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area, type })
-					eliminate_troop(FRANCE, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area, type)
+					eliminate_sp(FRANCE, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area, type)
 				}
 				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area = -1
 				if (--get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count === 0) {
@@ -3273,7 +3345,7 @@ P.draw_card_to_hand = {
 					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area = -1
 					return
 				case "exhaust":
-					rally_troop(FRANCE, action.area, action.type + 1)
+					rally_sp(FRANCE, action.area, action.type + 1)
 					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area = action.area
 					if (++get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count === 1) {
 						get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = "exhaust"
@@ -3281,7 +3353,7 @@ P.draw_card_to_hand = {
 					}
 					return
 				case "eliminate":
-					add_troop(FRANCE, action.area, action.type)
+					add_sp(FRANCE, action.area, action.type)
 					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area = action.area
 					if (++get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count === 1) {
 						get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = "eliminate"
@@ -3438,7 +3510,7 @@ P.draw_card_to_hand = {
 		},
 		"chaotic_food_distribution": {
 			on_begin() {
-				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).troop_type = -1
+				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type = -1
 				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area = -1
 				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).removed_depot = -1
 			},
@@ -3455,7 +3527,7 @@ P.draw_card_to_hand = {
 						if (has_exhausted_sp(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)) {
 							prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, `Rally an exhausted SP at ${format_area(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)}.`)
 							for (let type of get_all_exhausted_sp_types(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area))
-								action_troop_alt(type, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)
+								action_sp_alt(type, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)
 						} else {
 							prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, `No exhausted SPs at ${format_area(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)} to rally.`)
 							button_next()
@@ -3479,9 +3551,9 @@ P.draw_card_to_hand = {
 				G.depots[depot] = POOL
 				increment_event_tracker(C_CHAOTIC_FOOD_DISTRIBUTION)
 			},
-			on_troop(type) {
-				rally_troop(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area, type)
-				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).troop_type = type
+			on_sp(type) {
+				rally_sp(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area, type)
+				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type = type
 				increment_event_tracker(C_CHAOTIC_FOOD_DISTRIBUTION)
 			},
 			on_next() {
@@ -3504,9 +3576,9 @@ P.draw_card_to_hand = {
 					get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area = -1
 					get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).removed_depot = -1
 				} else {
-					if (get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).troop_type > -1) {
-						exhaust_sp(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).troop_type - 1)
-						get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).troop_type = -1
+					if (get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type > -1) {
+						exhaust_sp(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type - 1)
+						get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type = -1
 					}
 				}
 				decrement_event_tracker(C_CHAOTIC_FOOD_DISTRIBUTION)
@@ -3523,7 +3595,7 @@ P.draw_card_to_hand = {
 	card(card) 		{ this.states[L.state[R]].on_card(card)},
 	depot(depot) 	{ this.states[L.state[R]].on_depot(depot)},
 	leader(leader) 	{ this.states[L.state[R]].on_leader(leader) },
-	troop(type) 	{ this.states[L.state[R]].on_troop(type) },
+	sp(type) 	{ this.states[L.state[R]].on_sp(type) },
 	done() 		{ this.states[L.state[R]].on_done() },
 	undo() 		{ this.states[L.state[R]].on_undo() },
 	finish_state() {
@@ -4870,7 +4942,7 @@ function filter_orders(who, type) {
 			// Keep only the orders where there is (1) a friendly SP, and (2) at least one of those SPs haven't moved previously this turn
 			// TODO: May be less confusing to filter out the second case at a later stage?
 			let area = get_order_location(order)
-			return has_friendly_troop(G.active, area) && (!have_sps_moved_in_area(area) || get_movable_sps_in_area(G.active, area).some(type => type > 0))
+			return has_friendly_sp(G.active, area) && (!have_sps_moved_in_area(area) || get_movable_sps_in_area(G.active, area).some(type => type > 0))
 		})
 		return
 	case CAVALRY_PATROLS:
@@ -4880,14 +4952,14 @@ function filter_orders(who, type) {
 		return
 	case EVADE:
 		filter_orders_of_type(who, type, (order) => {
-			return has_friendly_troop(G.active, get_order_location(order))
+			return has_friendly_sp(G.active, get_order_location(order))
 				&& has_battle(get_order_location(order))
 				&& (!is_event_active(C_UNSUCCESSFUL_DISENGAGEMENT) || (is_event_active(C_UNSUCCESSFUL_DISENGAGEMENT) && !set_has(get_event_keyword(C_UNSUCCESSFUL_DISENGAGEMENT, "cancelled_orders"), order)))
 		})
 		return
 	case RALLY:
 		filter_orders_of_type(who, type, (order) => {
-			return has_friendly_troop(G.active, get_order_location(order))
+			return has_friendly_sp(G.active, get_order_location(order))
 		})
 		return
 	case COSSACK_RAID:
@@ -4980,7 +5052,7 @@ P.end_order = {
 
 		button_confirm()
 
-		// The fuzzer loves to pull out all depots on map: This will wipe out all troops on map with attrition!
+		// The fuzzer loves to pull out all depots on map: This will wipe out all sps on map with attrition!
 		if (L.type === PLACE_DEPOT && !globalThis.RTT_FUZZER)
 			for (let depot = get_first_depot(G.active); depot <= get_last_depot(G.active); ++depot)
 				if (is_depot_on_map(depot))
@@ -5082,15 +5154,6 @@ P.execute_march = script(`
 /*
 	G.moved is a plain array map following the map functions in the framework.
 	For simplicity, each key holds a list of forces in the area that have previously moved.
-
-	G.moved = [area, forces, area, forces, ... ]
-
-	20 bits
-	Player 		- 1 bit 	- RUSSIA or FRANCE
-	From   		- 8 bits 	- corresponds to area ix
-	Strength 	- 1 bit 	- HALF_STRENGTH or FULL_STRENGTH
-	type 		- 4 bits
-	num 		- 6 bits
 */
 
 function clear_moved() {
@@ -5109,49 +5172,6 @@ function mark_leader_moved(leader, from, strength) {
 	map_set(G.moved.leaders, leader, { from, strength })
 }
 
-// SPs
-const TROOP_MOVED_PLAYER_MASK = 1 << 19
-const TROOP_MOVED_FROM_MASK = 522240
-const TROOP_MOVED_STRENGTH_MASK = 1 << 10
-const TROOP_MOVED_TYPE_MASK = 960
-const TROOP_MOVED_NUM_MASK = 63
-
-const TROOP_MOVED_PLAYER_SHIFT = 19
-const TROOP_MOVED_FROM_SHIFT = 11
-const TROOP_MOVED_STRENGTH_SHIFT = 10
-const TROOP_MOVED_TYPE_SHIFT = 6
-const TROOP_MOVED_NUM_SHIFT = 0
-
-function decode_troop_moved_player(entry) {
-	return (entry & TROOP_MOVED_PLAYER_MASK) >> TROOP_MOVED_PLAYER_SHIFT
-}
-
-function decode_troop_moved_from(entry) {
-	return (entry & TROOP_MOVED_FROM_MASK) >> TROOP_MOVED_FROM_SHIFT
-}
-
-function decode_troop_moved_strength(entry) {
-	return (entry & TROOP_MOVED_STRENGTH_MASK) >> TROOP_MOVED_STRENGTH_SHIFT
-}
-
-function decode_troop_moved_type(entry) {
-	return (entry & TROOP_MOVED_TYPE_MASK) >> TROOP_MOVED_TYPE_SHIFT
-}
-
-function decode_troop_moved_num(entry) {
-	return (entry & TROOP_MOVED_NUM_MASK) >> TROOP_MOVED_NUM_SHIFT
-}
-
-function encode_troop_moved(player, from, strength, type, num) {
-	let entry = 0
-	entry += player << TROOP_MOVED_PLAYER_SHIFT
-	entry += from << TROOP_MOVED_FROM_SHIFT
-	entry += strength << TROOP_MOVED_STRENGTH_SHIFT
-	entry += type << TROOP_MOVED_TYPE_SHIFT
-	entry += num
-	return entry
-}
-
 function init_sps_moved(area) {
 	map_set(G.moved.sps, area, [])
 }
@@ -5166,10 +5186,10 @@ function get_moved_sps_in_area(area) {
 
 function find_moved_entry(area, player, from, strength, type) {
 	return get_moved_sps_in_area(area).find(entry => {
-		return decode_troop_moved_player(entry) === player
-			&& decode_troop_moved_from(entry) === from
-			&& decode_troop_moved_strength(entry) === strength
-			&& decode_troop_moved_type(entry) === type
+		return decode_sp_player(entry) === player
+			&& decode_sp_from(entry) === from
+			&& decode_sp_strength(entry) === strength
+			&& decode_sp_type(entry) === type
 	}) ?? -1
 }
 
@@ -5181,9 +5201,9 @@ function add_sp_moved(area, player, from, strength, type, num) {
 
 	if (existing_entry > -1)  {
 		set_delete(get_moved_sps_in_area(area), existing_entry)
-		set_add(get_moved_sps_in_area(area), encode_troop_moved(player, from, strength, type, decode_troop_moved_num(existing_entry) + num))
+		set_add(get_moved_sps_in_area(area), package_sp_moved(player, from, strength, type, decode_sp_num(existing_entry) + num))
 	} else {
-		set_add(get_moved_sps_in_area(area), encode_troop_moved(player, from, strength, type, num))
+		set_add(get_moved_sps_in_area(area), package_sp_moved(player, from, strength, type, num))
 	}
 }
 
@@ -5195,7 +5215,7 @@ function remove_sp_moved(area, player, from, strength, type, num) {
 
 	if (existing_entry > -1) {
 		set_delete(get_moved_sps_in_area(area), existing_entry)
-		let num_remaining = decode_troop_moved_num(existing_entry) - num
+		let num_remaining = decode_sp_num(existing_entry) - num
 		if (num_remaining > 0)
 			add_sp_moved(area, player, from, strength, type, num_remaining)
 	}
@@ -5226,7 +5246,7 @@ function move_force(from, to) {
 
 	for (let type = 0; type < G.move.sps.length; ++type) {
 		if (G.move.sps[type] > 0)
-			move_troop(G.active, from, to, type, G.move.sps[type])
+			move_sp(G.active, from, to, type, G.move.sps[type])
 	}
 
 	G.move.path.push(to)
@@ -5235,13 +5255,13 @@ function move_force(from, to) {
 /* SELECT FORCE */
 function get_movable_sps_in_area(player, area) {
 	var list = Array(NUM_TROOP_TYPES).fill(0)
-	if (!has_friendly_troop(player, area))
+	if (!has_friendly_sp(player, area))
 		return list
 
-	for (let entry of get_area_troop_set(area)) {
-		if (decode_troop_entry_who(entry) === player) {
-			let type = decode_troop_entry_type(entry)
-			let num = decode_troop_entry_num(entry)
+	for (let entry of get_area_sp_set(area)) {
+		if (decode_sp_player(entry) === player) {
+			let type = decode_sp_type(entry)
+			let num = decode_sp_num(entry)
 
 			if (
 				is_event_active(C_BAGRATIONS_RETREAT)
@@ -5257,8 +5277,8 @@ function get_movable_sps_in_area(player, area) {
 	if (have_sps_moved_in_area(area)) {
 		let moved_sps = get_moved_sps_in_area(area)
 		for (let item of moved_sps) {
-			if (decode_troop_moved_player(item) === player)
-				list[decode_troop_moved_type(item)] -= decode_troop_moved_num(item)
+			if (decode_sp_player(item) === player)
+				list[decode_sp_type(item)] -= decode_sp_num(item)
 		}
 	}
 
@@ -5302,7 +5322,7 @@ function move_prompt() {
 	s += G.move.leaders.map(format_leader).join(", ")
 	for (let type = 0; type < G.move.sps.length; ++type)
 		if (G.move.sps[type] > 0)
-			 s += `${G.move.leaders.length > 0 ? ", " : ""}${G.move.sps[type]} ${get_troop_type_name(type)}`
+			 s += `${G.move.leaders.length > 0 ? ", " : ""}${G.move.sps[type]} ${get_sp_type_name(type)}`
 
 	V.prompt += s + ")"
 }
@@ -5425,16 +5445,16 @@ P.select_force = {
 				) {
 					// Only get SPs that haven't previously moved.
 					if (has_battle(L.area))
-						action_troop_alt(type, L.area, FULL_STRENGTH, L.area)
+						action_sp_alt(type, L.area, FULL_STRENGTH, L.area)
 					else
-						action_troop_alt(type, L.area)
+						action_sp_alt(type, L.area)
 				}
 
 				if (G.move.sps[type] > 0) {
 					if (has_battle(L.area))
-						action_troop_alt(type, L.area, FULL_STRENGTH, L.area, 1)
+						action_sp_alt(type, L.area, FULL_STRENGTH, L.area, 1)
 					else
-						action_troop_alt(type, L.area, FULL_STRENGTH, POOL, 1)
+						action_sp_alt(type, L.area, FULL_STRENGTH, POOL, 1)
 				}
 			}
 
@@ -5484,10 +5504,10 @@ P.select_force = {
 			}
 		}
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
-		let moving = decode_troop_action_moving(entry)
+		let type = decode_sp_type(entry)
+		let moving = decode_sp_moving(entry)
 
 		if (moving) {
 			--G.move.sps[type]
@@ -5534,7 +5554,7 @@ P.select_force = {
 }
 
 /* MOVE */
-function calculate_move_allowance(who, move_type, troops) {
+function calculate_move_allowance(who, move_type, sps) {
 	// Exhausted Horses supersedes 'Fast Marching'. My assumption is that Freezing Weather does the same since it has the same wording.
 	// https://boardgamegeek.com/thread/3745296/fast-marching-and-exhausted-horses
 	if (is_event_active(C_EXHAUSTED_HORSES) || (is_event_active(C_FREEZING_WEATHER) && who === FRANCE))
@@ -5545,7 +5565,7 @@ function calculate_move_allowance(who, move_type, troops) {
 
 	let allowance = (move_type === FORCED_MARCH) ? 3 : 2
 	for (let type = FRESH_INFANTRY; type <= EXHAUSTED_AUSTRIAN_INFANTRY; ++type) {
-		if (((type !== FRESH_CAVALRY) && (type !== FRESH_COSSACK)) && (troops[type] > 0)) {
+		if (((type !== FRESH_CAVALRY) && (type !== FRESH_COSSACK)) && (sps[type] > 0)) {
 			return --allowance
 		}
 	}
@@ -5687,12 +5707,12 @@ P.move = {
 			logi(format_leader(get_seniormost_leader_from_list(G.active, G.move.leaders)))
 			for (let type = 0; type < G.move.sps.length; ++type) {
 				if (G.move.sps[type] > 0)
-					log_only(G.active, format_ii(`${G.move.sps[type]} ${get_troop_type_name(type)}`))
+					log_only(G.active, format_ii(`${G.move.sps[type]} ${get_sp_type_name(type)}`))
 			}
 		} else {
 			for (let type = 0; type < G.move.sps.length; ++type) {
 				if (G.move.sps[type] > 0)
-					logii(`${G.move.sps[type]} ${get_troop_type_name(type)}`)
+					logii(`${G.move.sps[type]} ${get_sp_type_name(type)}`)
 			}
 		}
 	},
@@ -5726,7 +5746,7 @@ P.move = {
 	area(area) {
 		push_undo()
 		logi(`to ${format_area(area)}`)
-		let could_play_city_ablaze = ((G.active === FRANCE) && is_key_city(area) && !has_troop(area))
+		let could_play_city_ablaze = ((G.active === FRANCE) && is_key_city(area) && !has_sp(area))
 
 		// If the destination is a VP area, increase VP
 		if (is_vp_area(area) && !is_friendly_controlled(G.active, area) && !has_enemy_sp(G.active, area)) {
@@ -5831,15 +5851,15 @@ function conduct_movement(from, to) {
 
 	// Remove SPs from the battle in the origin area, if any.
 	if (has_battle(from)) {
-		if (!has_friendly_troop(G.active, from)) {
+		if (!has_friendly_sp(G.active, from)) {
 			delete_battle_entry(from)
 		} else {
 			// Only defenders who started the turn in the area would be eligible to move.
 			get_player_battle_data(G.active, from).forces.forEach(force => {
 				if (force.from === from && force.strength === FULL_STRENGTH) {
-					for (let type = 0; type < force.troops.length; ++type) {
-						if (force.troops[type] > 0)
-							force.troops[type] -= G.move.sps[type]
+					for (let type = 0; type < force.sps.length; ++type) {
+						if (force.sps[type] > 0)
+							force.sps[type] -= G.move.sps[type]
 					}
 				}
 			})
@@ -5856,11 +5876,11 @@ function conduct_movement(from, to) {
 			add_attacker_to_battle(G.active, from, to, G.move.type, G.move.leaders.slice(), G.move.sps.slice())
 
 			// If all the defending SPs would fight at full strength, add them all as a single force.
-			if (!have_sps_moved_in_area(to) || get_moved_sps_in_area(to).every(entry => decode_troop_moved_strength(entry) === FULL_STRENGTH)) {
-				add_defender_to_battle(enemy(G.active), to, to, NONE, get_leaders_at_area(enemy(G.active), to), get_troop_list_by_type(enemy(G.active), to))
+			if (!have_sps_moved_in_area(to) || get_moved_sps_in_area(to).every(entry => decode_sp_strength(entry) === FULL_STRENGTH)) {
+				add_defender_to_battle(enemy(G.active), to, to, NONE, get_leaders_at_area(enemy(G.active), to), get_sp_list_by_type(enemy(G.active), to))
 			} else {
 				let leaders_at_area = get_leaders_at_area(enemy(G.active), to)
-				let sps_at_area = get_troop_list_by_type(enemy(G.active), to)
+				let sps_at_area = get_sp_list_by_type(enemy(G.active), to)
 
 				// Re-derive force (bit kludgy)
 				let force = {
@@ -5879,11 +5899,11 @@ function conduct_movement(from, to) {
 				})
 				for (let entry of get_moved_sps_in_area(to)) {
 					if (
-						decode_troop_moved_player(entry) === enemy(G.active)
-						&& decode_troop_moved_strength(entry) === HALF_STRENGTH
+						decode_sp_player(entry) === enemy(G.active)
+						&& decode_sp_strength(entry) === HALF_STRENGTH
 					) {
-						force.sps[decode_troop_moved_type(entry)] += decode_troop_moved_num(entry)
-						sps_at_area[decode_troop_moved_type(entry)] -= decode_troop_moved_num(entry)
+						force.sps[decode_sp_type(entry)] += decode_sp_num(entry)
+						sps_at_area[decode_sp_type(entry)] -= decode_sp_num(entry)
 					}
 				}
 				add_defender_to_battle(enemy(G.active), to, to, HALF_STRENGTH, force.leaders, force.sps)
@@ -6008,7 +6028,7 @@ function get_post_move_exhaustion_events(who, move_type) {
 
 function has_fresh_moving_sp() {
 	for (let type = 0; type < NUM_TROOP_TYPES; ++type)
-		if (is_troop_type_fresh(type) && G.move.sps[type] > 0)
+		if (is_sp_type_fresh(type) && G.move.sps[type] > 0)
 			return true
 	return false
 }
@@ -6024,13 +6044,13 @@ P.post_move_exhaustion = {
 				prompt_card(L.current_event, `Exhaust an SP in the moving force.`)
 
 				if (L.current_event === C_EXTREME_WEATHER_RU && G.move.sps[FRESH_CAVALRY] > 0) {
-					action_troop_alt(FRESH_CAVALRY, G.move.path[G.move.path.length - 1], get_move_strength(G.move.type), G.move.path[G.move.path.length - 2])
+					action_sp_alt(FRESH_CAVALRY, G.move.path[G.move.path.length - 1], get_move_strength(G.move.type), G.move.path[G.move.path.length - 2])
 					return
 				}
 
 				for (let type = 0; type < G.move.sps.length; ++type)
-					if (is_troop_type_fresh(type) && G.move.sps[type] > 0)
-						action_troop_alt(type, G.move.path[G.move.path.length - 1], get_move_strength(G.move.type), G.move.path[G.move.path.length - 2])
+					if (is_sp_type_fresh(type) && G.move.sps[type] > 0)
+						action_sp_alt(type, G.move.path[G.move.path.length - 1], get_move_strength(G.move.type), G.move.path[G.move.path.length - 2])
 			} else {
 				prompt_card(L.current_event, `No fresh SPs in the moving force.`)
 				button_confirm()
@@ -6040,11 +6060,11 @@ P.post_move_exhaustion = {
 			button_done()
 		}
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
-		let strength = decode_troop_action_strength(entry)
-		let from = decode_troop_action_from(entry)
+		let type = decode_sp_type(entry)
+		let strength = decode_sp_strength(entry)
+		let from = decode_sp_from(entry)
 		let destination = G.move.path[G.move.path.length - 1]
 
 		exhaust_sp(G.active, destination, type, 1, true, true, strength, from, has_battle(destination))
@@ -6052,7 +6072,7 @@ P.post_move_exhaustion = {
 		log()
 		log(`${format_card(L.current_event)}`)
 		logi(`Exhausted`)
-		log_masked(G.active, format_ii(`1 ${get_troop_type_name(type)}`), format_ii(`1 fresh SP`))
+		log_masked(G.active, format_ii(`1 ${get_sp_type_name(type)}`), format_ii(`1 fresh SP`))
 
 		if (L.current_event === C_FAST_MARCHING_1 || L.current_event === C_FAST_MARCHING_2)
 			map_delete(G.persistent_events, L.current_event)
@@ -6091,9 +6111,9 @@ P.execute_cavalry_patrols = script(`
 `)
 
 function has_cavalry_or_cossack_in_area(who, area) {
-	if (!has_troop(area))
+	if (!has_sp(area))
 		return false
-	return get_area_troop_set(area, null).some(entry => (decode_troop_entry_who(entry) === who) && (is_cavalry(decode_troop_entry_type(entry)) || is_cossack(decode_troop_entry_type(entry))))
+	return get_area_sp_set(area, null).some(entry => (decode_sp_player(entry) === who) && (is_cavalry(decode_sp_type(entry)) || is_cossack(decode_sp_type(entry))))
 }
 
 function get_cavalry_patrols_targets(player, area) {
@@ -6140,9 +6160,9 @@ P.cavalry_patrols_reveal = function() {
 	for (let leader of get_leaders_at_area(G.active, L.selected_area))
 		logii(format_leader(leader))
 	logi("SPs")
-	for (let entry of get_area_troop_set(L.selected_area, null)) {
-		if (decode_troop_entry_who(entry) === enemy(G.active))
-			logii(`${decode_troop_entry_num(entry)} ${get_troop_type_name(decode_troop_entry_type(entry))}`)
+	for (let entry of get_area_sp_set(L.selected_area, null)) {
+		if (decode_sp_player(entry) === enemy(G.active))
+			logii(`${decode_sp_num(entry)} ${get_sp_type_name(decode_sp_type(entry))}`)
 	}
 	logi("Orders")
 	if (get_orders_at_area(enemy(G.active), L.selected_area).length === 0)
@@ -6258,17 +6278,17 @@ function get_evade_sps(who, area) {
 		if (!map_has(evade_sps, force.from))
 			map_set(evade_sps, force.from, [])
 
-		let troops = Array(NUM_TROOP_TYPES).fill(0)
-		for (let type = 0; type < force.troops.length; ++type) {
+		let sps = Array(NUM_TROOP_TYPES).fill(0)
+		for (let type = 0; type < force.sps.length; ++type) {
 			if (is_event_active(C_UNEXPECTED_RETREAT) && !(type === FRESH_AUSTRIAN_INFANTRY || type === EXHAUSTED_AUSTRIAN_INFANTRY)) {
 				continue
 			} else {
-				if (force.troops[type] > 0)
-					troops[type] += force.troops[type]
+				if (force.sps[type] > 0)
+					sps[type] += force.sps[type]
 			}
 		}
 
-		map_set(map_get(evade_sps, force.from, null), force.strength, troops)
+		map_set(map_get(evade_sps, force.from, null), force.strength, sps)
 	})
 
 	return evade_sps
@@ -6294,7 +6314,7 @@ P.select_evade_force = {
 			type: EVADE,
 			// Leaders part of the Evade
 			leaders: [],
-			// Nested map of troops that can evade.
+			// Nested map of sps that can evade.
 			// First keyed by area of origin, then keyed by move type.
 			// For attackers, area of origin is important as it can influence their retreat options after battle.
 			// It has to be this intricate since connections influences where the force could retreat after battle & move type determines battle strength.
@@ -6337,7 +6357,7 @@ P.select_evade_force = {
 						if (map_has(G.move.sps, from) && map_has(map_get(G.move.sps, from), strength) && map_get(map_get(G.move.sps, from), strength)[type] >= sps[type])
 							continue
 						else
-							action_troop_alt(type, L.area, strength, from)
+							action_sp_alt(type, L.area, strength, from)
 					}
 				}
 			})
@@ -6347,7 +6367,7 @@ P.select_evade_force = {
 			map_for_each(forces, (strength, sps) => {
 				for (let type = 0; type < sps.length; ++type)
 					if (sps[type] > 0)
-						action_troop_alt(type, L.area, strength, from, 1)
+						action_sp_alt(type, L.area, strength, from, 1)
 			})
 		})
 
@@ -6381,12 +6401,12 @@ P.select_evade_force = {
 			})
 		}
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
-		let strength = decode_troop_action_strength(entry)
-		let from = decode_troop_action_from(entry)
-		let moving = decode_troop_action_moving(entry)
+		let type = decode_sp_type(entry)
+		let strength = decode_sp_strength(entry)
+		let from = decode_sp_from(entry)
+		let moving = decode_sp_moving(entry)
 
 		if (!map_has(G.move.sps, from))
 			map_set(G.move.sps, from, [])
@@ -6445,12 +6465,12 @@ P.select_evade_force = {
 			logi(format_leader(get_seniormost_leader_from_list(G.active, G.move.leaders))) //Seniormost leader
 			for (let type = 0; type < sp_count.length; ++type) {
 				if (sp_count[type] > 0)
-					log_only(G.active, format_ii(`${sp_count[type]} ${get_troop_type_name(type)}`))
+					log_only(G.active, format_ii(`${sp_count[type]} ${get_sp_type_name(type)}`))
 			}
 		} else {
 			for (let type = 0; type < sp_count.length; ++type) {
 				if (sp_count[type] > 0) {
-					logii(`${sp_count[type]} ${get_troop_type_name(type)}`)
+					logii(`${sp_count[type]} ${get_sp_type_name(type)}`)
 				}
 			}
 		}
@@ -6546,8 +6566,8 @@ P.evade_pursuit_exhaustion = {
 				map_for_each(G.move.sps, (from, forces) => {
 					map_for_each(forces, (strength, sps) => {
 						for (let type = 0; type < sps.length; ++type)
-							if (is_troop_type_fresh(type) && sps[type] > 0)
-								action_troop_alt(type, L.area, strength, from, 1)
+							if (is_sp_type_fresh(type) && sps[type] > 0)
+								action_sp_alt(type, L.area, strength, from, 1)
 					})
 				})
 			}
@@ -6556,11 +6576,11 @@ P.evade_pursuit_exhaustion = {
 			button_done()
 		}
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
-		let strength = decode_troop_action_strength(entry)
-		let from = decode_troop_action_from(entry)
+		let type = decode_sp_type(entry)
+		let strength = decode_sp_strength(entry)
+		let from = decode_sp_from(entry)
 
 		battle_exhaust_sp(L.evader, L.area, type, strength, from)
 		L.has_assigned_exhaustion = true
@@ -6611,8 +6631,8 @@ P.eliminate_all_sps = {
 		log(`${ROLES[G.active]} has no more fresh SPs.`)
 		log(`Eliminated all SPs at ${format_area(L.area)}.`)
 		L.count = count_num_sps(G.active, L.area)
-		for (let type of get_troop_types_at_area(G.active, L.area))
-			eliminate_troop(G.active, L.area, type, count_num_sps_of_type(G.active, type, L.area))
+		for (let type of get_sp_types_at_area(G.active, L.area))
+			eliminate_sp(G.active, L.area, type, count_num_sps_of_type(G.active, type, L.area))
 		L.has_eliminated_sps = true
 		if (G.phase === TURN_PHASES.findIndex(phase => phase === EVADE))
 			delete_battle_entry(L.area)
@@ -6652,10 +6672,10 @@ P.evade = function() {
 		map_for_each(forces, (strength, sps) => {
 			for (let type = 0; type < sps.length; ++type) {
 				if (sps[type] > 0) {
-					move_troop(L.evader, L.area, G.move.destination, type, sps[type])
+					move_sp(L.evader, L.area, G.move.destination, type, sps[type])
 					for (let entry of battle_data.forces) {
 						if (entry.from === origin && entry.strength === strength) {
-							entry.troops[type] -= sps[type]
+							entry.sps[type] -= sps[type]
 						}
 					}
 				}
@@ -6663,7 +6683,7 @@ P.evade = function() {
 		})
 	})
 
-	if (battle_data.forces.every(force => force.troops.every(type => type === 0)))
+	if (battle_data.forces.every(force => force.sps.every(type => type === 0)))
 		delete_battle_entry(L.area)
 
 	if (is_event_active(C_HOLY_MOTHER_RUSSIA_FR) && get_event_keyword(C_HOLY_MOTHER_RUSSIA_FR, "area") === L.area) {
@@ -6683,7 +6703,7 @@ P.evade = function() {
 P.finish_evade = {
 	_begin() {
 		G.active = L.evader
-		if (has_friendly_depot(G.active, L.area) && !has_friendly_troop(G.active, L.area))
+		if (has_friendly_depot(G.active, L.area) && !has_friendly_sp(G.active, L.area))
 			call("remove_depot", { area: L.area })
 	},
 	prompt() {
@@ -6706,7 +6726,7 @@ P.finish_evade = {
 	},
 	pass() {
 		log()
-		if (is_vp_area(L.area) && !has_friendly_troop(L.evader, L.area)) {
+		if (is_vp_area(L.area) && !has_friendly_sp(L.evader, L.area)) {
 			increase_vp(enemy(L.evader), get_area_vp(L.area))
 		}
 		if (is_event_active(C_UNEXPECTED_RETREAT))
@@ -6957,7 +6977,7 @@ function is_battle_attacker(who, area) {
 	return get_battle_attacker(area) === who
 }
 
-function add_attacker_to_battle(who, from, area, move_type, leaders, troops) {
+function add_attacker_to_battle(who, from, area, move_type, leaders, sps) {
 	if (who === FRANCE && is_event_active(C_FREEZING_WEATHER)) {
 		log()
 		log(`${format_card(C_FREEZING_WEATHER)}`)
@@ -6977,9 +6997,9 @@ function add_attacker_to_battle(who, from, area, move_type, leaders, troops) {
 		for (let leader of leaders)
 			set_add(force.leaders, leader)
 
-		for (let type = 0; type < force.troops.length; ++type)
-			if (troops[type] > 0)
-				force.troops[type] += troops[type]
+		for (let type = 0; type < force.sps.length; ++type)
+			if (sps[type] > 0)
+				force.sps[type] += sps[type]
 	}
 	else {
 		battle.attacker.who = who
@@ -6989,7 +7009,7 @@ function add_attacker_to_battle(who, from, area, move_type, leaders, troops) {
 			strength: strength,
 			river_crossing: has_bridge(from, area),
 			leaders: leaders,
-			troops: troops,
+			sps: sps,
 		})
 	}
 }
@@ -7006,7 +7026,7 @@ function is_battle_defender(who, area) {
 	return get_battle_defender(area) === who
 }
 
-function add_defender_to_battle(who, from, area, move_type, leaders, troops) {
+function add_defender_to_battle(who, from, area, move_type, leaders, sps) {
 	if (who === FRANCE && is_event_active(C_FREEZING_WEATHER)) {
 		log()
 		log(`${format_card(C_FREEZING_WEATHER)}`)
@@ -7025,9 +7045,9 @@ function add_defender_to_battle(who, from, area, move_type, leaders, troops) {
 		for (let leader of leaders)
 			set_add(force.leaders, leader)
 
-		for (let type = 0; type < force.troops.length; ++type)
-			if (troops[type] > 0)
-				force.troops[type] += troops[type]
+		for (let type = 0; type < force.sps.length; ++type)
+			if (sps[type] > 0)
+				force.sps[type] += sps[type]
 	} else {
 		battle.defender.who = who
 
@@ -7036,7 +7056,7 @@ function add_defender_to_battle(who, from, area, move_type, leaders, troops) {
 			strength: strength,
 			river_crossing: false,
 			leaders: leaders,
-			troops: troops,
+			sps: sps,
 		})
 
 		battle.defender.defend_order = false
@@ -7176,31 +7196,31 @@ function is_leader_in_battle(leader, area) {
 }
 
 function count_num_infantry(who, area) {
-	if (!has_troop(area)) return 0
+	if (!has_sp(area)) return 0
 	let count = 0
-	for (let entry of get_area_troop_set(area)) {
-		if ((decode_troop_entry_who(entry) === who) && is_fresh_infantry(decode_troop_entry_type(entry)))
-			count += decode_troop_entry_num(entry)
+	for (let entry of get_area_sp_set(area)) {
+		if ((decode_sp_player(entry) === who) && is_fresh_infantry(decode_sp_type(entry)))
+			count += decode_sp_num(entry)
 	}
 	return count
 }
 
 function count_num_cavalry(who, area) {
-	if (!has_troop(area)) return 0
+	if (!has_sp(area)) return 0
 	let count = 0
-	for (let entry of get_area_troop_set(area)) {
-		if ((decode_troop_entry_who(entry) === who) && is_fresh_cavalry(decode_troop_entry_type(entry)))
-			count += decode_troop_entry_num(entry)
+	for (let entry of get_area_sp_set(area)) {
+		if ((decode_sp_player(entry) === who) && is_fresh_cavalry(decode_sp_type(entry)))
+			count += decode_sp_num(entry)
 	}
 	return count
 }
 
 function count_num_guard(who, area) {
-	if (!has_troop(area)) return 0
+	if (!has_sp(area)) return 0
 	let count = 0
-	for (let entry of get_area_troop_set(area)) {
-		if ((decode_troop_entry_who(entry) === who) && (decode_troop_entry_type(entry) === FRESH_GUARD))
-			count += decode_troop_entry_num(entry)
+	for (let entry of get_area_sp_set(area)) {
+		if ((decode_sp_player(entry) === who) && (decode_sp_type(entry) === FRESH_GUARD))
+			count += decode_sp_num(entry)
 	}
 	return count
 }
@@ -7515,7 +7535,7 @@ P.do_combat_value_calculations = function() {
 
 	const attacker = get_attacker_data(G.current_battle)
 	const attacker_who = get_battle_attacker(G.current_battle)
-	attacker.sps_unaffected_by_events = get_troop_list_by_type(attacker_who, G.current_battle)
+	attacker.sps_unaffected_by_events = get_sp_list_by_type(attacker_who, G.current_battle)
 
 	for (let force of attacker.forces) {
 		if (is_battle_event_currently_active(C_DELAYED_FORCES_RU) && force.from !== get_battle_entry(G.current_battle).delayed_forces_ru)
@@ -7527,7 +7547,7 @@ P.do_combat_value_calculations = function() {
 
 	const defender = get_defender_data(G.current_battle)
 	const defender_who = get_battle_defender(G.current_battle)
-	defender.sps_unaffected_by_events = get_troop_list_by_type(defender_who, G.current_battle)
+	defender.sps_unaffected_by_events = get_sp_list_by_type(defender_who, G.current_battle)
 
 	for (let force of defender.forces) {
 		if (defender_who === RUSSIA && is_battle_event_currently_active(C_DELAYED_FORCES_FR) && force.from === get_battle_entry(G.current_battle).delayed_forces_fr)
@@ -7620,7 +7640,7 @@ function get_modifier(who, force) {
 
 function get_infantry_strength(who, force) {
 	// Ignores French-allied Austrians and Prussians for now
-	let count = force.troops[FRESH_INFANTRY]
+	let count = force.sps[FRESH_INFANTRY]
 	// Infantry fights at X1 by default.
 	let modifier = 1 * get_modifier(who, force)
 
@@ -7638,8 +7658,8 @@ function get_infantry_strength(who, force) {
 		// Prussian and Austrian SPs
 		// RU #51 Unreliable Germans: Prussian and Austrian SPs fight at X0.
 		if (!is_battle_event_currently_active(C_UNRELIABLE_GERMANS)) {
-			strength += force.troops[FRESH_PRUSSIAN_INFANTRY]
-			strength += force.troops[FRESH_AUSTRIAN_INFANTRY]
+			strength += force.sps[FRESH_PRUSSIAN_INFANTRY]
+			strength += force.sps[FRESH_AUSTRIAN_INFANTRY]
 		}
 
 		// RU #51 Unreliable Germans: French Infantry fights at X0.5
@@ -7675,7 +7695,7 @@ function get_cavalry_strength(who, force) {
 	)
 		return 0
 
-	let count = force.troops[FRESH_CAVALRY]
+	let count = force.sps[FRESH_CAVALRY]
 	let modifier
 	if (is_fortress_town(G.current_battle))
 		modifier = 0.5 * get_modifier(who, force)
@@ -7717,7 +7737,7 @@ function get_cossack_strength(force) {
 	)
 		return 0
 
-	let count = force.troops[FRESH_COSSACK]
+	let count = force.sps[FRESH_COSSACK]
 	let modifier = get_modifier(RUSSIA, force)
 	let strength = 0
 
@@ -7739,7 +7759,7 @@ function get_cossack_strength(force) {
 }
 
 function get_guard_strength(force) {
-	let count = force.troops[FRESH_GUARD]
+	let count = force.sps[FRESH_GUARD]
 	let modifier = get_modifier(FRANCE, force)
 	let strength = 0
 
@@ -7758,9 +7778,9 @@ function get_guard_strength(force) {
 function get_exhausted_strength(who, battle_data) {
 	if (who === FRANCE && is_battle_event_currently_active(C_COURAGE_OF_DESPERATION)) {
 		let count = 0
-		for (let type = 0; type < battle_data.troops.length; ++type) {
-			if (is_troop_type_exhausted(type))
-				count += battle_data.troops[type]
+		for (let type = 0; type < battle_data.sps.length; ++type) {
+			if (is_sp_type_exhausted(type))
+				count += battle_data.sps[type]
 		}
 		let modifier = get_modifier(who, battle_data)
 
@@ -7942,31 +7962,31 @@ P.determine_losses = function() {
 }
 
 function count_num_fresh_sps(who, area) {
-	if (!has_troop(area)) return 0
+	if (!has_sp(area)) return 0
 
 	let count = 0
-	for (let entry of get_area_troop_set(area)) {
-		if ((decode_troop_entry_who(entry) === who) && (is_troop_type_fresh(decode_troop_entry_type(entry))))
-			count += decode_troop_entry_num(entry)
+	for (let entry of get_area_sp_set(area)) {
+		if ((decode_sp_player(entry) === who) && (is_sp_type_fresh(decode_sp_type(entry))))
+			count += decode_sp_num(entry)
 	}
 
 	return count
 }
 
 function get_all_fresh_sp_types(who, area) {
-	return get_troop_types_at_area(who, area).filter(type => is_troop_type_fresh(type))
+	return get_sp_types_at_area(who, area).filter(type => is_sp_type_fresh(type))
 }
 
 function get_all_exhausted_sp_types(who, area) {
-	return get_troop_types_at_area(who, area).filter(type => is_troop_type_exhausted(type))
+	return get_sp_types_at_area(who, area).filter(type => is_sp_type_exhausted(type))
 }
 
 function exhaust_sp(who, area, type, num = 1, update_move = false, update_moved = false, strength = FULL_STRENGTH, from = POOL, update_battles = false) {
-	if (!is_troop_type_fresh(type))
+	if (!is_sp_type_fresh(type))
 		return
 
-	remove_troop(who, area, type, num)
-	add_troop(who, area, type + 1, num)
+	remove_sp(who, area, type, num)
+	add_sp(who, area, type + 1, num)
 
 	if (update_move) {
 		G.move.sps[type]--
@@ -7978,19 +7998,19 @@ function exhaust_sp(who, area, type, num = 1, update_move = false, update_moved 
 
 	if (update_battles) {
 		let bforce = get_player_battle_data(who, area).forces.find((f) => {
-			return f.troops[type] > 0 && f.from === from && f.strength === strength
+			return f.sps[type] > 0 && f.from === from && f.strength === strength
 		})
-		bforce.troops[type]--
-		bforce.troops[type + 1]++
+		bforce.sps[type]--
+		bforce.sps[type + 1]++
 	}
 }
 
-function eliminate_sp(who, area, type, num = 1, update_move = false, update_moved = false, strength = FULL_STRENGTH, from = POOL, update_battles = false) {
+function eliminate_sp_new(who, area, type, num = 1, update_move = false, update_moved = false, strength = FULL_STRENGTH, from = POOL, update_battles = false) {
 	let was_friendly_controlled = is_friendly_controlled(who, area)
 
-	remove_troop(who, area, type, num)
+	remove_sp(who, area, type, num)
 	if (who === FRANCE)
-		add_troop(who, FRENCH_CASUALTIES, is_troop_type_fresh(type) ? type : type - 1, num)
+		add_sp(who, FRENCH_CASUALTIES, is_sp_type_fresh(type) ? type : type - 1, num)
 
 	if (update_move)
 		G.move.sps[type] -= num
@@ -8000,9 +8020,9 @@ function eliminate_sp(who, area, type, num = 1, update_move = false, update_move
 
 	if (update_battles) {
 		let bforce = get_player_battle_data(who, area).forces.find((f) => {
-			return f.troops[type] > 0 && f.from === from && f.strength === strength
+			return f.sps[type] > 0 && f.from === from && f.strength === strength
 		})
-		bforce.troops[type]--
+		bforce.sps[type]--
 	}
 
 	if (!has_battle(area) && is_vp_area(area) && was_friendly_controlled && !is_friendly_controlled(who, area)) {
@@ -8011,33 +8031,33 @@ function eliminate_sp(who, area, type, num = 1, update_move = false, update_move
 	}
 }
 
-// TODO: Change everything to eliminate_sp
-function eliminate_troop(who, area, type, num = 1) {
-	remove_troop(who, area, type, num)
+// TODO: Change everything to eliminate_sp_new
+function eliminate_sp(who, area, type, num = 1) {
+	remove_sp(who, area, type, num)
 	if (who === FRANCE)
-		add_troop(FRANCE, FRENCH_CASUALTIES, is_troop_type_fresh(type) ? type : type - 1, num)
+		add_sp(FRANCE, FRENCH_CASUALTIES, is_sp_type_fresh(type) ? type : type - 1, num)
 
-	if (who === FRANCE && !has_friendly_troop(who, area) && is_vp_area(area))
+	if (who === FRANCE && !has_friendly_sp(who, area) && is_vp_area(area))
 		decrease_vp(who, get_area_vp(area))
 }
 
 function count_num_sps_of_type(who, type, area) {
-	if (!has_troop(area)) return 0
+	if (!has_sp(area)) return 0
 	let count = 0
-	for (let entry of get_area_troop_set(area, null)) {
-		if ((decode_troop_entry_who(entry) === who) && (decode_troop_entry_type(entry) === type))
-			count += decode_troop_entry_num(entry)
+	for (let entry of get_area_sp_set(area, null)) {
+		if ((decode_sp_player(entry) === who) && (decode_sp_type(entry) === type))
+			count += decode_sp_num(entry)
 	}
 	return count
 }
 
 function battle_rally_sp(who, area, type, strength, from, num = 1) {
-	rally_troop(who, area, type, num)
+	rally_sp(who, area, type, num)
 
 	let battle_data = get_player_battle_data(who, area)
 	let force = battle_data.forces.find(f => f.strength === strength && f.from === from)
-	force.troops[type] -= num
-	force.troops[type - 1] += num
+	force.sps[type] -= num
+	force.sps[type - 1] += num
 }
 
 function battle_exhaust_sp(who, area, type, strength, from, num = 1) {
@@ -8045,28 +8065,28 @@ function battle_exhaust_sp(who, area, type, strength, from, num = 1) {
 }
 
 function battle_eliminate_sp(who, area, type, strength, from, num = 1) {
-	eliminate_troop(who, area, type, num)
+	eliminate_sp(who, area, type, num)
 	increment_eliminated(who, area, num)
 
 	let battle_data = get_player_battle_data(who, area)
 	let force = battle_data.forces.find(f => f.strength === strength && f.from === from)
-	force.troops[type] -= num
+	force.sps[type] -= num
 }
 
 function battle_add_sp(who, area, type, strength, from, num = 1) {
-	add_troop(who, area, type, num)
+	add_sp(who, area, type, num)
 	decrement_eliminated(who, area, num)
 
 	if (who === FRANCE)
-		remove_troop(who, FRENCH_CASUALTIES, is_troop_type_exhausted(type) ? type - 1 : type, num)
+		remove_sp(who, FRENCH_CASUALTIES, is_sp_type_exhausted(type) ? type - 1 : type, num)
 
 	let battle_data = get_player_battle_data(who, area)
 	let force = battle_data.forces.find(f => f.strength === strength && f.from === from)
-	force.troops[type] += num
+	force.sps[type] += num
 }
 
-function battle_eliminate_troop(who, area, type, num = 1) {
-	eliminate_troop(who, area, type, num)
+function battle_eliminate_sp_old(who, area, type, num = 1) {
+	eliminate_sp(who, area, type, num)
 	increment_eliminated(who, area, num)
 
 	let battle_data = get_player_battle_data(who, area)
@@ -8076,8 +8096,8 @@ function battle_eliminate_troop(who, area, type, num = 1) {
 	for (let i = 0; i < battle_data.forces.length; ++i) {
 		let entry = battle_data.forces[i]
 
-		let num_available = Math.min(num - count, entry.troops[type])
-		entry.troops[type] -= Math.min(num, num_available)
+		let num_available = Math.min(num - count, entry.sps[type])
+		entry.sps[type] -= Math.min(num, num_available)
 
 		if (!map_has(connections_rallied, i) && num_available > 0)
 			map_set(connections_rallied, i, 0)
@@ -8097,12 +8117,12 @@ function would_be_eliminated_after_battle(player, area, losses) {
 		return false
 
 	let count = 0
-	let sps = get_troop_list_by_type(player, area)
+	let sps = get_sp_list_by_type(player, area)
 	let has_assigned_cavalry_loss = false
 
 	function would_have_fresh_sp() {
 		for (let type = 0; type < sps.length; ++type) {
-			if (is_troop_type_fresh(type) && sps[type] > 0)
+			if (is_sp_type_fresh(type) && sps[type] > 0)
 				return true
 		}
 		return false
@@ -8116,7 +8136,7 @@ function would_be_eliminated_after_battle(player, area, losses) {
 		} else {
 			let loss_type
 			for (let type = 0; type < sps.length; ++type) {
-				if (is_troop_type_fresh(type) && sps[type] > 0)
+				if (is_sp_type_fresh(type) && sps[type] > 0)
 					loss_type = type
 			}
 			if (loss_type === undefined) return true
@@ -8161,9 +8181,9 @@ P.assign_losses = {
 				if (has_exhausted_sp(FRANCE, G.current_battle)) {
 					prompt_card(C_NAPOLEONS_MARSHALS, `Rally an exhausted SP at ${format_area(G.current_battle)}.`)
 					get_player_battle_data(FRANCE, G.current_battle).forces.forEach(force => {
-						for (let type = 0; type < force.troops.length; ++type) {
-							if (force.troops[type] > 0)
-								action_troop_alt(type, G.current_battle, force.strength, force.from)
+						for (let type = 0; type < force.sps.length; ++type) {
+							if (force.sps[type] > 0)
+								action_sp_alt(type, G.current_battle, force.strength, force.from)
 						}
 					})
 				} else {
@@ -8171,10 +8191,10 @@ P.assign_losses = {
 					button_next()
 				}
 			},
-			on_troop(entry) {
-				let type = decode_troop_action_type(entry)
-				let strength = decode_troop_action_strength(entry)
-				let from = decode_troop_action_from(entry)
+			on_sp(entry) {
+				let type = decode_sp_type(entry)
+				let strength = decode_sp_strength(entry)
+				let from = decode_sp_from(entry)
 
 				battle_rally_sp(R, G.current_battle, type, strength, from)
 				push_local_undo(FRANCE, "rally", { type, strength, from })
@@ -8237,19 +8257,19 @@ P.assign_losses = {
 				if (count_num_cavalry(R, G.current_battle) > 0) {
 					prompt_card(card, `Assign a loss to a Cavalry SP.`)
 					get_player_battle_data(R, G.current_battle).forces.forEach(force => {
-						if (force.troops[FRESH_CAVALRY] > 0)
-							action_troop_alt(FRESH_CAVALRY, G.current_battle, force.strength, force.from)
+						if (force.sps[FRESH_CAVALRY] > 0)
+							action_sp_alt(FRESH_CAVALRY, G.current_battle, force.strength, force.from)
 					})
 				} else {
 					prompt_card(card, `No Cavalry SPs at ${format_area(G.current_battle)}.`)
 					button_next()
 				}
 			},
-			on_troop(entry) {
+			on_sp(entry) {
 				push_undo()
-				let type = decode_troop_action_type(entry)
-				let strength = decode_troop_action_strength(entry)
-				let from = decode_troop_action_from(entry)
+				let type = decode_sp_type(entry)
+				let strength = decode_sp_strength(entry)
+				let from = decode_sp_from(entry)
 
 				// First battle loss is always an exhaustion
 				battle_exhaust_sp(R, G.current_battle, type, strength, from)
@@ -8277,8 +8297,8 @@ P.assign_losses = {
 					) {
 						V.prompt = `Assign a loss to a fresh Cavalry SP.`
 						get_player_battle_data(R, G.current_battle).forces.forEach(force => {
-							if (force.troops[FRESH_CAVALRY] > 0)
-								action_troop_alt(FRESH_CAVALRY, G.current_battle, force.strength, force.from)
+							if (force.sps[FRESH_CAVALRY] > 0)
+								action_sp_alt(FRESH_CAVALRY, G.current_battle, force.strength, force.from)
 						})
 					}
 					// Players must alternate between exhausting and eliminating a fresh SP, starting with exhausting
@@ -8288,9 +8308,9 @@ P.assign_losses = {
 						else
 							V.prompt = `Select a fresh SP to eliminate.`
 						get_player_battle_data(R, G.current_battle).forces.forEach(force => {
-							for (let type = 0; type < force.troops.length; ++type) {
-								if (is_troop_type_fresh(type) && force.troops[type] > 0)
-									action_troop_alt(type, G.current_battle, force.strength, force.from)
+							for (let type = 0; type < force.sps.length; ++type) {
+								if (is_sp_type_fresh(type) && force.sps[type] > 0)
+									action_sp_alt(type, G.current_battle, force.strength, force.from)
 							}
 						})
 					}
@@ -8298,7 +8318,7 @@ P.assign_losses = {
 					// A stack consisting solely of exhausted SPs is eliminated if in an area with fresh enemy SPs.
 					// Since losses are taken simultaneously, we check whether the enemy would have a fresh SP after assigning losses.
 					if (
-						has_friendly_troop(R, G.current_battle)
+						has_friendly_sp(R, G.current_battle)
 						&& !has_fresh_sp(R, G.current_battle)
 						&& !would_be_eliminated_after_battle(enemy(R), G.current_battle, L.losses[enemy[R]] - L.count[enemy[R]])
 					) {
@@ -8310,10 +8330,10 @@ P.assign_losses = {
 					}
 				}
 			},
-			on_troop(entry) {
-				let type = decode_troop_action_type(entry)
-				let strength = decode_troop_action_strength(entry)
-				let from = decode_troop_action_from(entry)
+			on_sp(entry) {
+				let type = decode_sp_type(entry)
+				let strength = decode_sp_strength(entry)
+				let from = decode_sp_from(entry)
 
 				if (type === FRESH_CAVALRY)
 					L.has_assigned_cavalry_loss[R] = true
@@ -8340,7 +8360,7 @@ P.assign_losses = {
 				let counts = []
 				for (let type of get_all_exhausted_sp_types(R, G.current_battle)) {
 					let count = count_num_sps_of_type(R, type, G.current_battle)
-					let connections = battle_eliminate_troop(R, G.current_battle, type, count)
+					let connections = battle_eliminate_sp_old(R, G.current_battle, type, count)
 					map_set(eliminated_by_type, type, connections)
 					map_set(counts, type, count)
 				}
@@ -8355,7 +8375,7 @@ P.assign_losses = {
 				if (G.active.length === 0) {
 					for (let who = RUSSIA; who <= FRANCE; ++who) {
 						log(`${ROLES[who]} assigned ${L.count[who]} losses.`)
-						if (!has_friendly_troop(who, G.current_battle)) {
+						if (!has_friendly_sp(who, G.current_battle)) {
 							log(`${ROLES[who]} has no more fresh SPs.`)
 							log(`${ROLES[who]} eliminated!`)
 						}
@@ -8413,13 +8433,13 @@ P.assign_losses = {
 				let count =  map_get(undo.info.counts, type)
 
 				if (R === RUSSIA)
-					add_troop(R, G.current_battle, type, count)
+					add_sp(R, G.current_battle, type, count)
 				else
-					move_troop(R, FRENCH_CASUALTIES, G.current_battle, type, count)
+					move_sp(R, FRENCH_CASUALTIES, G.current_battle, type, count)
 
 				decrement_eliminated(R, G.current_battle, count)
 				map_for_each(connections, (ix, amount) => {
-					battle_data.forces[ix].troops[type] += amount
+					battle_data.forces[ix].sps[type] += amount
 				})
 			})
 			if (R !== RUSSIA || !(get_player_battle_data(RUSSIA, G.current_battle)?.only_cossack ?? false)) {
@@ -8433,7 +8453,7 @@ P.assign_losses = {
 	},
 	next() 		{ this.states[L.state[R]].on_next() },
 	eliminate() 	{ this.states[L.state[R]].on_eliminate() },
-	troop(entry) 	{ this.states[L.state[R]].on_troop(entry) },
+	sp(entry) 	{ this.states[L.state[R]].on_sp(entry) },
 	leader(leader) 	{ this.states[L.state[R]].on_leader(leader) },
 	confirm()		{ this.states[L.state[R]].on_confirm() },
 }
@@ -8451,8 +8471,8 @@ P.determine_battle_winner = function() {
 	}
 
 	// If one side has no SPs remaining, the other side wins if they have a fresh SP.
-	else if ((!has_friendly_troop(RUSSIA, G.current_battle) && has_fresh_sp(FRANCE, G.current_battle))
-		|| (!has_friendly_troop(FRANCE, G.current_battle) && has_fresh_sp(RUSSIA, G.current_battle))) {
+	else if ((!has_friendly_sp(RUSSIA, G.current_battle) && has_fresh_sp(FRANCE, G.current_battle))
+		|| (!has_friendly_sp(FRANCE, G.current_battle) && has_fresh_sp(RUSSIA, G.current_battle))) {
 
 		let winner = has_fresh_sp(RUSSIA, G.current_battle) ? RUSSIA : FRANCE
 		set_battle_winner(winner, G.current_battle)
@@ -8548,7 +8568,7 @@ P.determine_battle_winner = function() {
 }
 
 function has_fresh_sp(who, area) {
-	return get_area_troop_set(area, null)?.some(entry => decode_troop_entry_who(entry) === who && is_troop_type_fresh(decode_troop_entry_type(entry))) ?? false
+	return get_area_sp_set(area, null)?.some(entry => decode_sp_player(entry) === who && is_sp_type_fresh(decode_sp_type(entry))) ?? false
 }
 
 function find_battle_winner(count) {
@@ -8628,9 +8648,9 @@ P.assign_pursuit_losses = {
 		} else {
 			V.prompt = `Pursuit: Eliminate ${L.difference} SPs at ${format_area(G.current_battle)}.`
 			get_player_battle_data(R, G.current_battle).forces.forEach(force => {
-				for (let type = 0; type < force.troops.length; ++type) {
-					if (force.troops[type] > 0)
-						action_troop_alt(type, G.current_battle, force.strength, force.from)
+				for (let type = 0; type < force.sps.length; ++type) {
+					if (force.sps[type] > 0)
+						action_sp_alt(type, G.current_battle, force.strength, force.from)
 				}
 
 			})
@@ -8640,18 +8660,18 @@ P.assign_pursuit_losses = {
 		push_undo()
 		for (let type of get_all_exhausted_sp_types(R, G.current_battle)) {
 			let count = count_num_sps_of_type(R, type, G.current_battle)
-			battle_eliminate_troop(G.active, G.current_battle, type, count)
+			battle_eliminate_sp_old(G.active, G.current_battle, type, count)
 		}
 		log(`${ROLES[R]} has no more fresh SPs.`)
 		log(`${ROLES[R]} eliminated!`)
 
 		L.has_finished = true
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
-		let strength = decode_troop_action_strength(entry)
-		let from = decode_troop_action_from(entry)
+		let type = decode_sp_type(entry)
+		let strength = decode_sp_strength(entry)
+		let from = decode_sp_from(entry)
 
 		battle_eliminate_sp(G.active, G.current_battle, type, strength, from)
 
@@ -8686,7 +8706,7 @@ P.end_battle = script(`
 	if (could_any_end_battle_events_be_played()) {
 		call end_battle_events
 	}
-	if (has_friendly_troop(L.loser, G.current_battle)) {
+	if (has_friendly_sp(L.loser, G.current_battle)) {
 		call retreat { loser: L.loser }
 	}
 	if (has_friendly_leader(L.loser, G.current_battle)) {
@@ -8867,18 +8887,18 @@ P.end_battle_events = {
 				if (L.num_sps_to_rally > 0) {
 					prompt_card(C_STOIC_INFANTRY, `Rally up to ${L.num_sps_to_rally} exhausted Infantry SPs.`)
 					get_player_battle_data(R, G.current_battle).forces.forEach(force => {
-						if (force.troops[EXHAUSTED_INFANTRY] > 0)
-							action_troop_alt(EXHAUSTED_INFANTRY, G.current_battle, force.strength, force.from)
+						if (force.sps[EXHAUSTED_INFANTRY] > 0)
+							action_sp_alt(EXHAUSTED_INFANTRY, G.current_battle, force.strength, force.from)
 					})
 				} else {
 					prompt_card(C_STOIC_INFANTRY, "All done.")
 					button_confirm()
 				}
 			},
-			on_troop(entry) {
-				let type = decode_troop_action_type(entry)
-				let strength = decode_troop_action_strength(entry)
-				let from = decode_troop_action_from(entry)
+			on_sp(entry) {
+				let type = decode_sp_type(entry)
+				let strength = decode_sp_strength(entry)
+				let from = decode_sp_from(entry)
 
 				battle_rally_sp(R, G.current_battle, type, strength, from)
 				--L.num_sps_to_rally
@@ -8929,18 +8949,18 @@ P.end_battle_events = {
 				if (count_num_sps_of_type(FRANCE, FRESH_CAVALRY, G.current_battle) > 0) {
 					prompt_card(C_MURATS_CAVALRY, `Exhaust a fresh Cavalry SP.`)
 					get_player_battle_data(R, G.current_battle).forces.forEach(force => {
-						if (force.troops[FRESH_CAVALRY] > 0)
-							action_troop_alt(FRESH_CAVALRY, G.current_battle, force.strength, force.from)
+						if (force.sps[FRESH_CAVALRY] > 0)
+							action_sp_alt(FRESH_CAVALRY, G.current_battle, force.strength, force.from)
 					})
 				} else {
 					prompt_card(C_MURATS_CAVALRY, "No effect.")
 					button_next()
 				}
 			},
-			on_troop(entry) {
-				let type = decode_troop_action_type(entry)
-				let strength = decode_troop_action_strength(entry)
-				let from = decode_troop_action_from(entry)
+			on_sp(entry) {
+				let type = decode_sp_type(entry)
+				let strength = decode_sp_strength(entry)
+				let from = decode_sp_from(entry)
 
 				battle_exhaust_sp(R, G.current_battle, type, strength, from)
 
@@ -8960,19 +8980,19 @@ P.end_battle_events = {
 				if (has_exhausted_sp(FRANCE, G.current_battle)) {
 					prompt_card(C_NEYS_III_CORPS, "Rally an exhausted SP.")
 					get_player_battle_data(R, G.current_battle).forces.forEach(force => {
-						for (let type = 0; type < force.troops.length; ++type)
-							if (is_troop_type_exhausted(type))
-								action_troop_alt(type, G.current_battle, force.strength, force.from)
+						for (let type = 0; type < force.sps.length; ++type)
+							if (is_sp_type_exhausted(type))
+								action_sp_alt(type, G.current_battle, force.strength, force.from)
 					})
 				} else {
 					prompt_card(C_NEYS_III_CORPS, `No exhausted SPs at ${format_area(G.current_battle)} to rally.`)
 					button_next()
 				}
 			},
-			on_troop(entry) {
-				let type = decode_troop_action_type(entry)
-				let strength = decode_troop_action_strength(entry)
-				let from = decode_troop_action_from(entry)
+			on_sp(entry) {
+				let type = decode_sp_type(entry)
+				let strength = decode_sp_strength(entry)
+				let from = decode_sp_from(entry)
 
 				battle_rally_sp(R, G.current_battle, type, strength, from)
 
@@ -9023,7 +9043,7 @@ P.end_battle_events = {
 			throw new Error(`Unknown action: ${undo.action}`)
 		}
 	},
-	troop(entry) 	{ this.states[L.state[R]].on_troop(entry) },
+	sp(entry) 	{ this.states[L.state[R]].on_sp(entry) },
 	discard()		{ this.states[L.state[R]].on_discard() },
 	vp() 			{ this.states[L.state[R]].on_vp() },
 	next() 			{ this.states[L.state[R]].on_next() },
@@ -9064,9 +9084,9 @@ function has_retreat_destination(who, area) {
 P.retreat = script(`
 	log "%Retreat"
 	set G.active L.loser
-	while (has_friendly_troop(L.loser, G.current_battle)) {
+	while (has_friendly_sp(L.loser, G.current_battle)) {
 		call select_retreat_destination
-		if (has_friendly_troop(G.active, G.current_battle)) {
+		if (has_friendly_sp(G.active, G.current_battle)) {
 			call select_retreat_force { destination: L.$ }
 			call do_retreat { destination: L.$ }
 		}
@@ -9114,16 +9134,16 @@ P.exhaust_half_sps = {
 		} else {
 			V.prompt = `No valid retreat destination: exhaust half of the SPs at ${format_area(G.current_battle)}.`
 			get_player_battle_data(G.active, G.current_battle).forces.forEach(force => {
-				for (let type = 0; type < force.troops.length; ++type)
-					action_troop_alt(type, G.current_battle, force.strength, force.from)
+				for (let type = 0; type < force.sps.length; ++type)
+					action_sp_alt(type, G.current_battle, force.strength, force.from)
 			})
 		}
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
-		let strength = decode_troop_action_strength(entry)
-		let from = decode_troop_action_from(entry)
+		let type = decode_sp_type(entry)
+		let strength = decode_sp_strength(entry)
+		let from = decode_sp_from(entry)
 		battle_exhaust_sp(G.active, G.current_battle, type, strength, from)
 		--L.num_sps_to_exhaust
 	},
@@ -9172,7 +9192,7 @@ P.select_retreat_force = {
 						if (map_has(G.move.sps, from) && map_has(map_get(G.move.sps, from), strength) && map_get(map_get(G.move.sps, from), strength)[type] >= sps[type])
 							continue
 						else
-							action_troop_alt(type, G.current_battle, strength, from)
+							action_sp_alt(type, G.current_battle, strength, from)
 					}
 				}
 			})
@@ -9182,7 +9202,7 @@ P.select_retreat_force = {
 			map_for_each(forces, (strength, sps) => {
 				for (let type = 0; type < sps.length; ++type)
 					if (sps[type] > 0)
-						action_troop_alt(type, G.current_battle, strength, from, 1)
+						action_sp_alt(type, G.current_battle, strength, from, 1)
 			})
 		})
 
@@ -9198,12 +9218,12 @@ P.select_retreat_force = {
 		push_undo()
 		set_toggle(G.move.leaders, leader)
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
-		let strength = decode_troop_action_strength(entry)
-		let from = decode_troop_action_from(entry)
-		let moving = decode_troop_action_moving(entry)
+		let type = decode_sp_type(entry)
+		let strength = decode_sp_strength(entry)
+		let from = decode_sp_from(entry)
+		let moving = decode_sp_moving(entry)
 
 		if (!map_has(G.move.sps, from))
 			map_set(G.move.sps, from, [])
@@ -9242,12 +9262,12 @@ P.select_retreat_force = {
 			logi(format_leader(get_seniormost_leader_from_list(G.active, G.move.leaders))) // Seniormost leader
 			for (let type = 0; type < sp_count.length; ++type) {
 				if (sp_count[type] > 0)
-					log_only(G.active, format_ii(`${sp_count[type]} ${get_troop_type_name(type)}`))
+					log_only(G.active, format_ii(`${sp_count[type]} ${get_sp_type_name(type)}`))
 			}
 		} else {
 			for (let type = 0; type < sp_count.length; ++type) {
 				if (sp_count[type] > 0)
-					logii(`${sp_count[type]} ${get_troop_type_name(type)}`)
+					logii(`${sp_count[type]} ${get_sp_type_name(type)}`)
 			}
 		}
 
@@ -9265,25 +9285,25 @@ P.do_retreat = function() {
 		map_for_each(forces, (strength, sps) => {
 			for (let type = 0; type < sps.length; ++type) {
 				if (sps[type] > 0) {
-					move_troop(G.active, G.current_battle, L.destination, type, sps[type])
+					move_sp(G.active, G.current_battle, L.destination, type, sps[type])
 					let force = get_player_battle_data(G.active, G.current_battle).forces.find(f => f.from === origin && f.strength === strength)
-					force.troops[type] -= sps[type]
+					force.sps[type] -= sps[type]
 				}
 			}
 		})
 	})
 
 	if (has_enemy_sp(G.active, L.destination)) {
-		let troops = get_evading_sps()
+		let sps = get_evading_sps()
 
 		if (has_battle(L.destination)) {
 			if (is_battle_attacker(G.active, L.destination))
-				add_attacker_to_battle(G.active, G.current_battle, L.destination, NONE, G.move.leaders, troops)
+				add_attacker_to_battle(G.active, G.current_battle, L.destination, NONE, G.move.leaders, sps)
 			else
-				add_defender_to_battle(G.active, G.current_battle, L.destination, NONE, G.move.leaders, troops)
+				add_defender_to_battle(G.active, G.current_battle, L.destination, NONE, G.move.leaders, sps)
 			log(`Joined existing battle at ${format_area(L.destination)}.`)
 		} else {
-			add_attacker_to_battle(G.active, G.current_battle, L.destination, NONE, G.move.leaders, troops)
+			add_attacker_to_battle(G.active, G.current_battle, L.destination, NONE, G.move.leaders, sps)
 			log(`Battle declared at ${format_area(L.destination)}.`)
 		}
 	}
@@ -9392,19 +9412,19 @@ P.rally = {
 
 			for (let type of get_all_exhausted_sp_types(G.active, L.area)) {
 				if (L.count === 0 || is_infantry(type))
-					action_troop_alt(type, L.area)
+					action_sp_alt(type, L.area)
 			}
 		}
 
 		if (L.kutuzov)
 			prompt_leader(L_KUTUZOV, V.prompt)
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
+		let type = decode_sp_type(entry)
 
-		rally_troop(G.active, L.area, type)
-		log_masked(G.active, format_i(`1 ${get_troop_type_name(type)}`), format_i(`1 Exh. SP`))
+		rally_sp(G.active, L.area, type)
+		log_masked(G.active, format_i(`1 ${get_sp_type_name(type)}`), format_i(`1 Exh. SP`))
 
 		if (!L.kutuzov && L.count === 0 && has_friendly_depot(G.active, L.area) && is_infantry(type))
 			++L.count
@@ -9442,7 +9462,7 @@ P.select_cossack_raid_target = {
 	prompt() {
 		V.prompt = `Select a target for the Cossack Raid. (cannot be undone)`
 		for (let area of get_all_adjacent_areas(L.area)) {
-			if (has_french_order(area) || has_friendly_troop(FRANCE, area))
+			if (has_french_order(area) || has_friendly_sp(FRANCE, area))
 				action_area(area)
 		}
 	},
@@ -9497,17 +9517,17 @@ P.eliminate_1_exhausted = {
 		if (has_exhausted_sp(G.active, L.area)) {
 			V.prompt = `Eliminate 1 exhausted SP at ${format_area(L.area)}.`
 			for (let type of get_all_exhausted_sp_types(G.active, L.area))
-				action_troop_alt(type, L.area)
+				action_sp_alt(type, L.area)
 		} else {
 			V.prompt = `No exhausted SPs at ${format_area(L.area)}.`
 			button_next()
 		}
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
-		eliminate_troop(G.active, L.area, type)
-		log_only(G.active, format_ii(`1 ${get_troop_type_name(type)}`))
+		let type = decode_sp_type(entry)
+		eliminate_sp(G.active, L.area, type)
+		log_only(G.active, format_ii(`1 ${get_sp_type_name(type)}`))
 		log_only(enemy(G.active), format_ii(`1 Exh. SP`))
 		end()
 	},
@@ -9539,7 +9559,7 @@ function has_executable_place_depot_order(who) {
 
 	let order = get_placed_orders_of_type(PLACE_DEPOT).find(order => get_order_owner(order) === who)
 
-	return has_friendly_troop(who, get_order_location(order))
+	return has_friendly_sp(who, get_order_location(order))
 		&& is_depot_town(get_order_location(order))
 		&& has_depot_within_four_road_connections(who, get_order_location(order))
 		&& (!is_event_active(C_LOGISTICS_COLLAPSE) || who !== FRANCE || has_card_in_hand(who))
@@ -9607,7 +9627,7 @@ P.place_depot = {
 			button_confirm()
 		}
 
-		// The fuzzer loves to pull out all depots on map: This will wipe out all troops on map with attrition!
+		// The fuzzer loves to pull out all depots on map: This will wipe out all sps on map with attrition!
 		if (!globalThis.RTT_FUZZER) {
 			for (let depot = get_first_depot(G.active); depot <= get_last_depot(G.active); ++depot) {
 				if (is_depot_on_map(depot))
@@ -9642,7 +9662,7 @@ P.may_remove_place_depot_orders = {
 		V.prompt = `Execute Place Depot orders: All done. You may remove any depots on map.`
 		button_done()
 
-		// The fuzzer loves to pull out all depots on map: This will wipe out all troops on map with attrition!
+		// The fuzzer loves to pull out all depots on map: This will wipe out all sps on map with attrition!
 		if (!globalThis.RTT_FUZZER) {
 			for (let depot = get_first_depot(G.active); depot <= get_last_depot(G.active); ++depot) {
 				if (is_depot_on_map(depot))
@@ -9793,7 +9813,7 @@ function log_weather_die_result(roll) {
 function get_areas_with_sps(who) {
 	let areas = []
 	map_for_each(G.sps, (area, entries) => {
-		if (entries.some(entry => decode_troop_entry_who(entry) === who) && (area >= FIRST_AREA) && (area <= LAST_AREA))
+		if (entries.some(entry => decode_sp_player(entry) === who) && (area >= FIRST_AREA) && (area <= LAST_AREA))
 			set_add(areas, area)
 	})
 	return areas
@@ -9882,12 +9902,12 @@ function lookup_attrition_devastation(modified_size, distance_to_nearest_depot) 
 }
 
 function count_num_exhausted_sps(who, area) {
-	if (!has_troop(area)) return 0
+	if (!has_sp(area)) return 0
 
 	let count = 0
-	for (let entry of get_area_troop_set(area, null)) {
-		if ((decode_troop_entry_who(entry) === who) && is_troop_type_exhausted(decode_troop_entry_type(entry)))
-			count += decode_troop_entry_num(entry)
+	for (let entry of get_area_sp_set(area, null)) {
+		if ((decode_sp_player(entry) === who) && is_sp_type_exhausted(decode_sp_type(entry)))
+			count += decode_sp_num(entry)
 	}
 	return count
 }
@@ -9909,7 +9929,7 @@ function log_attrition() {
 		log("Exhausted")
 		let total = 0
 		map_for_each(G.attrition_data.previously_exhausted, (type, num) => {
-			log_only(G.active, format_i(`${num} ${get_troop_type_name(type)}`))
+			log_only(G.active, format_i(`${num} ${get_sp_type_name(type)}`))
 			total += num
 		})
 		log_only(enemy(G.active), format_i(`${total} fresh SPs`))
@@ -9919,7 +9939,7 @@ function log_attrition() {
 		log("Eliminated")
 		let total = 0
 		map_for_each(G.attrition_data.previously_eliminated, (type, num) => {
-			log_only(G.active, format_i(`${num} ${get_troop_type_name(type)}`))
+			log_only(G.active, format_i(`${num} ${get_sp_type_name(type)}`))
 			total += num
 		})
 		log_only(enemy(G.active), format_i(`${total} fresh SPs`))
@@ -10004,7 +10024,7 @@ P.do_attrition = {
 			call("increase_devastation", { area })
 	},
 	_resume() {
-		if (has_attrition_losses_remaining() && has_friendly_troop(G.active, get_current_attrition_area()))
+		if (has_attrition_losses_remaining() && has_friendly_sp(G.active, get_current_attrition_area()))
 			call("assign_attrition_losses", { area: get_current_attrition_area() })
 		else if (!has_applied_attrition_devastation())
 			call("increase_devastation", { area: get_current_attrition_area() })
@@ -10083,7 +10103,7 @@ P.assign_attrition_losses = {
 				button("exhaust")
 
 			if (count_num_exhausted_sps(G.active, L.area) >= 2
-				|| ((has_friendly_troop(G.active, L.area) && count_num_sps(G.active, L.area) === count_num_exhausted_sps(G.active, L.area)))
+				|| ((has_friendly_sp(G.active, L.area) && count_num_sps(G.active, L.area) === count_num_exhausted_sps(G.active, L.area)))
 			) {
 				switch(G.attrition_data.num_sps_affected % 3) {
 				case 0:
@@ -10117,15 +10137,15 @@ P.exhaust_sp = {
 		if (must_assign_cavalry_attrition_loss() && (count_num_sps_of_type(G.active, FRESH_CAVALRY, L.area) > 0 || count_num_sps_of_type(G.active, FRESH_COSSACK, L.area) > 0)) {
 			for (let type of get_all_fresh_sp_types(G.active, L.area)) {
 				if (is_cavalry(type) || is_cossack(type))
-					action_troop_alt(type, L.area)
+					action_sp_alt(type, L.area)
 			}
 		} else {
-			get_all_fresh_sp_types(G.active, L.area).forEach(type => action_troop_alt(type, L.area))
+			get_all_fresh_sp_types(G.active, L.area).forEach(type => action_sp_alt(type, L.area))
 		}
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
+		let type = decode_sp_type(entry)
 
 		exhaust_sp(G.active, L.area, type)
 
@@ -10153,17 +10173,17 @@ P.eliminate_2_exhausted_sps = {
 		if (must_assign_cavalry_attrition_loss() && (count_num_sps_of_type(G.active, EXHAUSTED_CAVALRY, L.area) > 0 || count_num_sps_of_type(G.active, EXHAUSTED_COSSACK, L.area) > 0)) {
 			for (let type of get_all_exhausted_sp_types(G.active, L.area)) {
 				if (is_cavalry(type) || is_cossack(type))
-					action_troop_alt(type, L.area)
+					action_sp_alt(type, L.area)
 			}
 		} else {
-			get_all_exhausted_sp_types(G.active, L.area).forEach(type => action_troop_alt(type, L.area))
+			get_all_exhausted_sp_types(G.active, L.area).forEach(type => action_sp_alt(type, L.area))
 		}
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
+		let type = decode_sp_type(entry)
 
-		eliminate_troop(G.active, L.area, type)
+		eliminate_sp(G.active, L.area, type)
 
 		if (is_cavalry(type) || is_cossack(type))
 			G.attrition_data.has_assigned_cavalry_loss = true
@@ -10176,7 +10196,7 @@ P.eliminate_2_exhausted_sps = {
 			map_increment(G.attrition_data.previously_eliminated, type)
 
 		if (--L.count === 0) {
-			if (!has_friendly_troop(G.active, L.area) && has_friendly_leader(G.active, L.area))
+			if (!has_friendly_sp(G.active, L.area) && has_friendly_leader(G.active, L.area))
 				goto("eliminate_leader", { area: L.area })
 			else
 				end()
@@ -10208,7 +10228,7 @@ P.increase_devastation = {
 		if (
 			raw_devastation > 3
 			&& G.attrition_data.num_cancels_remaining === 0
-			&& has_friendly_troop(G.active, L.area)
+			&& has_friendly_sp(G.active, L.area)
 		) {
 			log_only(G.active, `Cannot increase devastation further.`)
 			++G.attrition_data.num_losses_remaining
@@ -10312,7 +10332,7 @@ function get_supply_sources_and_depots(who) {
 }
 
 function has_enemy_sp(who, space) {
-	return (who === RUSSIA && has_friendly_troop(FRANCE, space)) || (who === FRANCE && has_friendly_troop(RUSSIA, space))
+	return (who === RUSSIA && has_friendly_sp(FRANCE, space)) || (who === FRANCE && has_friendly_sp(RUSSIA, space))
 }
 
 function get_supply_status(who, area) {
@@ -10586,9 +10606,9 @@ function log_must_play_event(card, info) {
 			log("No effect.")
 		} else {
 			if (get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area) log(`Removed depot from ${format_area(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)}.`)
-			if (get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).troop_type) {
+			if (get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type) {
 				log(`Rallied`)
-				log_only(FRANCE, format_i(`1 ${get_troop_type_name(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).troop_type)}`))
+				log_only(FRANCE, format_i(`1 ${get_sp_type_name(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type)}`))
 				log_only(RUSSIA, format_i(`1 Exh. SP`))
 			}
 		}
@@ -10804,7 +10824,7 @@ P.receive_free_order = {
 // Per-event callback function (since passing a callback with L is not stable).
 function place_order_callback(card, area) {
 	if (card === C_CONFUSED_RETREAT)
-		return has_friendly_troop(G.active, area)
+		return has_friendly_sp(G.active, area)
 	else if (card === C_FLYING_COLUMNS)
 		return has_cossack_sp(area)
 	else if (card === C_CAVALRY_SCREENING)
@@ -10882,8 +10902,8 @@ P.opolchenie = {
 	area(area) {
 		push_undo()
 		logi(`${format_area(area)}`)
-		add_troop(RUSSIA, area, EXHAUSTED_INFANTRY, 2)
-		logii(`2 ${get_troop_type_name(EXHAUSTED_INFANTRY)}`)
+		add_sp(RUSSIA, area, EXHAUSTED_INFANTRY, 2)
+		logii(`2 ${get_sp_type_name(EXHAUSTED_INFANTRY)}`)
 		set_delete(L.areas, area)
 		if (L.areas.length === 0)
 			end()
@@ -10959,7 +10979,7 @@ function get_areas_that_could_execute_bagrations_retreat(destination) {
 	let areas = [ source ]
 
 	for (let area of get_all_adjacent_areas(source)) {
-		if (!has_russian_sp(area) || get_movable_sps_in_area(RUSSIA, source).every(troop_type => troop_type === 0))
+		if (!has_russian_sp(area) || get_movable_sps_in_area(RUSSIA, source).every(sp_type => sp_type === 0))
 			continue
 
 		let movable_sps = get_movable_sps_in_area(get_leader_location(L_BAGRATION), source)
@@ -11282,7 +11302,7 @@ function calculate_outflanking_strength(area) {
 	let count = 0
 	for (let entry of attacker.forces) {
 		if (entry.from !== get_battle_entry(area, null).outflanking)
-			for (let type of entry.troops)
+			for (let type of entry.sps)
 				if (type > 0) count += type
 	}
 	return count
@@ -11316,7 +11336,7 @@ function get_locations_with_leader(who) {
 	return result
 }
 
-P.garrison_troops = {
+P.garrison_sps = {
 	_begin() {
 		L.units_moved = 0
 		L.areas = get_areas_with_sps(RUSSIA).filter(area => !has_friendly_leader(RUSSIA, area) && is_area_in_supply(RUSSIA, area))
@@ -11328,12 +11348,12 @@ P.garrison_troops = {
 			if (L.selected_type === -1) {
 				prompt_card(C_GARRISON_TROOPS, `Select an SP to move.`)
 				for (let area of L.areas) {
-					for (let type of get_troop_types_at_area(G.active, area))
-						action_troop_alt(type, area)
+					for (let type of get_sp_types_at_area(G.active, area))
+						action_sp_alt(type, area)
 				}
 				button_pass()
 			} else {
-				V.prompt = `Select a destination for the ${get_troop_type_name(L.selected_type)} SP.`
+				V.prompt = `Select a destination for the ${get_sp_type_name(L.selected_type)} SP.`
 				for (let area of get_locations_with_leader(RUSSIA)) {
 					if (does_path_exist(RUSSIA, L.selected_area, area))
 						action_area(area)
@@ -11347,17 +11367,17 @@ P.garrison_troops = {
 			button_confirm()
 		}
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		L.selected_area = decode_troop_action_area(entry)
-		L.selected_type = decode_troop_action_type(entry)
+		L.selected_area = decode_sp_area(entry)
+		L.selected_type = decode_sp_type(entry)
 	},
 	area(area) {
 		push_undo()
-		move_troop(G.active, L.selected_area, area, L.selected_type, 1)
+		move_sp(G.active, L.selected_area, area, L.selected_type, 1)
 
 		log(`Moved from ${format_area(L.selected_area)}`)
-		logi(`1 ${get_troop_type_name(L.selected_type)}`)
+		logi(`1 ${get_sp_type_name(L.selected_type)}`)
 		logi(`to ${format_area(area)}`)
 
 		L.selected_area = -1
@@ -11415,8 +11435,8 @@ P.place_kutuzov = {
 	area(area) {
 		push_undo()
 		move_leader(L_KUTUZOV, area)
-		add_troop(RUSSIA, area, FRESH_INFANTRY, 1)
-		add_troop(RUSSIA, area, FRESH_COSSACK, 1)
+		add_sp(RUSSIA, area, FRESH_INFANTRY, 1)
+		add_sp(RUSSIA, area, FRESH_COSSACK, 1)
 
 		log(`Placed at ${format_area(area)}`)
 		logi(format_leader(L_KUTUZOV))
@@ -11431,7 +11451,7 @@ P.end_russian_disorganization_and_confusion = {
 	_begin() {
 		L.order = G.orders.findIndex(location => location === OUT_OF_PLAY)
 	},
-	inactive: "rally the troops",
+	inactive: "rally the sps",
 	prompt() {
 		V.prompt = `End of Russian Disorganization & Confusion: Add the removed Rally order to your pool.`
 		button_confirm()
@@ -11474,7 +11494,7 @@ P.the_finland_corps = {
 	},
 	area(area) {
 		push_undo()
-		add_troop(RUSSIA, area, FRESH_INFANTRY, 1)
+		add_sp(RUSSIA, area, FRESH_INFANTRY, 1)
 		logi(`${format_area(area)}`)
 		logii(`1 Infantry`)
 		if (--L.sps_to_place === 0)
@@ -11510,7 +11530,7 @@ P.treaty_of_bucharest = {
 			logi(`${format_area(area)}`)
 			logii(format_leader(L_CHICHAGOV))
 		} else {
-			add_troop(RUSSIA, area, FRESH_INFANTRY, 1)
+			add_sp(RUSSIA, area, FRESH_INFANTRY, 1)
 			if (!map_has(L.sp_log, area))
 				map_set(L.sp_log, area, 1)
 			else
@@ -11556,9 +11576,9 @@ P.may_play_flying_columns = function() {
 }
 
 function has_cossack_sp(area) {
-	if (!has_troop(area))
+	if (!has_sp(area))
 		return false
-	return get_area_troop_set(area).some(entry => is_cossack(decode_troop_entry_type(entry)))
+	return get_area_sp_set(area).some(entry => is_cossack(decode_sp_type(entry)))
 }
 
 P.flying_columns = script(`
@@ -11644,7 +11664,7 @@ P.may_play_city_ablaze = {
 		goto("city_ablaze", { card, area: L.area})
 	},
 	pass() {
-		if (!has_friendly_troop(RUSSIA, L.area) && has_friendly_depot(RUSSIA, L.area)) {
+		if (!has_friendly_sp(RUSSIA, L.area) && has_friendly_depot(RUSSIA, L.area)) {
 			goto("remove_depot", {area: L.area})
 		} else {
 			G.active = FRANCE
@@ -11710,7 +11730,7 @@ P.city_ablaze = {
 	done() {
 		card_box_end()
 		discard_or_remove_card(C_CITY_ABLAZE)
-		if (!has_friendly_troop(RUSSIA, L.area) && has_friendly_depot(RUSSIA, L.area)) {
+		if (!has_friendly_sp(RUSSIA, L.area) && has_friendly_depot(RUSSIA, L.area)) {
 			goto("remove_depot", {area: L.area})
 		} else {
 			G.active = FRANCE
@@ -11842,7 +11862,7 @@ function count_moving_sps() {
 function count_fresh_moving_sps() {
 	let count = 0
 	for (let type = 0; type < G.move.sps.length; ++type) {
-		if (is_troop_type_fresh(type))
+		if (is_sp_type_fresh(type))
 			count += G.move.sps[type]
 	}
 	return count
@@ -11851,7 +11871,7 @@ function count_fresh_moving_sps() {
 function count_exhausted_moving_sps() {
 	let count = 0
 	for (let type = 0; type < G.move.sps.length; ++type) {
-		if (is_troop_type_exhausted(type))
+		if (is_sp_type_exhausted(type))
 			count += G.move.sps[type]
 	}
 	return count
@@ -11974,21 +11994,21 @@ P.exhausting_march_exhaust = {
 	prompt() {
 		V.prompt = `Exhaust a fresh SP at ${format_area(G.move.path[G.move.path.length - 1])}.`
 		for (let type = 0; type < G.move.sps.length; ++type) {
-			if (is_troop_type_fresh(type) && G.move.sps[type] > 0)
-				action_troop_alt(type, G.move.path[G.move.path.length - 1], HALF_STRENGTH, G.move.path[G.move.path.length - 2])
+			if (is_sp_type_fresh(type) && G.move.sps[type] > 0)
+				action_sp_alt(type, G.move.path[G.move.path.length - 1], HALF_STRENGTH, G.move.path[G.move.path.length - 2])
 		}
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
-		let area = decode_troop_action_area(entry)
-		let strength = decode_troop_action_strength(entry)
-		let from = decode_troop_action_from(entry)
+		let type = decode_sp_type(entry)
+		let area = decode_sp_area(entry)
+		let strength = decode_sp_strength(entry)
+		let from = decode_sp_from(entry)
 
 		exhaust_sp(G.active, area, type, 1, true, true, strength, from, has_battle(area))
 
 		log("Exhausted")
-		logi(`1 ${get_troop_type_name(type)}`)
+		logi(`1 ${get_sp_type_name(type)}`)
 
 		end()
 	}
@@ -12001,21 +12021,21 @@ P.exhausting_march_eliminate = {
 	prompt() {
 		V.prompt = `Eliminate an exhausted SP at ${format_area(G.move.path[G.move.path.length - 1])} — ${L.losses_remaining} remaining.`
 		for (let type = 0; type < G.move.sps.length; ++type) {
-			if (is_troop_type_exhausted(type) && G.move.sps[type] > 0)
-				action_troop_alt(type, G.move.path[G.move.path.length - 1], HALF_STRENGTH, G.move.path[G.move.path.length - 2])
+			if (is_sp_type_exhausted(type) && G.move.sps[type] > 0)
+				action_sp_alt(type, G.move.path[G.move.path.length - 1], HALF_STRENGTH, G.move.path[G.move.path.length - 2])
 		}
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
-		let area = decode_troop_action_area(entry)
-		let strength = decode_troop_action_strength(entry)
-		let from = decode_troop_action_from(entry)
+		let type = decode_sp_type(entry)
+		let area = decode_sp_area(entry)
+		let strength = decode_sp_strength(entry)
+		let from = decode_sp_from(entry)
 
 		log("Eliminated")
-		logi(`1 ${get_troop_type_name(type)}`)
+		logi(`1 ${get_sp_type_name(type)}`)
 
-		eliminate_sp(G.active, area, type, 1, true, true, strength, from, has_battle(area))
+		eliminate_sp_new(G.active, area, type, 1, true, true, strength, from, has_battle(area))
 
 		if (--L.losses_remaining === 0)
 			end()
@@ -12041,7 +12061,7 @@ P.unexpected_retreat_evade = {
 	_begin() {
 		L.areas = []
 		for (let area of map_keys(G.battles))
-			if (has_troop(area) && has_austrian_sp(area) && has_russian_sp(area))
+			if (has_sp(area) && has_austrian_sp(area) && has_russian_sp(area))
 				set_add(L.areas, area)
 		L.did_evade = false
 	},
@@ -12630,15 +12650,15 @@ P.exhausted_horses_exhaust = {
 		V.prompt = `Exhaust a fresh Cavalry SP.`
 		if (L.areas.length <= 5)
 			V.prompt += ` (${join_array_with_or(L.areas.map(format_area))})`
-		L.areas.forEach(area => action_troop_alt(FRESH_CAVALRY, area))
+		L.areas.forEach(area => action_sp_alt(FRESH_CAVALRY, area))
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
-		let area = decode_troop_action_area(entry)
+		let type = decode_sp_type(entry)
+		let area = decode_sp_area(entry)
 		exhaust_sp(FRANCE, area, type)
 		logi(`${format_area(area)}`)
-		log_masked(FRANCE, format_ii(`1 ${get_troop_type_name(type)}`), format_ii(`1 fresh SP`))
+		log_masked(FRANCE, format_ii(`1 ${get_sp_type_name(type)}`), format_ii(`1 fresh SP`))
 		end()
 	}
 }
@@ -12653,15 +12673,15 @@ P.exhausted_horses_eliminate = {
 		V.prompt = `Eliminate exhausted Cavalry SPs — ${L.num_sps_to_eliminate} remaining.`
 		if (L.areas.length <= 5)
 			V.prompt += ` (${join_array_with_or(L.areas.map(format_area))})`
-		L.areas.forEach(area => action_troop_alt(EXHAUSTED_CAVALRY, area))
+		L.areas.forEach(area => action_sp_alt(EXHAUSTED_CAVALRY, area))
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
-		let area = decode_troop_action_area(entry)
-		eliminate_troop(FRANCE, area, type)
+		let type = decode_sp_type(entry)
+		let area = decode_sp_area(entry)
+		eliminate_sp(FRANCE, area, type)
 		logi(`${format_area(area)}`)
-		log_masked(FRANCE, format_ii(`1 ${get_troop_type_name(type)}`), format_ii(`1 Exh. SP`))
+		log_masked(FRANCE, format_ii(`1 ${get_sp_type_name(type)}`), format_ii(`1 Exh. SP`))
 
 		if (--L.num_sps_to_eliminate === 0) {
 			end()
@@ -12698,7 +12718,7 @@ P.disease_and_starvation_eliminate = {
 	_begin() {
 		log("Eliminated")
 		L.num_sps_to_eliminate = 4
-		L.areas = filter_areas(area => get_devastation(area) >= 2 && has_friendly_troop(FRANCE, area))
+		L.areas = filter_areas(area => get_devastation(area) >= 2 && has_friendly_sp(FRANCE, area))
 	},
 	prompt() {
 		if (L.areas.length > 0) {
@@ -12721,11 +12741,11 @@ P.disease_and_starvation_eliminate = {
 		} else {
 			logi(`${format_area(area)}`)
 			log_only(RUSSIA, format_ii(`${count_num_exhausted_sps(FRANCE, area)} Exh. SPs`))
-			// get_area_troop_set(area).forEach(entry => console.log([decode_troop_entry_who(entry), decode_troop_entry_type(entry), decode_troop_entry_num(entry)]))
+			// get_area_sp_set(area).forEach(entry => console.log([decode_sp_player(entry), decode_sp_type(entry), decode_sp_num(entry)]))
 			get_all_exhausted_sp_types(FRANCE, area).forEach((type) => {
-				log_only(FRANCE, format_ii(`${count_num_sps_of_type(FRANCE, type, area)} ${get_troop_type_name(type)}`))
+				log_only(FRANCE, format_ii(`${count_num_sps_of_type(FRANCE, type, area)} ${get_sp_type_name(type)}`))
 				L.num_sps_to_eliminate -= count_num_sps_of_type(FRANCE, type, area)
-				eliminate_troop(FRANCE, area, type, count_num_sps_of_type(FRANCE, type, area))
+				eliminate_sp(FRANCE, area, type, count_num_sps_of_type(FRANCE, type, area))
 			})
 		}
 		if (L.num_sps_to_eliminate === 0)
@@ -12747,12 +12767,12 @@ P.disease_and_starvation_select_losses = {
 	prompt() {
 		prompt_card(C_DISEASE_AND_STARVATION, `Eliminate ${L.count} exhausted SPs at ${format_area(L.area)}.`)
 		for (let type of get_all_exhausted_sp_types(G.active, L.area))
-			action_troop_alt(type, L.area)
+			action_sp_alt(type, L.area)
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
-		eliminate_troop(G.active, L.area, type)
+		let type = decode_sp_type(entry)
+		eliminate_sp(G.active, L.area, type)
 		if (!map_has(L.eliminated, type))
 			map_set(L.eliminated, type, 1)
 		else
@@ -12760,8 +12780,8 @@ P.disease_and_starvation_select_losses = {
 
 		if (--L.count === 0) {
 			logi(`${format_area(L.area)}`)
-			map_for_each(L.eliminated, (troop_type, num) => {
-				log_only(FRANCE, format_ii(`${num} ${get_troop_type_name(troop_type)}`))
+			map_for_each(L.eliminated, (sp_type, num) => {
+				log_only(FRANCE, format_ii(`${num} ${get_sp_type_name(sp_type)}`))
 			})
 			end()
 		}
@@ -12837,11 +12857,11 @@ P.treacherous_allies_betray = {
 			eliminate_leader(L_SCHWARZENBERG)
 		}
 
-		for (let type of get_troop_types_at_area(FRANCE, G.current_battle)) {
+		for (let type of get_sp_types_at_area(FRANCE, G.current_battle)) {
 			if (type >= FRESH_PRUSSIAN_INFANTRY) {
 				let count = count_num_sps_of_type(FRANCE, type, G.current_battle)
-				logi(`${count} ${get_troop_type_name(type)}`)
-				eliminate_troop(FRANCE, G.current_battle, type, count)
+				logi(`${count} ${get_sp_type_name(type)}`)
+				eliminate_sp(FRANCE, G.current_battle, type, count)
 			}
 		}
 
@@ -13002,7 +13022,7 @@ P.do_cossack_patrols = {
 			} else if (!L.has_eliminated_sp && has_exhausted_sp(G.active, L.selected_area)) {
 				prompt_card(C_COSSACK_PATROLS, `Eliminate 1 Exhausted SP at ${format_area(L.selected_area)}.`)
 				for (let type of get_all_exhausted_sp_types(G.active, L.selected_area))
-					action_troop_alt(type, L.selected_area)
+					action_sp_alt(type, L.selected_area)
 			} else {
 				prompt_card(C_COSSACK_PATROLS, `Remove Forage orders from ${format_area(L.selected_area)}.`)
 				get_orders_at_area(G.active, L.selected_area).filter(order => get_order_type(order) === FORAGE).forEach(action_order)
@@ -13017,12 +13037,12 @@ P.do_cossack_patrols = {
 		L.selected_area = area
 		logi(format_area(area))
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
-		eliminate_troop(G.active, L.selected_area, type)
+		let type = decode_sp_type(entry)
+		eliminate_sp(G.active, L.selected_area, type)
 		log_only(RUSSIA, format_ii(`1 Exh. SP`))
-		log_only(FRANCE, format_ii(`1 ${get_troop_type_name(type)}`))
+		log_only(FRANCE, format_ii(`1 ${get_sp_type_name(type)}`))
 		if (!has_order_of_type(G.active, FORAGE, L.selected_area)) {
 			set_delete(L.areas, L.selected_area)
 			L.selected_area = -1
@@ -13194,7 +13214,7 @@ P.polish_support_place_infantry = {
 	},
 	area(area) {
 		push_undo()
-		add_troop(FRANCE, area, FRESH_INFANTRY, 2)
+		add_sp(FRANCE, area, FRESH_INFANTRY, 2)
 		log(`Placed at ${format_area(area)}`)
 		logi(`2 Infantry`)
 		end()
@@ -13459,10 +13479,10 @@ P.davout_takes_command = {
 	area(area) {
 		push_undo()
 		move_leader(L_DAVOUT, area)
-		add_troop(FRANCE, area, FRESH_INFANTRY, 1)
+		add_sp(FRANCE, area, FRESH_INFANTRY, 1)
 		log(`Placed at ${format_area(area)}`)
 		logi(format_leader(L_DAVOUT))
-		logi(1 + " " + get_troop_type_name(FRESH_INFANTRY))
+		logi(1 + " " + get_sp_type_name(FRESH_INFANTRY))
 		goto("event_done", { card: C_DAVOUT_TAKES_COMMAND })
 	}
 }
@@ -13492,7 +13512,7 @@ P.bring_event_reinforcements = {
 	},
 	area(area) {
 		push_undo()
-		add_troop(FRANCE, area, FRESH_INFANTRY, L.count)
+		add_sp(FRANCE, area, FRESH_INFANTRY, L.count)
 		log(`Placed at ${format_area(area)}`)
 		logi(`${L.count} Infantry`)
 		goto("event_done", { card: L.card })
@@ -13729,7 +13749,7 @@ P.good_leadership_move_leader = {
 	// L.leader
 	prompt() {
 		V.prompt = `Select a destination to move ${format_leader(L.leader)}.`
-		filter_areas(area => has_friendly_troop(FRANCE, area) && area !== get_leader_location(L.leader)).forEach(action_area)
+		filter_areas(area => has_friendly_sp(FRANCE, area) && area !== get_leader_location(L.leader)).forEach(action_area)
 	},
 	area(area) {
 		push_undo()
@@ -13946,16 +13966,16 @@ P.eugenes_iv_corps = function() {
 
 // FR #37: Poniatowski's V Corps
 function is_exhausted_infantry(type) {
-	return is_infantry(type) && is_troop_type_exhausted(type)
+	return is_infantry(type) && is_sp_type_exhausted(type)
 }
 
 function count_num_exhausted_infantry(who, area) {
-	if (!has_troop(area)) return 0
+	if (!has_sp(area)) return 0
 
 	let count = 0
-	for (let entry of get_area_troop_set(area, null)) {
-		if ((decode_troop_entry_who(entry) === who) && is_exhausted_infantry(decode_troop_entry_type(entry)))
-			count += decode_troop_entry_num(entry)
+	for (let entry of get_area_sp_set(area, null)) {
+		if ((decode_sp_player(entry) === who) && is_exhausted_infantry(decode_sp_type(entry)))
+			count += decode_sp_num(entry)
 	}
 	return count
 }
@@ -13988,20 +14008,20 @@ P.poniatowskis_v_corps = {
 			prompt_card(C_PONIATOWSKIS_V_CORPS, `Rally exhausted Infantry in the moving force: ${L.count} remaining.`)
 			for (let type = 0; type < G.move.sps.length; ++type) {
 				if (is_exhausted_infantry(type) && G.move.sps[type] > 0)
-					action_troop_alt(type, G.move.path[G.move.path.length - 1], FULL_STRENGTH, POOL, 1)
+					action_sp_alt(type, G.move.path[G.move.path.length - 1], FULL_STRENGTH, POOL, 1)
 			}
 		}
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
-		let area = decode_troop_action_area(entry)
+		let type = decode_sp_type(entry)
+		let area = decode_sp_area(entry)
 
-		rally_troop(G.active, area, type)
+		rally_sp(G.active, area, type)
 		G.move.sps[type]--
 		G.move.sps[type - 1]++
 
-		logii(`1 ${get_troop_type_name(type)}`)
+		logii(`1 ${get_sp_type_name(type)}`)
 		if (--L.count === 0)
 			goto("event_done", { card: C_PONIATOWSKIS_V_CORPS })
 	},
@@ -14082,7 +14102,7 @@ P.much_needed_victuals = {
 		} else if (L.num_sps_rallied < 2 && count_num_exhausted_infantry(FRANCE, L.selected_area) > 0) {
 			V.prompt = `Rally ${2 - L.num_sps_rallied} exhausted Infantry at ${format_area(L.selected_area)}.`
 			for (let type of get_all_exhausted_sp_types(FRANCE, L.selected_area))
-				action_troop_alt(type, L.selected_area)
+				action_sp_alt(type, L.selected_area)
 		} else {
 			prompt_card(C_MUCH_NEEDED_VICTUALS, `Attrition will not be checked at ${format_area(L.selected_area)}`)
 			button_confirm()
@@ -14100,11 +14120,11 @@ P.much_needed_victuals = {
 		push_undo()
 		end()
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
-		rally_troop(FRANCE, L.selected_area, type)
-		logi(`1 ${get_troop_type_name(type)}`)
+		let type = decode_sp_type(entry)
+		rally_sp(FRANCE, L.selected_area, type)
+		logi(`1 ${get_sp_type_name(type)}`)
 		++L.num_sps_rallied
 	},
 	confirm() {
@@ -14204,18 +14224,18 @@ P.apply_tough_rearguard = {
 		if (has_fresh_sp(G.active, L.area)) {
 			prompt_card(C_TOUGH_REARGUARD, `Exhaust an SP at ${format_area(L.area)}.`)
 			for (let type of get_all_fresh_sp_types(G.active, L.area))
-				action_troop_alt(type, L.area)
+				action_sp_alt(type, L.area)
 		} else {
 			prompt_card(C_TOUGH_REARGUARD, `No fresh SPs to exhaust.`)
 			button_confirm()
 		}
 	},
-	troop(entry) {
+	sp(entry) {
 		push_undo()
-		let type = decode_troop_action_type(entry)
+		let type = decode_sp_type(entry)
 		exhaust_sp(G.active, L.area, type)
 		logi("Exhausted")
-		log_only(RUSSIA, format_ii(`1 Russian ${get_troop_type_name(type)}`))
+		log_only(RUSSIA, format_ii(`1 Russian ${get_sp_type_name(type)}`))
 		log_only(FRANCE, format_ii(`1 Russian SP`))
 		goto("event_done", { card: C_TOUGH_REARGUARD })
 	},
@@ -14244,9 +14264,9 @@ P.courage_of_desperation_rally = {
 		if (has_exhausted_sp(G.active, G.current_battle)) {
 			prompt_card(C_COURAGE_OF_DESPERATION, `Immediately Rally 1 exhausted SP.`)
 			get_player_battle_data(G.active, G.current_battle).forces.forEach(force => {
-				for (let type = 0; type < force.troops.length; ++type) {
-					if (force.troops[type] > 0 && is_troop_type_exhausted(type))
-						action_troop_alt(type, G.current_battle, force.strength, force.from)
+				for (let type = 0; type < force.sps.length; ++type) {
+					if (force.sps[type] > 0 && is_sp_type_exhausted(type))
+						action_sp_alt(type, G.current_battle, force.strength, force.from)
 				}
 			})
 		} else {
@@ -14255,13 +14275,13 @@ P.courage_of_desperation_rally = {
 		}
 
 	},
-	troop(entry) {
-		let type = decode_troop_action_type(entry)
-		let strength = decode_troop_action_strength(entry)
-		let from = decode_troop_action_from(entry)
+	sp(entry) {
+		let type = decode_sp_type(entry)
+		let strength = decode_sp_strength(entry)
+		let from = decode_sp_from(entry)
 
 		battle_rally_sp(G.active, G.current_battle, type, strength, from)
-		log_masked(FRANCE, `1 ${get_troop_type_name(type)}`, `1 Exh. SP`)
+		log_masked(FRANCE, `1 ${get_sp_type_name(type)}`, `1 Exh. SP`)
 		end()
 	},
 	next() {
@@ -14491,82 +14511,23 @@ function action_connection(from, to) {
 	action("connection", find_connection(from, to))
 }
 
-function button_troop(type) {
-	action("troop_button", type)
+function button_sp(type) {
+	action("sp_button", type)
 }
 
 /*
-	Since multiple SP counters with the same type but with different characteristics may be present in the same area, we bitpack additional information into the troop action's argument to identify the correct counter.
+	Since multiple SP counters with the same type but with different characteristics may be present in the same area, we bitpack additional information into the sp action's argument to identify the correct counter.
 	This action format modifies the standard world.js framework's action callback in the client.
-
-	23 bits
-	1 bit 	- is the piece moving?
-	1 bit 	- player 						(RUSSIA or FRANCE)
-	4 bits 	- troop type 					(from FRESH_INFANTRY (0) to EXHAUSTED_AUSTRIAN_INFANTRY (11))
-	1 bit 	- strength 						(HALF_STRENGTH, FULL_STRENGTH)
-	8 bits 	- area 						(needs to accomodate at least 157)
-	8 bit 	- area from which the SP entered 		(also needs to accomodate at least 157)
 */
 
-const ACTION_TROOP_MOVING_MASK = 1 << 22
-const ACTION_TROOP_PLAYER_MASK = 1 << 21
-const ACTION_TROOP_TYPE_MASK = 1966080
-const ACTION_TROOP_STRENGTH_MASK = 1 << 16
-const ACTION_TROOP_AREA_MASK = 65280
-const ACTION_TROOP_FROM_MASK = 255
-
-const ACTION_TROOP_MOVING_SHIFT = 22
-const ACTION_TROOP_PLAYER_SHIFT = 21
-const ACTION_TROOP_TYPE_SHIFT = 17
-const ACTION_TROOP_STRENGTH_SHIFT = 16
-const ACTION_TROOP_AREA_SHIFT = 8
-const ACTION_TROOP_FROM_SHIFT = 0
-
-function package_troop(player, type, strength, area, from, move) {
-	let m = move << ACTION_TROOP_MOVING_SHIFT
-	let p = player << ACTION_TROOP_PLAYER_SHIFT
-	let t = type << ACTION_TROOP_TYPE_SHIFT
-	let s = strength << ACTION_TROOP_STRENGTH_SHIFT
-	let a = area << ACTION_TROOP_AREA_SHIFT
-	let f = from << ACTION_TROOP_FROM_SHIFT
-
-	return m + p + t + s + a + f
-}
-
-function decode_troop_action_moving(entry) {
-	return (entry & ACTION_TROOP_MOVING_MASK) >> ACTION_TROOP_MOVING_SHIFT
-}
-
-// Seems good to have for consistency
-// eslint-disable-next-line no-unused-vars
-function decode_troop_action_player(entry) {
-	return (entry & ACTION_TROOP_PLAYER_MASK) >> ACTION_TROOP_PLAYER_SHIFT
-}
-
-function decode_troop_action_type(entry) {
-	return (entry & ACTION_TROOP_TYPE_MASK) >> ACTION_TROOP_TYPE_SHIFT
-}
-
-function decode_troop_action_strength(entry) {
-	return (entry & ACTION_TROOP_STRENGTH_MASK) >> ACTION_TROOP_STRENGTH_SHIFT
-}
-
-function decode_troop_action_area(entry) {
-	return (entry & ACTION_TROOP_AREA_MASK) >> ACTION_TROOP_AREA_SHIFT
-}
-
-function decode_troop_action_from(entry) {
-	return (entry & ACTION_TROOP_FROM_MASK) >> ACTION_TROOP_FROM_SHIFT
-}
-
-function action_troop_alt(type, area = 0, strength = FULL_STRENGTH, from = POOL, move = 0) {
+function action_sp_alt(type, area = 0, strength = FULL_STRENGTH, from = POOL, move = 0) {
 	let player
 	if (Array.isArray(G.active))
 		player = R
 	else
 		player = G.active
 
-	action("troop", package_troop(player, type, strength, area, from, move))
+	action("sp", package_sp_action(player, type, strength, area, from, move))
 }
 
 // === LOG FORMATTING ===
@@ -14684,17 +14645,17 @@ function log_masked(who, text1, text2) {
 // NOTE: Only runs in the fuzzer!
 
 function on_assert() {
-	assert_troop_entries()
+	assert_sp_entries()
 	// TODO
 	// assert_lone_leaders()
 }
 
 // Test invariant for G.sps: Each area has exactly one entry for each player & type.
-function assert_troop_entries() {
+function assert_sp_entries() {
 	map_for_each(G.sps, (area, entries) => {
 		for (let entry of entries) {
-			if (array_count(entries, item => (decode_troop_entry_who(item) === decode_troop_entry_who(entry)) && (decode_troop_entry_type(item) === decode_troop_entry_type(entry))) > 1)
-				throw new Error(`Multiple entries of ${ROLES[decode_troop_entry_who(entry)]} ${get_troop_type_name(decode_troop_entry_type(entry))} found at (${area}).`)
+			if (array_count(entries, item => (decode_sp_player(item) === decode_sp_player(entry)) && (decode_sp_type(item) === decode_sp_type(entry))) > 1)
+				throw new Error(`Multiple entries of ${ROLES[decode_sp_player(entry)]} ${get_sp_type_name(decode_sp_type(entry))} found at (${area}).`)
 		}
 	})
 }
@@ -14707,7 +14668,7 @@ function assert_lone_leaders() {
 
 	for (let who = RUSSIA; who <= FRANCE; ++who) {
 		for (let leader = get_first_leader(who); leader <= get_last_leader(who); ++leader) {
-			if (is_leader_on_map(leader) && !has_friendly_troop(who, get_leader_location(leader)))
+			if (is_leader_on_map(leader) && !has_friendly_sp(who, get_leader_location(leader)))
 				throw new Error(`${get_leader_short_name(leader)} is alone without SPs at ${get_area_name(get_leader_location(leader))}.`)
 		}
 	}
