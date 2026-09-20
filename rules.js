@@ -1252,7 +1252,7 @@ function add_order_of_type_from_pool(who, type, where) {
 
 	G.sps uses Player, Type, Num
 	G.moved uses From, Strength, Player, Type, Num
-	Troop action uses the entire field except Num
+	SP action uses the entire field except Num
 */
 
 const SP_MOVING_SHIFT 	= 28
@@ -1326,7 +1326,7 @@ function package_sp_moved(player, from, strength, type, num) {
 	return f | s | p | t | n
 }
 
-// Troop action
+// SP action
 function package_sp_action(player, type, strength, area, from, moving) {
 	let m = moving << SP_MOVING_SHIFT
 	let a = area << SP_AREA_SHIFT
@@ -1512,6 +1512,94 @@ function on_view() {
 	V.battles = G.battles // filter_battles(R)
 	V.moved = filter_moved(R)
 	V.move = G.move
+}
+
+// === ACTION/BUTTON WRAPPER FUNCTIONS ===
+function button_draw(enabled = true) {
+	button("draw", enabled)
+}
+
+function button_discard(enabled = true) {
+	button("discard", enabled)
+}
+
+function button_pass(enabled = true) {
+	 button("pass", enabled)
+}
+
+function button_next(enabled = true) {
+	button("next", enabled)
+}
+
+function button_done(enabled = true) {
+	button("done", enabled)
+}
+function button_confirm(enabled = true) {
+	button("confirm", enabled)
+}
+
+function button_undo(enabled = true) {
+	button("undo", enabled)
+}
+
+function button_roll(enabled = true) {
+	button("roll", enabled)
+}
+
+function action_card(c) {
+	action("card", c)
+}
+
+function action_area(area) {
+	action("area", area)
+}
+
+function action_initiative_marker() {
+	action("initiative", 0)
+}
+
+function action_vp_marker() {
+	action("vp", 0)
+}
+
+function action_leader(leader) {
+	action("leader", leader)
+}
+
+function button_leader(leader) {
+	action("leader_button", leader)
+}
+
+function action_order(order) {
+	action("order", order)
+}
+
+function action_depot(depot) {
+	action("depot", depot)
+}
+
+function action_connection(from, to) {
+	action("connection", find_connection(from, to))
+}
+
+function button_sp(type) {
+	action("sp_button", type)
+}
+
+/*
+	Since multiple SP counters with the same type but with different characteristics may be present in the same area, we bitpack additional information into the sp action's argument to identify the correct counter.
+	This action format modifies the standard world.js framework's action callback in the client.
+	See sp.js for the modified handling of SPs on the client.
+*/
+
+function action_sp_alt(type, area = 0, strength = FULL_STRENGTH, from = POOL, move = 0) {
+	let player
+	if (Array.isArray(G.active))
+		player = R
+	else
+		player = G.active
+
+	action("sp", package_sp_action(player, type, strength, area, from, move))
 }
 
 // === FRAMEWORK EXTENSIONS ===
@@ -2338,25 +2426,23 @@ function place_card_at_the_top_of_the_deck(card) {
 // === MAIN ===
 P.main = script(`
 	for G.turn in G.start_turn to G.end_turn {
-		eval { start_turn(G.turn) }
+		call start_turn
 		if (is_resource_turn(G.turn)) {
 			call resources_phase
 		} else {
 			call turn
 		}
 	}
-	goto finish_game
+	call finish_game
 `)
 
-// Called in main script
-// eslint-disable-next-line no-unused-vars
-function start_turn(turn) {
-	if (is_resource_turn(turn))
-		log_h1(`${get_month_name(G.turn)} – Resources Phase`, get_season(turn))
+P.start_turn = function() {
+	if (is_resource_turn(G.turn))
+		log_h1(`${get_month_name(G.turn)} – Resources Phase`, get_season(G.turn))
 	else
-		log_h1(`${get_month_name(G.turn)} ${get_turn_name(G.turn)}`, get_season(turn))
+		log_h1(`${get_month_name(G.turn)} ${get_turn_name(G.turn)}`, get_season(G.turn))
 
-	if (turn === JUNE_5) {
+	if (G.turn === JUNE_5) {
 		log_h5("French Logistic Preparations")
 		log_italic(`France receives a free Forced March and Place Depot order. As an exception to the rules, this Place Depot order may be placed in ${format_area(S_KOVNO)}.`)
 	}
@@ -5967,7 +6053,8 @@ P.remove_depot = {
 	card(card) {
 		push_undo()
 		discard_card(card)
-		log_masked(G.active, `Discarded ${format_card(card)}.`, `${ROLES[G.active]} discarded a card.`)
+		log_masked(G.active, `Discarded`, `${ROLES[G.active]} discarded a card.`)
+		log_only(G.active, format_i(format_card(card)))
 		L.has_discarded = true
 	},
 	pass() {
@@ -6155,21 +6242,25 @@ P.cavalry_patrols = {
 }
 
 P.cavalry_patrols_reveal = function() {
-	log(`Revealed ${format_area(L.selected_area)}:`)
+	log(`Revealed ${format_area(L.area)}:`)
+
 	logi("Leaders")
-	for (let leader of get_leaders_at_area(G.active, L.selected_area))
+	if (!has_friendly_leader(enemy(G.active), L.area))
+		logii("No leaders.")
+	for (let leader of get_leaders_at_area(enemy(G.active), L.area))
 		logii(format_leader(leader))
+
 	logi("SPs")
-	for (let entry of get_area_sp_set(L.selected_area, null)) {
-		if (decode_sp_player(entry) === enemy(G.active))
-			logii(`${decode_sp_num(entry)} ${get_sp_type_name(decode_sp_type(entry))}`)
-	}
+	for (let type of get_sp_types_at_area(enemy(G.active), L.area))
+		logii(`${count_num_sps_of_type(enemy(G.active), type, L.area)} ${get_sp_type_name(type)}`)
+
 	logi("Orders")
 	if (get_orders_at_area(enemy(G.active), L.selected_area).length === 0)
 		logii("No orders.")
 	else
-		for (let order of get_orders_at_area(enemy(G.active), L.selected_area))
+		for (let order of get_orders_at_area(enemy(G.active), L.area))
 			logii(`${get_order_type_name(get_order_type(order))}`)
+
 	end()
 }
 
@@ -11336,7 +11427,7 @@ function get_locations_with_leader(who) {
 	return result
 }
 
-P.garrison_sps = {
+P.garrison_troops = {
 	_begin() {
 		L.units_moved = 0
 		L.areas = get_areas_with_sps(RUSSIA).filter(area => !has_friendly_leader(RUSSIA, area) && is_area_in_supply(RUSSIA, area))
@@ -14441,93 +14532,6 @@ function join_array_with_and(array) {
 
 function join_array_with_or(array) {
 	return join_array_with(array, "or")
-}
-
-// === ACTION/BUTTON WRAPPER FUNCTIONS ===
-function button_draw(enabled = true) {
-	button("draw", enabled)
-}
-
-function button_discard(enabled = true) {
-	button("discard", enabled)
-}
-
-function button_pass(enabled = true) {
-	 button("pass", enabled)
-}
-
-function button_next(enabled = true) {
-	button("next", enabled)
-}
-
-function button_done(enabled = true) {
-	button("done", enabled)
-}
-function button_confirm(enabled = true) {
-	button("confirm", enabled)
-}
-
-function button_undo(enabled = true) {
-	button("undo", enabled)
-}
-
-function button_roll(enabled = true) {
-	button("roll", enabled)
-}
-
-function action_card(c) {
-	action("card", c)
-}
-
-function action_area(area) {
-	action("area", area)
-}
-
-function action_initiative_marker() {
-	action("initiative", 0)
-}
-
-function action_vp_marker() {
-	action("vp", 0)
-}
-
-function action_leader(leader) {
-	action("leader", leader)
-}
-
-function button_leader(leader) {
-	action("leader_button", leader)
-}
-
-function action_order(order) {
-	action("order", order)
-}
-
-function action_depot(depot) {
-	action("depot", depot)
-}
-
-function action_connection(from, to) {
-	action("connection", find_connection(from, to))
-}
-
-function button_sp(type) {
-	action("sp_button", type)
-}
-
-/*
-	Since multiple SP counters with the same type but with different characteristics may be present in the same area, we bitpack additional information into the sp action's argument to identify the correct counter.
-	This action format modifies the standard world.js framework's action callback in the client.
-*/
-
-function action_sp_alt(type, area = 0, strength = FULL_STRENGTH, from = POOL, move = 0) {
-	let player
-	if (Array.isArray(G.active))
-		player = R
-	else
-		player = G.active
-
-	action("sp", package_sp_action(player, type, strength, area, from, move))
 }
 
 // === LOG FORMATTING ===
