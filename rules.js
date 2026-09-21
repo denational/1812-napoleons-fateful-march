@@ -5014,8 +5014,8 @@ P.determine_who_goes_first = {
 	prompt() {
 		if (L.first_player === -1) {
 			V.prompt = `Select who will execute the first ${get_order_type_name(L.type)} order this turn.`
-			button("russia", get_executable_orders(RUSSIA, L.type).length > 0)
-			button("france", get_executable_orders(FRANCE, L.type).length > 0)
+			button("russia")
+			button("france")
 		} else {
 			V.prompt = `You chose ${ROLES[L.first_player]} to execute the first ${get_order_type_name(L.type)} order.`
 			button_confirm()
