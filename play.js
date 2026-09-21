@@ -408,7 +408,7 @@ function on_update() {
 	}
 
 	if (V.played_cards || V.committed_cards || V.num_enemy_committed_cards > 0) {
-		update_panel_show("table", 0, (V.played_cards && V.played_cards[R].length > 0) || (V.committed_cards && V.committed_cards.length > 0) || (V.num_enemy_committed_cards > 0))
+		update_panel_show("table", 0, (V.played_cards && V.played_cards[R] && V.played_cards[R].length > 0) || (V.committed_cards && V.committed_cards.length > 0) || (V.num_enemy_committed_cards > 0))
 		if (V.played_cards) {
 			for (let card of V.played_cards.flat(1))
 				populate("table", 0, "card", card)
