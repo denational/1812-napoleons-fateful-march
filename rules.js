@@ -4633,7 +4633,7 @@ function can_change_order(leader, current_type) {
 		return can_change_order_to(L_DAVOUT, current_type, MARCH, area)
 	// May discard a card to place an Evade order during that order´s step.
 	case L_SCHWARZENBERG:
-		return can_discard_card_to_place(L_SCHWARZENBERG, current_type, EVADE)
+		return has_battle(area) && can_discard_card_to_place(L_SCHWARZENBERG, current_type, EVADE)
 	}
 }
 
