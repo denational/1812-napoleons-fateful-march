@@ -4,63 +4,34 @@
 <link rel="stylesheet" href="/style.css">
 
 <style>
-    h1 {
-        text-align: center;
-    }
-    h2 {
-        font-weight: normal;
-        font-style: italic;
-    }
-    h3 {
-        font-style: italic;
-    }
-    body {
-        max-width:50rem;
-        margin:0 auto;
-    }
+	h1 {
+		text-align: center;
+    	}
+    	h2 {
+        	font-weight: normal;
+        	font-style: italic;
+    	}
+    	h3 {
+        	font-style: italic;
+    	}
+    	body {
+        	max-width:50rem;
+        	margin:0 auto;
+    	}
 </style>
 
 <h1>
-    1812: Napoleon's Fateful March &#x2014; Implementation Notes
+	1812: Napoleon's Fateful March &#x2014; Implementation Notes
 </h1>
-<h2> New Living Rules Version </h2>
-
-<p style="color:red; font-style: italic;"> This implementation follows the upcoming version 1.3 of the living rules, which is not yet updated on the about page.</p>
-<ul>
-    <li> Whenever a Force is eliminated (including by attrition losses or from having all of its SPs in an area with fresh enemy SPs), the Initiative marker is shifted in the other player's favor.
-        <ul>
-            <li><b>Exception:</b> Eliminated force that consisted entirely of Cossacks and/or were under Evade orders are exempt from this rule.
-        </ul>
-    <li> Exception to Pinning: If the pinning force consists of a single SP with no leader, the moving force <i>may enter</i> the area from which the pinning force entered, as long as there is at least 1 SP remaining in the pinned area.
-    <li> Optional rules added:
-        <ul>
-            <li>No <i>Unsuccessful Disengagement</i> (FR #7) during Turn 1.
-                <ul>
-                    <li>During setup of all scenarios that use the June setup this card is placed in the French discard before players draw cards.
-                </ul>
-                <li>Increased French Command Capability.
-                <ul>
-                    <li>During the Order Selection step of every turn during Summer months where Napoleon is in supply the French player receive a free 'Cavalry Patrols' order that must be placed on Napoleon's area.
-                </ul>
-            <li>Russian Disorganization and Confusion 
-                <ul>
-                    <li>Remove one of the Russian 'Rally' order blocks from the game at the start of the game so they only have 1 such order available. 
-                    <li>The removed 'Rally' order block is returned to the game upon Russian play of <i>Kutuzov Appointed</i> (RU #16) and is available as normal from then on – even if Kutuzov is later eliminated.
-                    <li><b>Exception: </b> This rule is ignored in Scenario #6 (The Retreat of the Grande Armée) since Kutuzov starts the game already on map.
-                </ul> 
-        </ul>
-    <li> Optional rules removed:
-        <ul>
-            <li> (page 9) The optional rule to select any card in the Resources Phase has been removed.
-            <li> (page 17) The optional rule to remove one Rally order from each side for a less forgiving game has been removed.
-        </ul>
-    <li> Lines of Communication: Single depot markers that are unable to trace a line of communication (as detailed on page 19 of the rules) are removed from the map. <br>
-         Two or more depots that cannot trace a line of communication to a supply source, but CAN trace a line of communications to each other, the owning player must remove HALF of the depots in the interlinked cluster from the map.
-    <li> End of Turn: If the Initiative level is currently at 4, the side with the Initiative gains 1 VP.
-</ul>
 
 <h2> Implementation Notes </h2>
 <h3> Sequence of Play changes for asynchronous play: </h3>
 <ul>
-    <li> The optional rule to place orders simultaneously (page 10) is enforced by default.
+	<li> The optional rule to place orders simultaneously (page 10) is enforced by default.
+	<li> Since losses are assigned simultaneously, elimination is only triggered if the enemy <i>would</i> have any fresh SPs after determining losses, not the current board state.</li>
+</ul>
+<br>
+<h3> Minor rules modifications: </h3>
+<ul>
+	<li> <i>Poor Communications</i> (FR #22) now designates an area where France removes a random order, rather than selected a placed French order.</li>
 </ul>
