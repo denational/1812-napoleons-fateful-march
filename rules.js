@@ -6354,7 +6354,7 @@ P.cavalry_patrols_reveal = function() {
 		logii("No orders.")
 	else
 		for (let order of get_orders_at_area(enemy(G.active), L.area))
-			logii(`${get_order_type_name(get_order_type(order))}`)
+			logii(get_order_name(order))
 
 	end()
 }
