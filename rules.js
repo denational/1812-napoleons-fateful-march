@@ -4,8 +4,6 @@
 
 // TODO: Undo for Lines of Communications.
 // TODO: Better handling of response events.
-// IN PROGRESS: Fully filter view for roles who shouldn't see SP composition.
-
 
 const data = require("./data")
 
