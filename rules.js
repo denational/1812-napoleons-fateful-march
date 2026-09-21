@@ -4580,12 +4580,11 @@ function is_leader_ability_used(leader) {
 }
 
 function can_change_order_to(leader, current_type, type_to, area) {
-	// The current order execution phase MUST be before the order that the leader is eligible to change to.
-	// The leader must have an order of the current type in the area.
-	// There must be an order of the target type in the pool.
-	return current_type < type_to
-	&& has_order_of_type(get_leader_faction(leader), current_type, area)
-	&& has_order_of_type(get_leader_faction(leader), type_to, POOL)
+	// TWO OPTIONS:
+	// 1. The leader may change any of the type that is currently being executed to the order type he can change to.
+	// 2. The order type that the leader can change to is currently being executed, and he has an order that could be executed during a future execution phase.
+	return (current_type < type_to && has_order_of_type(get_leader_faction(leader), current_type, area) && has_order_of_type(get_leader_faction(leader), type_to, POOL))
+	|| (current_type === type_to && has_order_of_switchable_type(get_leader_faction(leader), current_type, area) && has_order_of_type(get_leader_faction(leader), type_to, POOL))
 }
 
 function can_discard_card_to_place(leader, current_type, type_to) {
@@ -4648,6 +4647,10 @@ function generate_change_order_actions(leader, current_type, type) {
 	if (current_type < type) {
 		get_orders_at_area(R, get_leader_location(leader))
 			.filter(order => get_order_type(order) === current_type)
+			.forEach(action_order)
+	} else if (current_type === type) {
+		get_orders_at_area(R, get_leader_location(leader))
+			.filter(order => get_order_type(order) !== current_type)
 			.forEach(action_order)
 	}
 }
