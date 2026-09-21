@@ -1339,7 +1339,58 @@ function package_sp_action(player, type, strength, area, from, moving) {
 	return m | a | f | s | p | t | n
 }
 
+// G.visible_sp_type
+function package_visible_sp_type(player, type, strength, from) {
+	let p = player << SP_PLAYER_SHIFT
+	let t = type << SP_TYPE_SHIFT
+	let s = strength << SP_STRENGTH_SHIFT
+	let f = from << SP_FROM_SHIFT
+
+	return f | s | p | t
+}
+
 // === VIEW ===
+/* VISIBLE SP TYPE */
+// Roles that are not the player can only see the topmost SP in each stack without a leader.
+// A random type among the types the player has in the area is selected to be the 'topmost' counter in the stack.
+// All other entries are filtered out.
+// To keep the counters consistent, the values are stored in G.
+
+function get_visible_type(player, area, strength = FULL_STRENGTH, from = POOL) {
+	let entry = map_get(G.visible_sp_type, area, []).find(item => {
+		return decode_sp_player(item) === player
+			&& decode_sp_strength(item) === strength
+			&& decode_sp_from(item) === from
+	}) ?? -1
+
+	if (entry > -1)
+		return decode_sp_type(entry)
+
+	return -1
+}
+
+function set_visible_type(player, area, strength = FULL_STRENGTH, from = POOL) {
+	let entries = map_get_set(G.visible_sp_type, area)
+
+	if (get_visible_type(player, area, strength, from) > -1) {
+		return -1
+	} else {
+		let types = get_sp_types_at_area(player, area)
+		let random_type = types[random(types.length)]
+
+		set_add(entries, package_visible_sp_type(player, random_type, strength, from))
+
+		return random_type
+	}
+}
+
+function reset_visible_type(player, area) {
+	let entries = map_get(G.visible_sp_type, area, [])
+	entries = entries.filter(entry => decode_sp_player(entry) !== player)
+	if (entries.length === 0)
+		map_delete(G.visible_sp_type, area)
+}
+
 function is_observer(role) {
 	return role !== RUSSIA && role !== FRANCE
 }
@@ -1370,58 +1421,52 @@ function filter_leaders(leaders, player) {
 	return filtered_leaders
 }
 
-function get_visible_type(who, area) {
-	return map_get(G.visible_sp_type, area)?.[who] ?? -1
-}
-
-function set_visible_type(who, area) {
-	let types = get_sp_types_at_area(who, area)
-	let random_type = types[random(types.length)]
-
-	if (!map_has(G.visible_sp_type, area))
-		map_set(G.visible_sp_type, area, [-1, -1])
-	map_get(G.visible_sp_type, area)[who] = random_type
-
-	return random_type
-}
-
-function reset_visible_type(who, area) {
-	if (get_visible_type(enemy(who), area) === -1)
-		map_delete(G.visible_sp_type, area)
-	else
-		map_get(G.visible_sp_type, area)[who] = -1
-}
-
-// This method is fairly simplistic and doesn't account for battles with multiple connections.
-// Needs more work, but I think that this is a good foundation.
 function filter_sps(player) {
 	let sps = []
 
 	map_for_each(G.sps, (area, entries) => {
 		let filtered_entries = []
 
+		// A player may see any of their own SPs.
 		for (let entry of entries) {
 			if (decode_sp_player(entry) === player)
 				set_add(filtered_entries, entry)
 		}
 
-		if (player !== RUSSIA && has_friendly_sp(RUSSIA, area) && !has_friendly_leader(RUSSIA, area)) {
-			if (get_visible_type(RUSSIA, area) === -1 || !has_sp_of_type(RUSSIA, get_visible_type(RUSSIA, area), area))
-				set_visible_type(RUSSIA, area)
-			set_add(filtered_entries, entries.find(entry => decode_sp_player(entry) === RUSSIA && decode_sp_type(entry) === get_visible_type(RUSSIA, area)))
+		// A player may only see the topmost SP in areas/connections without enemy leaders.
+		for (let who = RUSSIA; who <= FRANCE; ++who) {
+			if (player !== who && has_friendly_sp(who, area)) {
+				if (has_battle(area)) {
+					get_player_battle_data(who, area).forces.forEach(force => {
+						if (force.leaders.length === 0) {
+							if (
+								get_visible_type(who, area, force.strength, force.from) === -1
+								|| force.sps[get_visible_type(who, area, force.strength, force.from)] === 0
+							) {
+								set_visible_type(who, area, force.strength, force.from)
+							}
+
+							set_add(filtered_entries, entries.find(entry => {
+								return decode_sp_player(entry) === who
+								&& decode_sp_type(entry) === get_visible_type(who, area, force.strength, force.from)
+							}))
+						}
+					})
+				} else {
+					if (player !== who && has_friendly_sp(who, area) && !has_friendly_leader(who, area)) {
+						if (get_visible_type(who, area) === -1 || !has_sp_of_type(who, get_visible_type(who, area), area))
+							set_visible_type(who, area)
+						set_add(filtered_entries, entries.find(entry => decode_sp_player(entry) === who && decode_sp_type(entry) === get_visible_type(who, area)))
+					}
+				}
+			}
 		}
 
-		if (player !== FRANCE && has_friendly_sp(FRANCE, area) && !has_friendly_leader(FRANCE, area)) {
-			if (get_visible_type(FRANCE, area) === -1 || !has_sp_of_type(FRANCE, get_visible_type(FRANCE, area), area))
-				set_visible_type(FRANCE, area)
-			set_add(filtered_entries, entries.find(entry => decode_sp_player(entry) === FRANCE && decode_sp_type(entry) === get_visible_type(FRANCE, area)))
+		// Nothing is revealed in areas/connections with enemy leaders.
+		for (let who = RUSSIA; who <= FRANCE; ++who) {
+			if (!has_friendly_sp(who, area) || (has_friendly_leader(RUSSIA, area) && get_visible_type(RUSSIA, area) > -1))
+				reset_visible_type(who, area)
 		}
-
-		if ((!has_friendly_sp(RUSSIA, area) || has_friendly_leader(RUSSIA, area)) && get_visible_type(RUSSIA, area) > -1)
-			reset_visible_type(RUSSIA, area)
-
-		if ((!has_friendly_sp(FRANCE, area) || has_friendly_leader(FRANCE, area)) && get_visible_type(FRANCE, area) > -1)
-			reset_visible_type(FRANCE, area)
 
 		map_set(sps, area, filtered_entries)
 	})
@@ -1442,28 +1487,68 @@ function filter_moved(player) {
 
 	map_for_each(G.moved.sps, (area, entries) => {
 		let filtered_entries = []
+
 		for (let entry of entries) {
-			if (decode_sp_player(entry) === player || decode_sp_type(entry) === get_visible_type(decode_sp_player(entry), area))
+			if (decode_sp_player(entry) === player)
 				set_add(filtered_entries, entry)
 		}
+
+		if (has_battle(area)) {
+			for (let who = RUSSIA; who <= FRANCE; ++who) {
+				if (player !== who) {
+					get_player_battle_data(player, area).forces.forEach(force => {
+						if (force.leaders.length === 0) {
+							if (get_visible_type(who, area, force.strength, force.from) > -1 && force.sps[get_visible_type(who, area, force.strength, force.from)] > 0)
+								set_add(filtered_entries, entries.find(entry => decode_sp_player(entry) === who && decode_sp_type(entry) === get_visible_type(who, area, force.strength, force.from)))
+						}
+					})
+				}
+			}
+		} else {
+			for (let who = RUSSIA; who <= FRANCE; ++who) {
+				for (let entry of entries) {
+					if (decode_sp_type(entry) === get_visible_type(who, area))
+						set_add(filtered_entries, entry)
+				}
+			}
+		}
+
 		map_set(moved.sps, area, filtered_entries)
 	})
 
 	return moved
 }
 
-// TODO (needs rework on client side to account for missing entries)
 function filter_battles(player) {
 	let battles = []
 
 	map_for_each(G.battles, (area, battle) => {
 		let filtered_battle = object_copy(battle)
 
-		if (!is_battle_attacker(player, area))
-			delete filtered_battle.attacker.sps
+		for (let who = RUSSIA; who <= FRANCE; ++who) {
+			if (player !== who) {
+				get_player_battle_data(who, area).forces.forEach(force => {
+					var f
 
-		if (!is_battle_defender(player, area))
-			delete filtered_battle.defender.sps
+					if (is_battle_attacker(who, area))
+						f = filtered_battle.attacker.forces.find(entry => entry.strength === force.strength && entry.from === force.from)
+					else
+						f = filtered_battle.defender.forces.find(entry => entry.strength === force.strength && entry.from === force.from)
+
+					if (force.leaders.length > 0) {
+						let seniormost_leader = get_seniormost_leader_from_list(who, force.leaders)
+						f.leaders = f.leaders.filter(leader => leader === seniormost_leader)
+						for (let type = 0; type < f.sps.length; ++type)
+							f.sps[type] = 0
+					} else {
+						for (let type = 0; type < f.sps.length; ++type) {
+							if (type !== get_visible_type(who, area, force.strength, force.from))
+								f.sps[type] = 0
+						}
+					}
+				})
+			}
+		}
 
 		map_set(battles, area, filtered_battle)
 	})
@@ -1507,11 +1592,10 @@ function on_view() {
 	// Stuff that needs to be filtered based on role
 	V.log = filter_log(V.log, R)
 	V.leaders = filter_leaders(G.leaders, R)
-	// TODO: Filter these based on role
 	V.sps = filter_sps(R)
-	V.battles = G.battles // filter_battles(R)
+	V.battles = filter_battles(R)
 	V.moved = filter_moved(R)
-	V.move = G.move
+	V.move = (G.move.player !== undefined && G.move.player === R) ? G.move : {}
 }
 
 // === ACTION/BUTTON WRAPPER FUNCTIONS ===
@@ -2446,6 +2530,8 @@ P.start_turn = function() {
 		log_h5("French Logistic Preparations")
 		log_italic(`France receives a free Forced March and Place Depot order. As an exception to the rules, this Place Depot order may be placed in ${format_area(S_KOVNO)}.`)
 	}
+
+	end()
 }
 
 // === END-GAME OBJECTIVES ===
@@ -5446,6 +5532,7 @@ P.select_force = {
 		L.max_sps_selectable = L.movable_sps.reduce((a, b) => (a + b), 0)
 
 		G.move = {
+			player: G.active,
 			// FORCED_MARCH or MARCH
 			type: L.type,
 			// Move path
@@ -5502,40 +5589,44 @@ P.select_force = {
 					action_leader(leader)
 			}
 
-			for (let type = 0; type < G.move.sps.length; ++type) {
-				// Platov leader ability: He may only command Cavalry and Cossack SPs
-				if (
-					G.active === RUSSIA
-					&& G.move.leaders.length === 1
-					&& set_has(G.move.leaders, L_PLATOV)
-					&& !could_platov_select(type)
-				) {
-					continue
-				}
-
-				// If a Russian leader in the target Infighting & Intrigue destination is selected, only allow SP type that would be able to move to a French-occupied area to move.
-				if (
-					G.move.leaders.length > 0
-					&& is_event_active(C_INFIGHTING_AND_INTRIGUE)
-					&& get_event_keyword(C_INFIGHTING_AND_INTRIGUE, "area") === L.area
-					&& type !== FRESH_CAVALRY && type !== FRESH_COSSACK		// Force types that have an extended move range
-				) {
-					let dist = L.type === FORCED_MARCH ? 2 : 1
-					if (get_distance_to_closest_infighting_and_intrigue_destination(G.active, L.area, L.type) > dist)
+			if (L.num_sps_selected < sp_limit) {
+				for (let type = 0; type < G.move.sps.length; ++type) {
+					// Platov leader ability: He may only command Cavalry and Cossack SPs
+					if (
+						G.active === RUSSIA
+						&& G.move.leaders.length === 1
+						&& set_has(G.move.leaders, L_PLATOV)
+						&& !could_platov_select(type)
+					) {
 						continue
-				}
+					}
 
-				if (L.movable_sps[type] > 0
-					&& G.move.sps[type] < L.movable_sps[type]
-					&& L.num_sps_selected < L.max_sps_selectable
-				) {
-					// Only get SPs that haven't previously moved.
-					if (has_battle(L.area))
-						action_sp_alt(type, L.area, FULL_STRENGTH, L.area)
-					else
-						action_sp_alt(type, L.area)
-				}
+					// If a Russian leader in the target Infighting & Intrigue destination is selected, only allow SP type that would be able to move to a French-occupied area to move.
+					if (
+						G.move.leaders.length > 0
+						&& is_event_active(C_INFIGHTING_AND_INTRIGUE)
+						&& get_event_keyword(C_INFIGHTING_AND_INTRIGUE, "area") === L.area
+						&& type !== FRESH_CAVALRY && type !== FRESH_COSSACK		// Force types that have an extended move range
+					) {
+						let dist = L.type === FORCED_MARCH ? 2 : 1
+						if (get_distance_to_closest_infighting_and_intrigue_destination(G.active, L.area, L.type) > dist)
+							continue
+					}
 
+					if (L.movable_sps[type] > 0
+						&& G.move.sps[type] < L.movable_sps[type]
+						&& L.num_sps_selected < L.max_sps_selectable
+					) {
+						// Only get SPs that haven't previously moved.
+						if (has_battle(L.area))
+							action_sp_alt(type, L.area, FULL_STRENGTH, L.area)
+						else
+							action_sp_alt(type, L.area)
+					}
+				}
+			}
+
+			for (let type = 0; type < G.move.sps.length; ++type) {
 				if (G.move.sps[type] > 0) {
 					if (has_battle(L.area))
 						action_sp_alt(type, L.area, FULL_STRENGTH, L.area, 1)
@@ -5554,6 +5645,7 @@ P.select_force = {
 				&& ((!is_event_active(C_BAGRATIONS_RETREAT)) || (get_leader_location(L_BAGRATION) !== L.area) || set_has(G.move.leaders, L_BAGRATION))
 			)
 		}
+
 	},
 	pass() {
 		push_undo()
@@ -5797,8 +5889,12 @@ P.move = {
 			}
 		} else {
 			for (let type = 0; type < G.move.sps.length; ++type) {
-				if (G.move.sps[type] > 0)
-					logii(`${G.move.sps[type]} ${get_sp_type_name(type)}`)
+				if (G.move.sps[type] > 0) {
+					if (type === get_visible_type(G.active, G.move.path[G.move.path.length - 1]))
+						logii(`${G.move.sps[type]} ${get_sp_type_name(type)}`)
+					else
+						log_only(G.active, format_ii(`${G.move.sps[type]} ${get_sp_type_name(type)}`))
+				}
 			}
 		}
 	},
@@ -6402,6 +6498,7 @@ P.select_evade_force = {
 		L.num_sps_selected = 0
 
 		G.move = {
+			player: G.active,
 			type: EVADE,
 			// Leaders part of the Evade
 			leaders: [],
@@ -6430,29 +6527,31 @@ P.select_evade_force = {
 		for (let leader of L.leaders)
 			action_leader(leader)
 
-		map_for_each(L.sps, (from, forces) => {
-			map_for_each(forces, (strength, sps) => {
-				for (let type = 0; type < sps.length; ++type) {
-					// Platov leader ability: He may only command Cavalry and Cossack SPs
-					if (
-						G.active === RUSSIA
-						&& G.move.leaders.length === 1
-						&& set_has(G.move.leaders, L_PLATOV)
-						&& !could_platov_select(type)
-					) {
-						continue
-					}
-
-					if (sps[type] > 0) {
-						// Ignore if all SPs have already been selected.
-						if (map_has(G.move.sps, from) && map_has(map_get(G.move.sps, from), strength) && map_get(map_get(G.move.sps, from), strength)[type] >= sps[type])
+		if (L.num_sps_selected < max_sps_selectable) {
+			map_for_each(L.sps, (from, forces) => {
+				map_for_each(forces, (strength, sps) => {
+					for (let type = 0; type < sps.length; ++type) {
+						// Platov leader ability: He may only command Cavalry and Cossack SPs
+						if (
+							G.active === RUSSIA
+							&& G.move.leaders.length === 1
+							&& set_has(G.move.leaders, L_PLATOV)
+							&& !could_platov_select(type)
+						) {
 							continue
-						else
-							action_sp_alt(type, L.area, strength, from)
+						}
+
+						if (sps[type] > 0) {
+							// Ignore if all SPs have already been selected.
+							if (map_has(G.move.sps, from) && map_has(map_get(G.move.sps, from), strength) && map_get(map_get(G.move.sps, from), strength)[type] >= sps[type])
+								continue
+							else
+								action_sp_alt(type, L.area, strength, from)
+						}
 					}
-				}
+				})
 			})
-		})
+		}
 
 		map_for_each(G.move.sps, (from, forces) => {
 			map_for_each(forces, (strength, sps) => {
@@ -9260,6 +9359,7 @@ P.select_retreat_force = {
 		L.num_sps_selected = 0
 
 		G.move = {
+			player: G.active,
 			type: NONE,
 			leaders: [],
 			sps: [],
