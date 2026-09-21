@@ -6350,11 +6350,12 @@ P.cavalry_patrols_reveal = function() {
 		logii(`${count_num_sps_of_type(enemy(G.active), type, L.area)} ${get_sp_type_name(type)}`)
 
 	logi("Orders")
-	if (get_orders_at_area(enemy(G.active), L.selected_area).length === 0)
+	if (get_orders_at_area(enemy(G.active), L.area).length === 0) {
 		logii("No orders.")
-	else
+	} else {
 		for (let order of get_orders_at_area(enemy(G.active), L.area))
 			logii(get_order_name(order))
+	}
 
 	end()
 }
