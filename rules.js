@@ -4088,6 +4088,7 @@ P.select_orders = {
 		// Generic properties
 		L.count = [0, 0]
 		L.already_selected_orders = [[], []]
+		L.has_passed_superior_staff_order = false
 	},
 	states: {
 		// Platov gives Russia a free Cossack Raid or Evade order each turn so long as he is on map.
@@ -4124,16 +4125,22 @@ P.select_orders = {
 		// Superior Staff Officers optional rule: France gets a Cavalry Patrols order in Napoléon's location in Summer.
 		"superior_staff_officers": {
 			eligible(player) {
-				return does_receive_superior_staff_officers_free_order(player)
+				return does_receive_superior_staff_officers_free_order(player) && !L.has_passed_superior_staff_order
 			},
 			on_prompt() {
-				V.prompt = `Superior Staff Officers: Select a Cavalry Patrols order. This order would be placed in ${format_area(get_leader_location(L_NAPOLEON))}.`
+				V.prompt = `Superior Staff Officers: Select a Cavalry Patrols order. This order MUST be placed in ${format_area(get_leader_location(L_NAPOLEON))}.`
 				generate_select_order_actions(R, CAVALRY_PATROLS)
+				button_pass()
 			},
 			on_order(order) {
 				push_local_undo(R, "select_superior_staff_officers_order")
 				G.superior_staff_officers_order = order
 				select_order(order, false)
+			},
+			on_pass() {
+				push_undo(R, "superior_staff_officers_pass")
+				L.has_passed_superior_staff_order = true
+				advance_local_state(R)
 			}
 		},
 		// Each player must select 4 Dummy orders.
@@ -4254,6 +4261,8 @@ P.select_orders = {
 			G.platov_order = -1
 		else if (undo.action === "select_superior_staff_officers_order")
 			G.superior_staff_officers_order = -1
+		else if (undo.action === "superior_staff_officers_pass")
+			L.has_passed_superior_staff_order = false
 		else if (undo.action === "select_dummy_order" || undo.action === "select_order_main")
 			++L.count[R]
 		else if (undo.action === "select_french_logistic_preparations_order")
@@ -4266,6 +4275,7 @@ P.select_orders = {
 			end()
 	},
 	order(order) 	{ this.states[L.state[R]].on_order(order) },
+	pass()		{ this.states[L.state[R]].on_pass() },
 	confirm()		{ this.states[L.state[R]].on_confirm() },
 }
 
@@ -4354,7 +4364,11 @@ P.do_place_orders = {
 		L.undo = [[], []]
 
 		L.has_placed_platov_order = is_leader_on_map(L_PLATOV) ? false : true
-		L.has_placed_superior_staff_officers_order = is_leader_on_map(L_NAPOLEON) ? false : true
+
+		L.has_placed_superior_staff_officers_order = true
+		if (is_leader_on_map(L_NAPOLEON) && is_superior_staff_officers() && G.superior_staff_officers_order > -1)
+			L.has_placed_superior_staff_officers_order = false
+
 		L.has_discarded_card = false
 	},
 	states: {
