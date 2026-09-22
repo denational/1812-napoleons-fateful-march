@@ -315,7 +315,7 @@ const FIRST_ORDER = 1
 const LAST_ORDER = 53
 const NUM_ORDERS = 54
 
-/* TROOPS */
+/* SPS */
 // X1 vs. X0,5
 const HALF_STRENGTH = 0
 const FULL_STRENGTH = 1
@@ -468,6 +468,18 @@ function get_modified_size_row(modified_size) {
 function lookup_attrition_table(modified_size, distance_to_nearest_depot) {
 	distance_to_nearest_depot = Math.max(0, Math.min(6, distance_to_nearest_depot))
 	return ATTRITION_TABLE[get_modified_size_row(modified_size)][distance_to_nearest_depot].slice()
+}
+
+function get_battle_vp_shift(losses) {
+	if (losses <= 1)
+		return 0
+	else if (losses <= 4)
+		return 1
+	else if (losses <= 7)
+		return 2
+	else if (losses <= 11)
+		return 3
+	return 5
 }
 
 // === DATA ACCESSORS ===
@@ -737,19 +749,7 @@ function has_non_dummy_order_at_area(who, area) {
 	return get_orders_at_area(who, area).some(order => get_order_type(order) !== DUMMY_ORDER)
 }
 
-/* TROOPS */
-/*
-	G.sps is a plain array map, using the map functions from the framework.
-	Each key in the 'map' corresponds to an area id where there are sps present. Areas with no sps will be culled.
-	Each value in the 'map' is a 'set', using the set functions in the framework.
-
-	Each set is a sorted plain array of bitpacked sp data.
-
-	Each bitpacked entry follows the following format: (NOTE: For programming simplicity, I've fudged the Prussian and Austrian SPs as separate 'types' of sps, not separate nationalities.)
-		Player owner		1 bit 		Uses player mnemonics RUSSIA and FRANCE.
-		Type 				4 bits 		Corresponds to the 12 (8 type + 4 allies) constants defined in the "Troops" section of constants
-		Number of sps		6 bits  		Safe estimate of max. sps of a specific nationality and type in an area.
-*/
+/* SPS */
 function init_sp_entry(area) {
 	map_set(G.sps, area, [])
 }
@@ -8942,7 +8942,7 @@ P.battle_shift_vp_and_initiative = {
 		//console.log(get_battle_entry(G.current_battle, null))
 		log_h5("VP & Initiative Shifts")
 		G.active = L.winner
-		L.num_enemy_sps_eliminated = get_player_battle_data(enemy(G.active), G.current_battle).num_eliminated
+		L.vp_shift = get_battle_vp_shift(get_player_battle_data(enemy(G.active), G.current_battle).num_eliminated)
 		L.has_shifted_vp = false
 		L.has_finished = false
 		L.step = -1
@@ -8950,11 +8950,11 @@ P.battle_shift_vp_and_initiative = {
 	prompt() {
 		if (!L.has_shifted_vp) {
 			if (L.step === -1) {
-				if (L.num_enemy_sps_eliminated > 0) {
-					V.prompt = `Battle Winner: Shift VP marker ${L.num_enemy_sps_eliminated} spaces in your favor.`
+				if (L.vp_shift > 0) {
+					V.prompt = `Battle Winner: Shift VP marker ${L.vp_shift} spaces in your favor.`
 					action_vp_marker()
 				} else {
-					V.prompt = `No enemy SPs eliminated - no VP shifts.`
+					V.prompt = `No VP shift.`
 					button_pass()
 				}
 			} else {
@@ -8966,7 +8966,7 @@ P.battle_shift_vp_and_initiative = {
 			}
 		} else if (!L.has_finished) {
 			if (G.active === get_who_has_initiative()) {
-				if ((get_current_initiative_level() < 4) && (L.num_enemy_sps_eliminated >= get_current_initiative_level())) {
+				if ((get_current_initiative_level() < 4) && (L.vp_shift >= get_current_initiative_level())) {
 					V.prompt = `Shift Initiative Marker 1 in your favor for eliminating more losing SPs than the current Initiative level.`
 					action_initiative_marker()
 				} else if (get_current_initiative_level() === 4) {
@@ -8988,8 +8988,8 @@ P.battle_shift_vp_and_initiative = {
 	vp() {
 		push_undo()
 		if (L.step === -1) {
-			log(`${ROLES[G.active]} eliminated ${L.num_enemy_sps_eliminated} enemy SPs.`)
-			increase_vp(G.active, L.num_enemy_sps_eliminated)
+			log(`${ROLES[G.active]} eliminated ${L.vp_shift} enemy SPs.`)
+			increase_vp(G.active, L.vp_shift)
 			if (losing_force_includes_king(G.active, G.current_battle))
 				++L.step
 			else
