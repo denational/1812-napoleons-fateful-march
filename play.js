@@ -518,27 +518,10 @@ function on_update() {
 	action_button("france", "France")
 	action_button("pass", "Pass")
 
-	action_button_with_argument("card_button", C_SCORCHED_EARTH, "#10 Scorched Earth")
-	action_button_with_argument("card_button", C_PRIDE_AND_HESITATION, "#15 Pride and Hesitation")
-	action_button_with_argument("card_button", C_KUTUZOV_APPOINTED, "#16 Kutuzov Appointed")
-	action_button_with_argument("card_button", C_THE_FINLAND_CORPS, "#17 The Finland Corps")
-	action_button_with_argument("card_button", C_TREATY_OF_BUCHAREST, "#18 Treaty of Bucharest")
-	action_button_with_argument("card_button", C_THE_CZAR_LEAVES_THE_ARMY, "#19 The Czar Leaves The Army")
-	action_button_with_argument("card_button", C_EXHAUSTING_MARCH_1, "#25 Exhausting March")
-	action_button_with_argument("card_button", C_EXHAUSTING_MARCH_2, "#26 Exhausting March")
-	action_button_with_argument("card_button", C_DISORDERLY_MARCH, "#48 Disorderly March")
-	action_button_with_argument("card_button", C_COSSACK_PATROLS, "#49 Cossack Patrols")
-
-	action_button_with_argument("card_button", C_HARD_MARCHING_2, "#2 Hard Marching")
-	action_button_with_argument("card_button", C_HOLY_MOTHER_RUSSIA_FR, "#4 Holy Mother Russia")
-	action_button_with_argument("card_button", C_INFIGHTING_AND_INTRIGUE, "#8 Infighting amp; Intrigue")
-	action_button_with_argument("card_button", C_PEACE_OFFER, "#15 Peace Offer")
-	action_button_with_argument("card_button", C_DAVOUT_TAKES_COMMAND, "#16 Davout Takes Command")
-	action_button_with_argument("card_button", C_IX_CORPS_ARRIVES, "#19 IX Corps Arrives")
-	action_button_with_argument("card_button", C_XI_CORPS_ARRIVES, "#20 XI Corps Arrives")
-	action_button_with_argument("card_button", C_COURAGE_OF_DESPERATION, "#50 Courage of Desperation")
-	action_button_with_argument("card_button", C_NEYS_ESCAPE, "#52 Ney's Escape")
-	action_button_with_argument("card_button", C_LETHARGIC_PURSUIT, "#53 Lethargic Pursuit")
+	for (let player = RUSSIA; player <= FRANCE; ++player) {
+		for (let card of RESOURCE_PHASE_CARD_OPTIONS[player])
+			action_button_with_argument("card_button", card, `#${data.cards[card].id} ${data.cards[card].name}`)
+	}
 
 	action_button("undo", "Undo")
 

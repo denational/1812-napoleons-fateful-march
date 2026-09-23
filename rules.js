@@ -6205,23 +6205,33 @@ P.determine_seniority = {
 
 function get_post_move_exhaustion_events(who, move_type) {
 	let events = []
-	if (who === RUSSIA) {
-		if (move_type === FORCED_MARCH) {
-			if (is_event_active(C_EXTREME_WEATHER_RU))
-				set_add(events, C_EXTREME_WEATHER_RU)
-		} else {
-			for (let event of [C_EXTREME_WEATHER_RU, C_EXTREME_WEATHER_FR])
-				if (is_event_active(event)) set_add(events, event)
-		}
-	} else {
-		if (move_type === FORCED_MARCH) {
-			for (let event of [C_EXTREME_WEATHER_RU, C_HARD_MARCHING_1, C_HARD_MARCHING_2])
-				if (is_event_active(event)) set_add(events, event)
-		} else {
-			for (let event of [C_EXTREME_WEATHER_RU, C_FAST_MARCHING_1, C_FAST_MARCHING_2, C_EXTREME_WEATHER_FR])
-				if (is_event_active(event)) set_add(events, event)
-		}
+
+	// RU #14 Extreme Weather: 1 fresh SP in each Forced Marching or Marching force is exhausted.
+	if (is_event_active(C_EXTREME_WEATHER_RU))
+		set_add(events, C_EXTREME_WEATHER_RU)
+
+	// FR #1, FR #2 Hard Marching: 1 fresh SP in each French Forced Marching force is exhausted.
+	// If both are played, only one has effect. See https://boardgamegeek.com/thread/3772053/double-hard-marshing
+	if (who === FRANCE && move_type === FORCED_MARCH) {
+		if (is_event_active(C_HARD_MARCHING_1))
+			set_add(events, C_HARD_MARCHING_1)
+		else if (is_event_active(C_HARD_MARCHING_2))
+			set_add(events, C_HARD_MARCHING_2)
 	}
+
+	// FR #9, FR #10 Fast Marching: 1 fresh SP in each French Marching force is exhausted.
+	// If both are played, only one has effect. (keeping it consistent with Hard Marching)
+	if (who === FRANCE && move_type === MARCH) {
+		if (is_event_active(C_FAST_MARCHING_1))
+			set_add(events, C_FAST_MARCHING_1)
+		else if (is_event_active(C_FAST_MARCHING_2))
+			set_add(events, C_FAST_MARCHING_2)
+	}
+
+	// FR #42 Extreme Weather: 1 fresh SP in each Marching force is exhausted.
+	if (move_type === MARCH && is_event_active(C_EXTREME_WEATHER_FR))
+		set_add(events, C_EXTREME_WEATHER_FR)
+
 	return events
 }
 
