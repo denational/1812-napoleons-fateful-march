@@ -2,8 +2,8 @@
 @import url(../fonts/fonts.css);
 
 :root {
-    --russia: hsl(100, 14%, 66%);
-    --france: hsl(206, 55%, 73%);
+	--russia: hsl(100, 14%, 66%);
+	--france: hsl(206, 55%, 73%);
 
 	--russia_dark: #61ac5866;
 	--france_dark: hsl(213, 54%, 77%);
@@ -23,21 +23,21 @@ body.France header.your_turn {background-color: var(--france);}
 
 /* MAP */
 #mapwrap {
-    width: 2500px;
-    height: 2027px;
+	width: 2214px;
+	height: 1653px;
 }
 
 #map {
-	width: 2500px;
-	height: 2027px;
-	background-image: url(map40.png);
-	background-size: 2500px 2027px;
+	width: 2214px;
+	height: 1653px;
+	background-image: url(boards.1x/map.avif);
+	background-size: 2214px 1653px;
 }
 
 @media (min-resolution: 97dpi) {
-    #map {
-        background-image: url(map80.png);
-    }
+	#map {
+		background-image: url(boards.2x/map.avif);
+	}
 }
 
 #tip, #area-tip, #card-tip {
@@ -71,15 +71,15 @@ body.France header.your_turn {background-color: var(--france);}
 	& .h1.winter { background-color: hsl(200, 61%, 81%); }
 
 	& .h2 {
-    	background-color: hsl(24, 100%, 85%);
-    	padding:2px 0;
-    	text-align: center;
-    	font-variant-caps: small-caps;
+		background-color: hsl(24, 100%, 85%);
+		padding:2px 0;
+		text-align: center;
+		font-variant-caps: small-caps;
 	}
 
 	& .h3 {
-    	background-color: lightgray;
-    	text-align: center;
+		background-color: lightgray;
+		text-align: center;
 		font-variant-caps: small-caps;
 	}
 
@@ -141,8 +141,8 @@ body.France header.your_turn {background-color: var(--france);}
  }
 
 .tip:hover, .card-tip:hover, .area-tip:hover {
-    cursor: pointer;
-    text-decoration: underline;
+	cursor: pointer;
+	text-decoration: underline;
 }
 
 #prompt > .card-tip {
@@ -157,8 +157,8 @@ body.France header.your_turn {background-color: var(--france);}
 	background-color: wheat;
 	padding: 4px;
 	font-style: italic;
-    font-size: 12px;
-    line-height: 18px;
+	font-size: 12px;
+	line-height: 18px;
 	font-family: var(--font-small);
 }
 
@@ -170,19 +170,19 @@ body.France header.your_turn {background-color: var(--france);}
 	height: 14px;
 }
 
-.dice.battle_fr.d1 {background-image: url(pieces/dice/fr_battle_1.png);}
-.dice.battle_fr.d2 {background-image: url(pieces/dice/fr_battle_2.png);}
-.dice.battle_fr.d3 {background-image: url(pieces/dice/fr_battle_3.png);}
-.dice.battle_fr.d4 {background-image: url(pieces/dice/fr_battle_4.png);}
-.dice.battle_fr.d5 {background-image: url(pieces/dice/fr_battle_5.png);}
-.dice.battle_fr.d6 {background-image: url(pieces/dice/fr_battle_6.png);}
+.dice.battle_fr.d1 {background-image: url(icons/battle_die_fr_1.webp);}
+.dice.battle_fr.d2 {background-image: url(icons/battle_die_fr_2.webp);}
+.dice.battle_fr.d3 {background-image: url(icons/battle_die_fr_3.webp);}
+.dice.battle_fr.d4 {background-image: url(icons/battle_die_fr_4.webp);}
+.dice.battle_fr.d5 {background-image: url(icons/battle_die_fr_5.webp);}
+.dice.battle_fr.d6 {background-image: url(icons/battle_die_fr_6.webp);}
 
-.dice.battle_ru.d1 {background-image: url(pieces/dice/ru_battle_1.png);}
-.dice.battle_ru.d2 {background-image: url(pieces/dice/ru_battle_2.png);}
-.dice.battle_ru.d3 {background-image: url(pieces/dice/ru_battle_3.png);}
-.dice.battle_ru.d4 {background-image: url(pieces/dice/ru_battle_4.png);}
-.dice.battle_ru.d5 {background-image: url(pieces/dice/ru_battle_5.png);}
-.dice.battle_ru.d6 {background-image: url(pieces/dice/ru_battle_6.png);}
+.dice.battle_ru.d1 {background-image: url(icons/battle_die_ru_1.webp);}
+.dice.battle_ru.d2 {background-image: url(icons/battle_die_ru_2.webp);}
+.dice.battle_ru.d3 {background-image: url(icons/battle_die_ru_3.webp);}
+.dice.battle_ru.d4 {background-image: url(icons/battle_die_ru_4.webp);}
+.dice.battle_ru.d5 {background-image: url(icons/battle_die_ru_5.webp);}
+.dice.battle_ru.d6 {background-image: url(icons/battle_die_ru_6.webp);}
 
 
 /* ORDERS PANEL */
@@ -230,70 +230,63 @@ body.France header.your_turn {background-color: var(--france);}
 }
 
 .piece, .sp {
-		position: absolute;
-		background-size: cover;
-		background-repeat: no-repeat;
-		filter: drop-shadow(0px 2px 3px #0008);
-		transition-property: top, left;
-		transition-duration: 1s;
-		transition-timing-function: ease;
+	position: absolute;
+	background-size: cover;
+	background-repeat: no-repeat;
+	Xfilter: drop-shadow(0px 2px 3px #0008);
+	transition-property: top, left;
+	transition-duration: 1s;
+	transition-timing-function: ease;
 }
 
 
 /* LEADERS */
 .piece.leader {
-    width: 67px;
-    height: 67px;
+	width: 44px;
+	height: 44px;
+	border: 2px solid lime;
 	position: relative;
 }
 
 .piece.leader.action {
-	filter:
-		drop-shadow(0 -1px 0 yellow)
-		drop-shadow(0 1px 0 yellow)
-		drop-shadow(-1px 0 0 yellow)
-		drop-shadow(1px 0 0 yellow)
+	box-shadow: 0 0 0 2px yellow;
 }
 
 .piece.leader.selected {
-	filter:
-		drop-shadow(0 -2px 0 lightgreen)
-		drop-shadow(0 2px 0 lightgreen)
-		drop-shadow(-2px 0 0 lightgreen)
-		drop-shadow(2px 0 0 lightgreen)
+	box-shadow: 0 0 0 2px lightgreen;
 }
 
 .stack > .piece.leader {
 	position: absolute;
 }
 
-.piece.leader.Alexander {background-image: url(pieces/leader_Alexander.png);}
-.piece.leader.Kutuzov {background-image: url(pieces/leader_Kutuzov.png);}
-.piece.leader.Tolly {background-image: url(pieces/leader_Tolly.png);}
-.piece.leader.Bagration {background-image: url(pieces/leader_Bagration.png);}
-.piece.leader.Tormasov {background-image: url(pieces/leader_Tormasov.png);}
-.piece.leader.Wittgenstein {background-image: url(pieces/leader_Wittgenstein.png);}
-.piece.leader.Chichagov {background-image: url(pieces/leader_Chichagov.png);}
-.piece.leader.Platov {background-image: url(pieces/leader_Platov.png);}
+.piece.leader.Alexander {background-image: url(counters.1x/ru_leader_alexander_i.webp);}
+.piece.leader.Kutuzov {background-image: url(counters.1x/ru_leader_kutuzov.webp);}
+.piece.leader.Tolly {background-image: url(counters.1x/ru_leader_de_tolly.webp);}
+.piece.leader.Bagration {background-image: url(counters.1x/ru_leader_bagration.webp);}
+.piece.leader.Tormasov {background-image: url(counters.1x/ru_leader_tormasov.webp);}
+.piece.leader.Wittgenstein {background-image: url(counters.1x/ru_leader_wittgenstein.webp);}
+.piece.leader.Chichagov {background-image: url(counters.1x/ru_leader_chichagov.webp);}
+.piece.leader.Platov {background-image: url(counters.1x/ru_leader_platov.webp);}
 
-.piece.leader.Napoleon {background-image: url(pieces/leader_Napoleon.png);}
-.piece.leader.Jerome {background-image: url(pieces/leader_Jerome.png);}
-.piece.leader.Beauharnais {background-image: url(pieces/leader_Beauharnais.png);}
-.piece.leader.Davout {background-image: url(pieces/leader_Davout.png);}
-.piece.leader.Murat {background-image: url(pieces/leader_Murat.png);}
-.piece.leader.Schwarzenberg {background-image: url(pieces/leader_Schwarzenberg.png);}
+.piece.leader.Napoleon {background-image: url(counters.1x/fr_leader_napoleon.webp);}
+.piece.leader.Jerome {background-image: url(counters.1x/fr_leader_jerome.webp);}
+.piece.leader.Beauharnais {background-image: url(counters.1x/fr_leader_de_beauharnais.webp);}
+.piece.leader.Davout {background-image: url(counters.1x/fr_leader_davout.webp);}
+.piece.leader.Murat {background-image: url(counters.1x/fr_leader_murat.webp);}
+.piece.leader.Schwarzenberg {background-image: url(counters.1x/fr_leader_schwarzenberg.webp);}
 
 .leader_board {
 	position: relative;
-    width: 750px;
-    height: 300px;
-    background-size: cover;
+	width: 590px;
+	height: 236px;
+	background-size: 590px 236px;
 }
 
 .leader_board > * {
 	position: absolute;
 	width: 190px;
-    height: 75px;
+	height: 75px;
 	border: 5px;
 	display: flex;
 	flex-direction: row;
@@ -301,8 +294,8 @@ body.France header.your_turn {background-color: var(--france);}
 }
 
 .subordinate_special {
-    top: 225px;
-    z-index: 1;
+	top: 225px;
+	z-index: 1;
 }
 
 .subordinate_cavalry {
@@ -319,94 +312,96 @@ body.France header.your_turn {background-color: var(--france);}
 	z-index: 4;
 }
 
-.leader_board.Alexander { background-image: url(leader-boards/leader-board_Alexander.png);}
-.leader_board.Kutuzov { background-image: url(leader-boards/leader-board_Kutuzov.png);}
-.leader_board.Tolly { background-image: url(leader-boards/leader-board_Tolly.png);}
-.leader_board.Bagration { background-image: url(leader-boards/leader-board_Bagration.png);}
-.leader_board.Tormasov { background-image: url(leader-boards/leader-board_Tormasov.png);}
-.leader_board.Wittgenstein {background-image: url(leader-boards/leader-board_Wittgenstein.png);}
-.leader_board.Chichagov { background-image: url(leader-boards/leader-board_Chichagov.png);}
-.leader_board.Platov { background-image: url(leader-boards/leader-board_Platov.png);}
+.leader_board.Alexander { background-image: url(boards.1x/leader_board_ru_1.avf);}
+.leader_board.Kutuzov { background-image: url(boards.1x/leader_board_ru_7.avf);}
+.leader_board.Tolly { background-image: url(boards.1x/leader_board_ru_3.avf);}
+.leader_board.Bagration { background-image: url(boards.1x/leader_board_ru_9.avf);}
+.leader_board.Tormasov { background-image: url(boards.1x/leader_board_ru_5.avf);}
+.leader_board.Wittgenstein {background-image: url(boards.1x/leader_board_ru_11.avf);}
+.leader_board.Chichagov { background-image: url(boards.1x/leader_board_ru_13.avf);}
+.leader_board.Platov { background-image: url(boards.1x/leader_board_ru_15.avf);}
 
-.leader_board.Napoleon {background-image: url(leader-boards/leader-board_Napoleon.png);}
-.leader_board.Jerome {background-image: url(leader-boards/leader-board_Jerome.png);}
-.leader_board.Beauharnais { background-image: url(leader-boards/leader-board_Beauharnais.png);}
-.leader_board.Davout { background-image: url(leader-boards/leader-board_Davout.png);}
-.leader_board.Murat {background-image: url(leader-boards/leader-board_Murat.png);}
-.leader_board.Schwarzenberg { background-image: url(leader-boards/leader-board_Schwarzenberg.png);}
+.leader_board.Napoleon {background-image: url(boards.1x/leader_board_fr_1.avf);}
+.leader_board.Jerome {background-image: url(boards.1x/leader_board_fr_3.avf);}
+.leader_board.Beauharnais { background-image: url(boards.1x/leader_board_fr_7.avf);}
+.leader_board.Davout { background-image: url(boards.1x/leader_board_fr_9.avf);}
+.leader_board.Murat {background-image: url(boards.1x/leader_board_fr_5.avf);}
+.leader_board.Schwarzenberg { background-image: url(boards.1x/leader_board_fr_11.avf);}
+
+.leader_board.reverse.Alexander { background-image: url(boards.2x/leader_board_ru_1.avf);}
+.leader_board.reverse.Kutuzov { background-image: url(boards.1x/leader_board_ru_8.avf);}
+.leader_board.reverse.Tolly { background-image: url(boards.1x/leader_board_ru_4.avf);}
+.leader_board.reverse.Bagration { background-image: url(boards.1x/leader_board_ru_10.avf);}
+.leader_board.reverse.Tormasov { background-image: url(boards.1x/leader_board_ru_6.avf);}
+.leader_board.reverse.Wittgenstein {background-image: url(boards.1x/leader_board_ru_12.avf);}
+.leader_board.reverse.Chichagov { background-image: url(boards.1x/leader_board_ru_14.avf);}
+.leader_board.reverse.Platov { background-image: url(boards.1x/leader_board_ru_16.avf);}
+
+.leader_board.reverse.Napoleon {background-image: url(boards.1x/leader_board_fr_2.avf);}
+.leader_board.reverse.Jerome {background-image: url(boards.1x/leader_board_fr_4.avf);}
+.leader_board.reverse.Beauharnais { background-image: url(boards.1x/leader_board_fr_8.avf);}
+.leader_board.reverse.Davout { background-image: url(boards.1x/leader_board_fr_10.avf);}
+.leader_board.reverse.Murat {background-image: url(boards.1x/leader_board_fr_6.avf);}
+.leader_board.reverse.Schwarzenberg { background-image: url(boards.1x/leader_board_fr_12.avf);}
 
 /* ORDERS */
+
 .piece.order {
-	width: 50px;
-	height: 75px;
-	background-image: url(pieces/fr\ order\ back.png);
+	width: 48px;
+	height: 48px;
+	background-size: 48px 48px;
+	background-position: center;
+	background-repeat: no-repeat;
 	position: relative;
 }
 
+.piece.order.ru { border: 5px solid #01503b }
+.piece.order.fr { border: 5px solid #1a385f }
+
 .piece.order.action {
-	filter:
-		drop-shadow(0 -2px 0 yellow)
-		drop-shadow(0 2px 0 yellow)
-		drop-shadow(-2px 0 0 yellow)
-		drop-shadow(2px 0 0 yellow)
+	box-shadow: 0 0 0 3px yellow;
 }
 
 .piece.order.selected {
-	filter:
-		drop-shadow(0 -2px 0 lightgreen)
-		drop-shadow(0 2px 0 lightgreen)
-		drop-shadow(-2px 0 0 lightgreen)
-		drop-shadow(2px 0 0 lightgreen)
+	box-shadow: 0 0 0 3px lightgreen;
 }
 
-.piece.order.forced_march.ru {background-image: url(pieces/forced_march_ru.png);}
-.piece.order.forced_march.fr {background-image: url(pieces/forced_march_fr.png);}
-
-.piece.order.cavalry_patrols.ru { background-image: url(pieces/cavalry_patrols_ru.png);}
-.piece.order.cavalry_patrols.fr { background-image: url(pieces/cavalry_patrols_fr.png);}
-
-.piece.order.march.ru { background-image: url(pieces/march_ru.png);}
-.piece.order.march.fr { background-image: url(pieces/march_fr.png);}
-
-.piece.order.evade.ru { background-image: url(pieces/evade_ru.png);}
-.piece.order.evade.fr { background-image: url(pieces/evade_fr.png);}
-
-.piece.order.defend.ru { background-image: url(pieces/defend_ru.png);}
-.piece.order.defend.fr { background-image: url(pieces/defend_fr.png);}
-
-.piece.order.rally.ru { background-image: url(pieces/rally_ru.png);}
-.piece.order.rally.fr { background-image: url(pieces/rally_fr.png);}
-
-.piece.order.cossack_raid.ru { background-image: url(pieces/cossack_raid_ru.png);}
-
-.piece.order.place_depot.ru { background-image: url(pieces/place_depot_ru.png);}
-.piece.order.place_depot.fr { background-image: url(pieces/place_depot_fr.png);}
-
-.piece.order.forage.ru { background-image: url(pieces/forage_ru.png);}
-.piece.order.forage.fr { background-image: url(pieces/forage_fr.png);}
-
-.piece.order.dummy_order.ru { background-image: url(pieces/dummy_order_ru.png);}
-.piece.order.dummy_order.fr { background-image: url(pieces/dummy_order_fr.png);}
-
-.piece.order.hidden.ru { background-image: url(pieces/ru\ order\ back.png);}
-.piece.order.hidden.fr { background-image: url(pieces/fr\ order\ back.png);}
+.piece.order.forced_march.ru {background-image: url(orders.1x/ru_order_forced_march.webp)}
+.piece.order.forced_march.fr {background-image: url(orders.1x/fr_order_forced_march.webp)}
+.piece.order.cavalry_patrols.ru { background-image: url(orders.1x/ru_order_cavalry_patrols.webp)}
+.piece.order.cavalry_patrols.fr { background-image: url(orders.1x/fr_order_cavalry_patrols.webp)}
+.piece.order.march.ru { background-image: url(orders.1x/ru_order_march.webp)}
+.piece.order.march.fr { background-image: url(orders.1x/fr_order_march.webp)}
+.piece.order.evade.ru { background-image: url(orders.1x/ru_order_evade.webp)}
+.piece.order.evade.fr { background-image: url(orders.1x/fr_order_evade.webp)}
+.piece.order.defend.ru { background-image: url(orders.1x/ru_order_defend.webp)}
+.piece.order.defend.fr { background-image: url(orders.1x/fr_order_defend.webp)}
+.piece.order.rally.ru { background-image: url(orders.1x/ru_order_rally.webp)}
+.piece.order.rally.fr { background-image: url(orders.1x/fr_order_rally.webp)}
+.piece.order.cossack_raid.ru { background-image: url(orders.1x/ru_order_cossack_raid.webp)}
+.piece.order.place_depot.ru { background-image: url(orders.1x/ru_order_place_depot.webp)}
+.piece.order.place_depot.fr { background-image: url(orders.1x/fr_order_place_depot.webp)}
+.piece.order.forage.ru { background-image: url(orders.1x/ru_order_forage.webp)}
+.piece.order.forage.fr { background-image: url(orders.1x/fr_order_forage.webp)}
+.piece.order.dummy_order.ru { background-image: url(orders.1x/ru_order_dummy.webp)}
+.piece.order.dummy_order.fr { background-image: url(orders.1x/fr_order_dummy.webp)}
+.piece.order.hidden.ru { background-image: url(orders.1x/ru_order_back.webp)}
+.piece.order.hidden.fr { background-image: url(orders.1x/fr_order_back.webp)}
 
 /* TROOPS */
+
 body.hide-pieces .sp { display: none }
 
 .sp {
-	width: 67px;
-	height: 67px;
+	width: 44px;
+	height: 44px;
+	border: 2px solid;
 	position: relative;
 	background-size: contain;
 }
 
 .sp.action {
-	filter:
-		drop-shadow(0 -1px 0 yellow)
-		drop-shadow(0 1px 0 yellow)
-		drop-shadow(-1px 0 0 yellow)
-		drop-shadow(1px 0 0 yellow)
+	box-shadow: 0 0 0 3px yellow;
 }
 
 .connection_stack > * {
@@ -440,60 +435,58 @@ body.hide-pieces .sp { display: none }
 	position: relative;
 }
 
-.sp.infantry.ru.fresh 		{ background-image: url(pieces/fresh-infantry_ru.png);}
-.sp.infantry.ru.exhausted 	{ background-image: url(pieces/exhausted-infantry_ru.png);}
-.sp.infantry.fr.fresh 		{ background-image: url(pieces/fresh-infantry_fr.png);}
-.sp.infantry.fr.exhausted 	{ background-image: url(pieces/exhausted-infantry_fr.png);}
-.sp.infantry.pr.fresh 		{ background-image: url(pieces/fresh-infantry_pr.png);}
-.sp.infantry.pr.exhausted 	{ background-image: url(pieces/exhausted-infantry_pr.png);}
-.sp.infantry.au.fresh 		{ background-image: url(pieces/fresh-infantry_au.png);}
-.sp.infantry.au.exhausted 	{ background-image: url(pieces/exhausted-infantry_au.png);}
+.sp.infantry.ru.fresh 		{ background-image: url(counters.1x/ru_infantry_1.webp);}
+.sp.infantry.ru.exhausted 	{ background-image: url(counters.1x/ru_infantry_1_ex.webp);}
+.sp.infantry.fr.fresh 		{ background-image: url(counters.1x/fr_infantry_1.webp);}
+.sp.infantry.fr.exhausted 	{ background-image: url(counters.1x/fr_infantry_1_ex.webp);}
+.sp.infantry.pr.fresh 		{ background-image: url(counters.1x/fr_infantry_pr_1.webp);}
+.sp.infantry.pr.exhausted 	{ background-image: url(counters.1x/fr_infantry_pr_1_ex.webp);}
+.sp.infantry.au.fresh 		{ background-image: url(counters.1x/fr_infantry_au_1.webp);}
+.sp.infantry.au.exhausted 	{ background-image: url(counters.1x/fr_infantry_au_1_ex.webp);}
 
-.sp.cavalry.ru.fresh 		{ background-image: url(pieces/fresh-cavalry_ru.png);}
-.sp.cavalry.ru.exhausted 	{ background-image: url(pieces/exhausted-cavalry_ru.png);}
-.sp.cavalry.fr.fresh 		{ background-image: url(pieces/fresh-cavalry_fr.png);}
-.sp.cavalry.fr.exhausted 	{ background-image: url(pieces/exhausted-cavalry_fr.png);}
+.sp.cavalry.ru.fresh 		{ background-image: url(counters.1x/ru_cavalry_1.webp);}
+.sp.cavalry.ru.exhausted 	{ background-image: url(counters.1x/ru_cavalry_1_ex.webp);}
+.sp.cavalry.fr.fresh 		{ background-image: url(counters.1x/fr_cavalry_1.webp);}
+.sp.cavalry.fr.exhausted 	{ background-image: url(counters.1x/fr_cavalry_1_ex.webp);}
 
-.sp.cossack.ru.fresh 		{ background-image: url(pieces/fresh-cossack.png);}
-.sp.cossack.ru.exhausted 	{ background-image: url(pieces/exhausted-cossack.png);}
-.sp.guard.fr.fresh 			{ background-image: url(pieces/fresh-guard.png);}
-.sp.guard.fr.exhausted 		{ background-image: url(pieces/exhausted-guard.png);}
+.sp.cossack.ru.fresh 		{ background-image: url(counters.1x/ru_cossack_1.webp);}
+.sp.cossack.ru.exhausted 	{ background-image: url(counters.1x/ru_cossack_1_ex.webp);}
+.sp.guard.fr.fresh 		{ background-image: url(counters.1x/ru_guard_1.webp);}
+.sp.guard.fr.exhausted 		{ background-image: url(counters.1x/ru_guard_1_ex.webp);}
 
 /* TRACKS */
+
 .marker {
-    position: absolute;
+	position: absolute;
 	pointer-events: none;
 	background-size: cover;
 	background-repeat: no-repeat;
-	filter: drop-shadow(0px 2px 3px #0008);
 	transition-property: top, left;
 	transition-duration: 1s;
 	transition-timing-function: ease;
 }
 
 .marker.vp, .marker.time, .marker.initiative {
-    width: 50px;
-    height: 50px;
+	width: 44px;
+	height: 44px;
+	border: 2px solid;
 }
 
 .marker.vp.action, .marker.time.action, .marker.initiative.action {
-	filter:
-		drop-shadow(0 -2px 0 skyblue)
-		drop-shadow(0 2px 0 skyblue)
-		drop-shadow(-2px 0 0 skyblue)
-		drop-shadow(2px 0 0 skyblue)
+	box-shadow: 0 0 0 3px skyblue;
 }
 
-.marker.vp.fr {background-image: url(pieces/vp_fr.png);}
-.marker.vp.ru {background-image: url(pieces/vp_ru.png);}
-.marker.time.current {background-image: url(pieces/time_current.png);}
-.marker.time.end {background-image: url(pieces/time_end.png);}
-.marker.initiative.fr {background-image: url(pieces/initiative_fr.png);}
-.marker.initiative.ru {background-image: url(pieces/initiative_ru.png);}
+.marker.vp.fr {background-image: url(counters.1x/marker_fr_vp.webp);}
+.marker.vp.ru {background-image: url(counters.1x/marker_ru_vp.webp);}
+.marker.time.current {background-image: url(counters.1x/marker_time.webp);}
+.marker.time.end {background-image: url(counters.1x/marker_last_turn.webp);}
+.marker.initiative.fr {background-image: url(counters.1x/marker_fr_initiative.webp);}
+.marker.initiative.ru {background-image: url(counters.1x/marker_ru_initiative.webp);}
 
 .marker.devastation {
-	width: 40px;
-	height: 40px;
+	border: 2px solid;
+	width: 50px;
+	height: 50px;
 	left: -15px;
 	z-index: -2;
 	border-radius: 50%;
@@ -504,9 +497,9 @@ body.hide-pieces .sp { display: none }
 	left: -35px;
 }
 
-.marker.devastation.lvl1 { background-image: url(pieces/devastation-l1.png);}
-.marker.devastation.lvl2 { background-image: url(pieces/devastation-l2.png);}
-.marker.devastation.lvl3 { background-image: url(pieces/devastation-l3.png);}
+.marker.devastation.lvl1 { background-image: url(counters.1x/devastation_1.webp) }
+.marker.devastation.lvl2 { background-image: url(counters.1x/devastation_2.webp) }
+.marker.devastation.lvl3 { background-image: url(counters.1x/devastation_3.webp) }
 
 .marker.depot {
 	position: relative;
@@ -521,163 +514,174 @@ body.hide-pieces .sp { display: none }
 }
 
 .marker.depot.action {
-	filter:
-		drop-shadow(0 -2px 0 yellow)
-		drop-shadow(0 2px 0 yellow)
-		drop-shadow(-2px 0 0 yellow)
-		drop-shadow(2px 0 0 yellow)
+	box-shadow: 0 0 0 3px yellow;
 }
 
 .marker.depot.ru { background-image: url(pieces/green_cube.svg);}
 .marker.depot.fr { background-image: url(pieces/blue_cube.svg);}
 
 .attrition_checked {
-	width: 67px;
-	height: 67px;
-	background-size: cover;
-	background-image: url(pieces/attrition_checked.png);
+	border: 2px solid;
+	width: 50px;
+	height: 50px;
+	background-size: 100%;
+	background-image: url(counters.1x/attrition_checked.webp);
+	border-radius: 50%;
 	pointer-events: auto;
 }
 
 .half_strength_ru, .half_strength_fr {
-	width: 50px;
-	height: 50px;
-	background-size: cover;
+	width: 44px;
+	height: 44px;
+	background-size: 100%;
 	pointer-events: auto;
 }
 
-.half_strength_ru { background-image: url(pieces/x0\,5_ru.png);}
-.half_strength_fr { background-image: url(pieces/x0\,5_fr.png);}
+.half_strength_ru { background-image: url(counters.1x/ru_half.webp) }
+.half_strength_fr { background-image: url(counters.1x/fr_half.webp) }
+
+/* BEVELS */
+
+.devastation.lvl1 { background-color: #9f8d7c; border-color: #c8b5a4 #786756 #786756 #c8b5a4; box-shadow: 0 0 0 1px #100500; }
+.devastation.lvl2 { background-color: #cd8e64; border-color: #fcba8f #a0643b #a0643b #fcba8f; box-shadow: 0 0 0 1px #220000; }
+.devastation.lvl3 { background-color: #d9705d; border-color: #ff9985 #ac4837 #ac4837 #ff9985; box-shadow: 0 0 0 1px #2b0000; }
+.sp.fr,.sp.pr,.sp.au { background-color: #5781b7; border-color: #7aa6de #355e91 #355e91 #7aa6de; box-shadow: 0 0 0 1px #000029; }
+.sp.ru { background-color: #46905d; border-color: #6bb580 #1f6d3c #1f6d3c #6bb580; box-shadow: 0 0 0 1px #000d00; }
+.sp.fr.exhuasted,.sp.pr.exhuasted,.sp.au.exhuasted { background-color: #a4b5c9; border-color: #d5e7fb #768699 #768699 #d5e7fb; box-shadow: 0 0 0 1px #030c1a; }
+.sp.ru.exhuasted { background-color: #a2b6a1; border-color: #d2e7d1 #758774 #758774 #d2e7d1; box-shadow: 0 0 0 1px #030f03; }
+.leader.fr { background-color: #13385c; border-color: #264a70 #012649 #012649 #264a70; box-shadow: 0 0 0 1px #000014; }
+.leader.ru { background-color: #065337; border-color: #26694c #003e23 #003e23 #26694c; box-shadow: 0 0 0 1px #000500; }
+.marker { background-color: #c0c0c0; border-color: #f5f5f5 #8e8e8e #8e8e8e #f5f5f5; box-shadow: 0 0 0 1px #0e0e0e; }
+.marker.time { background-color: #a67d4d; border-color: #cea372 #805929 #805929 #cea372; box-shadow: 0 0 0 1px #180000; }
+.marker.time.end { background-color: #555555; border-color: #6e6e6e #3d3d3d #3d3d3d #6e6e6e; box-shadow: 0 0 0 1px #020202; }
+.marker.initiative.fr { background-color: #1a3a5f; border-color: #2c4d73 #07284b #07284b #2c4d73; box-shadow: 0 0 0 1px #000015; }
+.marker.initiative.ru { background-color: #3b7c50; border-color: #5b9c6e #195d33 #195d33 #5b9c6e; box-shadow: 0 0 0 1px #000a00; }
+.marker.vp.fr { background-color: #1a3a5f; border-color: #2c4d73 #07284b #07284b #2c4d73; box-shadow: 0 0 0 1px #000015; }
+.marker.vp.ru { background-color: #3b7c50; border-color: #5b9c6e #195d33 #195d33 #5b9c6e; box-shadow: 0 0 0 1px #000a00; }
 
 /* CARDS */
 .card {
-    background-size: 110%;
+	background-size: 100%;
 	background-repeat: no-repeat;
-	background-position: -4px -10px;
-	background-color: transparent;
 	width: 250px;
-	height: 365px;
+	height: 350px;
 	border-radius: 16px;
-	box-shadow: 1px 1px 5px rgba(0, 0, 0, 0.5);
+	box-shadow: 1px 1px 5px #0006;
 }
 
 .card.action {
-	filter:
-		drop-shadow(0 -2px 0 yellow)
-		drop-shadow(0 2px 0 yellow)
-		drop-shadow(-2px 0 0 yellow)
-		drop-shadow(2px 0 0 yellow)
+	box-shadow: 0 0 0 3px yellow;
 }
 
-.card_back_ru {background-image: url(cards/ru/card_back_ru.png);}
-.card_back_fr {background-image: url(cards/fr/card_back_fr.png);}
+.card_back_ru{background-image:url(cards.1x/card_ru_back.avif)}
+.card_back_fr{background-image:url(cards.1x/card_fr_back.avif)}
 
 /* See gencardscss.js in /tools */
-.card_0{background-image: url(cards/ru/card_00.png);}
-.card_1{background-image: url(cards/ru/card_01.png);}
-.card_2{background-image: url(cards/ru/card_02.png);}
-.card_3{background-image: url(cards/ru/card_03.png);}
-.card_4{background-image: url(cards/ru/card_04.png);}
-.card_5{background-image: url(cards/ru/card_05.png);}
-.card_6{background-image: url(cards/ru/card_06.png);}
-.card_7{background-image: url(cards/ru/card_07.png);}
-.card_8{background-image: url(cards/ru/card_08.png);}
-.card_9{background-image: url(cards/ru/card_09.png);}
-.card_10{background-image: url(cards/ru/card_10.png);}
-.card_11{background-image: url(cards/ru/card_11.png);}
-.card_12{background-image: url(cards/ru/card_12.png);}
-.card_13{background-image: url(cards/ru/card_13.png);}
-.card_14{background-image: url(cards/ru/card_14.png);}
-.card_15{background-image: url(cards/ru/card_15.png);}
-.card_16{background-image: url(cards/ru/card_16.png);}
-.card_17{background-image: url(cards/ru/card_17.png);}
-.card_18{background-image: url(cards/ru/card_18.png);}
-.card_19{background-image: url(cards/ru/card_19.png);}
-.card_20{background-image: url(cards/ru/card_20.png);}
-.card_21{background-image: url(cards/ru/card_21.png);}
-.card_22{background-image: url(cards/ru/card_22.png);}
-.card_23{background-image: url(cards/ru/card_23.png);}
-.card_24{background-image: url(cards/ru/card_24.png);}
-.card_25{background-image: url(cards/ru/card_25.png);}
-.card_26{background-image: url(cards/ru/card_26.png);}
-.card_27{background-image: url(cards/ru/card_27.png);}
-.card_28{background-image: url(cards/ru/card_28.png);}
-.card_29{background-image: url(cards/ru/card_29.png);}
-.card_30{background-image: url(cards/ru/card_30.png);}
-.card_31{background-image: url(cards/ru/card_31.png);}
-.card_32{background-image: url(cards/ru/card_32.png);}
-.card_33{background-image: url(cards/ru/card_33.png);}
-.card_34{background-image: url(cards/ru/card_34.png);}
-.card_35{background-image: url(cards/ru/card_35.png);}
-.card_36{background-image: url(cards/ru/card_36.png);}
-.card_37{background-image: url(cards/ru/card_37.png);}
-.card_38{background-image: url(cards/ru/card_38.png);}
-.card_39{background-image: url(cards/ru/card_39.png);}
-.card_40{background-image: url(cards/ru/card_40.png);}
-.card_41{background-image: url(cards/ru/card_41.png);}
-.card_42{background-image: url(cards/ru/card_42.png);}
-.card_43{background-image: url(cards/ru/card_43.png);}
-.card_44{background-image: url(cards/ru/card_44.png);}
-.card_45{background-image: url(cards/ru/card_45.png);}
-.card_46{background-image: url(cards/ru/card_46.png);}
-.card_47{background-image: url(cards/ru/card_47.png);}
-.card_48{background-image: url(cards/ru/card_48.png);}
-.card_49{background-image: url(cards/ru/card_49.png);}
-.card_50{background-image: url(cards/ru/card_50.png);}
-.card_51{background-image: url(cards/ru/card_51.png);}
-.card_52{background-image: url(cards/ru/card_52.png);}
-.card_53{background-image: url(cards/ru/card_53.png);}
-.card_54{background-image: url(cards/fr/card_00.png);}
-.card_55{background-image: url(cards/fr/card_01.png);}
-.card_56{background-image: url(cards/fr/card_02.png);}
-.card_57{background-image: url(cards/fr/card_03.png);}
-.card_58{background-image: url(cards/fr/card_04.png);}
-.card_59{background-image: url(cards/fr/card_05.png);}
-.card_60{background-image: url(cards/fr/card_06.png);}
-.card_61{background-image: url(cards/fr/card_07.png);}
-.card_62{background-image: url(cards/fr/card_08.png);}
-.card_63{background-image: url(cards/fr/card_09.png);}
-.card_64{background-image: url(cards/fr/card_10.png);}
-.card_65{background-image: url(cards/fr/card_11.png);}
-.card_66{background-image: url(cards/fr/card_12.png);}
-.card_67{background-image: url(cards/fr/card_13.png);}
-.card_68{background-image: url(cards/fr/card_14.png);}
-.card_69{background-image: url(cards/fr/card_15.png);}
-.card_70{background-image: url(cards/fr/card_16.png);}
-.card_71{background-image: url(cards/fr/card_17.png);}
-.card_72{background-image: url(cards/fr/card_18.png);}
-.card_73{background-image: url(cards/fr/card_19.png);}
-.card_74{background-image: url(cards/fr/card_20.png);}
-.card_75{background-image: url(cards/fr/card_21.png);}
-.card_76{background-image: url(cards/fr/card_22.png);}
-.card_77{background-image: url(cards/fr/card_23.png);}
-.card_78{background-image: url(cards/fr/card_24.png);}
-.card_79{background-image: url(cards/fr/card_25.png);}
-.card_80{background-image: url(cards/fr/card_26.png);}
-.card_81{background-image: url(cards/fr/card_27.png);}
-.card_82{background-image: url(cards/fr/card_28.png);}
-.card_83{background-image: url(cards/fr/card_29.png);}
-.card_84{background-image: url(cards/fr/card_30.png);}
-.card_85{background-image: url(cards/fr/card_31.png);}
-.card_86{background-image: url(cards/fr/card_32.png);}
-.card_87{background-image: url(cards/fr/card_33.png);}
-.card_88{background-image: url(cards/fr/card_34.png);}
-.card_89{background-image: url(cards/fr/card_35.png);}
-.card_90{background-image: url(cards/fr/card_36.png);}
-.card_91{background-image: url(cards/fr/card_37.png);}
-.card_92{background-image: url(cards/fr/card_38.png);}
-.card_93{background-image: url(cards/fr/card_39.png);}
-.card_94{background-image: url(cards/fr/card_40.png);}
-.card_95{background-image: url(cards/fr/card_41.png);}
-.card_96{background-image: url(cards/fr/card_42.png);}
-.card_97{background-image: url(cards/fr/card_43.png);}
-.card_98{background-image: url(cards/fr/card_44.png);}
-.card_99{background-image: url(cards/fr/card_45.png);}
-.card_100{background-image: url(cards/fr/card_46.png);}
-.card_101{background-image: url(cards/fr/card_47.png);}
-.card_102{background-image: url(cards/fr/card_48.png);}
-.card_103{background-image: url(cards/fr/card_49.png);}
-.card_104{background-image: url(cards/fr/card_50.png);}
-.card_105{background-image: url(cards/fr/card_51.png);}
-.card_106{background-image: url(cards/fr/card_52.png);}
-.card_107{background-image: url(cards/fr/card_53.png);}
+.card_0{background-image:url(cards.1x/card_ru_00.avif)}
+.card_1{background-image:url(cards.1x/card_ru_01.avif)}
+.card_2{background-image:url(cards.1x/card_ru_02.avif)}
+.card_3{background-image:url(cards.1x/card_ru_03.avif)}
+.card_4{background-image:url(cards.1x/card_ru_04.avif)}
+.card_5{background-image:url(cards.1x/card_ru_05.avif)}
+.card_6{background-image:url(cards.1x/card_ru_06.avif)}
+.card_7{background-image:url(cards.1x/card_ru_07.avif)}
+.card_8{background-image:url(cards.1x/card_ru_08.avif)}
+.card_9{background-image:url(cards.1x/card_ru_09.avif)}
+.card_10{background-image:url(cards.1x/card_ru_10.avif)}
+.card_11{background-image:url(cards.1x/card_ru_11.avif)}
+.card_12{background-image:url(cards.1x/card_ru_12.avif)}
+.card_13{background-image:url(cards.1x/card_ru_13.avif)}
+.card_14{background-image:url(cards.1x/card_ru_14.avif)}
+.card_15{background-image:url(cards.1x/card_ru_15.avif)}
+.card_16{background-image:url(cards.1x/card_ru_16.avif)}
+.card_17{background-image:url(cards.1x/card_ru_17.avif)}
+.card_18{background-image:url(cards.1x/card_ru_18.avif)}
+.card_19{background-image:url(cards.1x/card_ru_19.avif)}
+.card_20{background-image:url(cards.1x/card_ru_20.avif)}
+.card_21{background-image:url(cards.1x/card_ru_21.avif)}
+.card_22{background-image:url(cards.1x/card_ru_22.avif)}
+.card_23{background-image:url(cards.1x/card_ru_23.avif)}
+.card_24{background-image:url(cards.1x/card_ru_24.avif)}
+.card_25{background-image:url(cards.1x/card_ru_25.avif)}
+.card_26{background-image:url(cards.1x/card_ru_26.avif)}
+.card_27{background-image:url(cards.1x/card_ru_27.avif)}
+.card_28{background-image:url(cards.1x/card_ru_28.avif)}
+.card_29{background-image:url(cards.1x/card_ru_29.avif)}
+.card_30{background-image:url(cards.1x/card_ru_30.avif)}
+.card_31{background-image:url(cards.1x/card_ru_31.avif)}
+.card_32{background-image:url(cards.1x/card_ru_32.avif)}
+.card_33{background-image:url(cards.1x/card_ru_33.avif)}
+.card_34{background-image:url(cards.1x/card_ru_34.avif)}
+.card_35{background-image:url(cards.1x/card_ru_35.avif)}
+.card_36{background-image:url(cards.1x/card_ru_36.avif)}
+.card_37{background-image:url(cards.1x/card_ru_37.avif)}
+.card_38{background-image:url(cards.1x/card_ru_38.avif)}
+.card_39{background-image:url(cards.1x/card_ru_39.avif)}
+.card_40{background-image:url(cards.1x/card_ru_40.avif)}
+.card_41{background-image:url(cards.1x/card_ru_41.avif)}
+.card_42{background-image:url(cards.1x/card_ru_42.avif)}
+.card_43{background-image:url(cards.1x/card_ru_43.avif)}
+.card_44{background-image:url(cards.1x/card_ru_44.avif)}
+.card_45{background-image:url(cards.1x/card_ru_45.avif)}
+.card_46{background-image:url(cards.1x/card_ru_46.avif)}
+.card_47{background-image:url(cards.1x/card_ru_47.avif)}
+.card_48{background-image:url(cards.1x/card_ru_48.avif)}
+.card_49{background-image:url(cards.1x/card_ru_49.avif)}
+.card_50{background-image:url(cards.1x/card_ru_50.avif)}
+.card_51{background-image:url(cards.1x/card_ru_51.avif)}
+.card_52{background-image:url(cards.1x/card_ru_52.avif)}
+.card_53{background-image:url(cards.1x/card_ru_53.avif)}
+.card_54{background-image:url(cards.1x/card_fr_00.avif)}
+.card_55{background-image:url(cards.1x/card_fr_01.avif)}
+.card_56{background-image:url(cards.1x/card_fr_02.avif)}
+.card_57{background-image:url(cards.1x/card_fr_03.avif)}
+.card_58{background-image:url(cards.1x/card_fr_04.avif)}
+.card_59{background-image:url(cards.1x/card_fr_05.avif)}
+.card_60{background-image:url(cards.1x/card_fr_06.avif)}
+.card_61{background-image:url(cards.1x/card_fr_07.avif)}
+.card_62{background-image:url(cards.1x/card_fr_08.avif)}
+.card_63{background-image:url(cards.1x/card_fr_09.avif)}
+.card_64{background-image:url(cards.1x/card_fr_10.avif)}
+.card_65{background-image:url(cards.1x/card_fr_11.avif)}
+.card_66{background-image:url(cards.1x/card_fr_12.avif)}
+.card_67{background-image:url(cards.1x/card_fr_13.avif)}
+.card_68{background-image:url(cards.1x/card_fr_14.avif)}
+.card_69{background-image:url(cards.1x/card_fr_15.avif)}
+.card_70{background-image:url(cards.1x/card_fr_16.avif)}
+.card_71{background-image:url(cards.1x/card_fr_17.avif)}
+.card_72{background-image:url(cards.1x/card_fr_18.avif)}
+.card_73{background-image:url(cards.1x/card_fr_19.avif)}
+.card_74{background-image:url(cards.1x/card_fr_20.avif)}
+.card_75{background-image:url(cards.1x/card_fr_21.avif)}
+.card_76{background-image:url(cards.1x/card_fr_22.avif)}
+.card_77{background-image:url(cards.1x/card_fr_23.avif)}
+.card_78{background-image:url(cards.1x/card_fr_24.avif)}
+.card_79{background-image:url(cards.1x/card_fr_25.avif)}
+.card_80{background-image:url(cards.1x/card_fr_26.avif)}
+.card_81{background-image:url(cards.1x/card_fr_27.avif)}
+.card_82{background-image:url(cards.1x/card_fr_28.avif)}
+.card_83{background-image:url(cards.1x/card_fr_29.avif)}
+.card_84{background-image:url(cards.1x/card_fr_30.avif)}
+.card_85{background-image:url(cards.1x/card_fr_31.avif)}
+.card_86{background-image:url(cards.1x/card_fr_32.avif)}
+.card_87{background-image:url(cards.1x/card_fr_33.avif)}
+.card_88{background-image:url(cards.1x/card_fr_34.avif)}
+.card_89{background-image:url(cards.1x/card_fr_35.avif)}
+.card_90{background-image:url(cards.1x/card_fr_36.avif)}
+.card_91{background-image:url(cards.1x/card_fr_37.avif)}
+.card_92{background-image:url(cards.1x/card_fr_38.avif)}
+.card_93{background-image:url(cards.1x/card_fr_39.avif)}
+.card_94{background-image:url(cards.1x/card_fr_40.avif)}
+.card_95{background-image:url(cards.1x/card_fr_41.avif)}
+.card_96{background-image:url(cards.1x/card_fr_42.avif)}
+.card_97{background-image:url(cards.1x/card_fr_43.avif)}
+.card_98{background-image:url(cards.1x/card_fr_44.avif)}
+.card_99{background-image:url(cards.1x/card_fr_45.avif)}
+.card_100{background-image:url(cards.1x/card_fr_46.avif)}
+.card_101{background-image:url(cards.1x/card_fr_47.avif)}
+.card_102{background-image:url(cards.1x/card_fr_48.avif)}
+.card_103{background-image:url(cards.1x/card_fr_49.avif)}
+.card_104{background-image:url(cards.1x/card_fr_50.avif)}
+.card_105{background-image:url(cards.1x/card_fr_51.avif)}
+.card_106{background-image:url(cards.1x/card_fr_52.avif)}
+.card_107{background-image:url(cards.1x/card_fr_53.avif)}

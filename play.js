@@ -336,8 +336,13 @@ function on_init() {
 		define_piece("order", order, get_order_keyword(order))
 
 	/* LEADERS */
-	for (let leader = first_russia_leader; leader <= last_france_leader; ++leader) {
-		define_piece("leader", leader, get_leader_short_name(leader))
+	for (let leader = first_russia_leader; leader <= last_russia_leader; ++leader) {
+		define_piece("leader", leader, "ru " + get_leader_short_name(leader))
+			.stackable()
+		define_leader_board(leader)
+	}
+	for (let leader = first_france_leader; leader <= last_france_leader; ++leader) {
+		define_piece("leader", leader, "fr " + get_leader_short_name(leader))
 			.stackable()
 		define_leader_board(leader)
 	}
