@@ -1,60 +1,14 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg
-   width="37"
-   height="37"
-   version="1.1"
-   id="svg4"
-   sodipodi:docname="green_cube.svg"
-   inkscape:version="1.4.4 (dcaf3e7, 2026-05-05)"
-   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
-   xmlns="http://www.w3.org/2000/svg"
-   xmlns:svg="http://www.w3.org/2000/svg">
-  <defs
-     id="defs4" />
-  <sodipodi:namedview
-     id="namedview4"
-     pagecolor="#ffffff"
-     bordercolor="#000000"
-     borderopacity="0.25"
-     inkscape:showpageshadow="2"
-     inkscape:pageopacity="0.0"
-     inkscape:pagecheckerboard="0"
-     inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="15.837838"
-     inkscape:cx="18.46843"
-     inkscape:cy="18.5"
-     inkscape:window-width="1440"
-     inkscape:window-height="830"
-     inkscape:window-x="1913"
-     inkscape:window-y="-6"
-     inkscape:window-maximized="1"
-     inkscape:current-layer="g4" />
-  <g
-     transform="translate(3.5,3.5)"
-     stroke-width="1"
-     stroke-linejoin="round"
-     stroke-linecap="round"
-     id="g4">
-    <path
-       fill="#37a161"
-       d="M 0,20 20,20 30,30 10,30 z"
-       id="path1"
-       style="fill:#287848;fill-opacity:1" />
-    <path
-       fill="#37a161"
-       d="M 20,20 20,0 30,10 30,30 z"
-       id="path2"
-       style="fill:#2b7f4d;fill-opacity:1" />
-    <path
-       fill="#23b21e"
-       d="M 0,0 0,20 20,20 20,0 0,0 z"
-       id="path3"
-       style="fill:#378833;fill-opacity:1" />
-    <path
-       fill="none"
-       stroke="#000"
-       d=" M 0,0 0,20 20,20 20,0 0,0 z M 10,30 30,30 M 30,30 30,10 M 0,20 10,30 M 20,20 30,30 M 20,0 30,10 "
-       id="path4" />
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="37" height="37" viewBox="0 0 46 46">
+<g transform="translate(3.5,3.5)" stroke-width="1" stroke-linejoin="round" stroke-linecap="round">
+<path fill="#44a56b" d="M 0,26 26,26 39,39 13,39 z"/>
+<path fill="#4aa56e" d="M 26,26 26,0 39,13 39,39 z"/>
+<path fill="#37b633" d="M 0,0 0,26 26,26 26,0 0,0 z"/>
+<path fill="none" stroke="#000" d="
+M 0,0 0,26 26,26 26,0 0,0 z
+M 13,39 39,39 M 39,39 39,13
+M 0,26 13,39
+M 26,26 39,39
+M 26,0 39,13
+"/>
+</g>
 </svg>

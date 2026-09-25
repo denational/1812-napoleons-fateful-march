@@ -418,8 +418,8 @@ body.hide-pieces .sp { display: none }
 	border-radius: 10px;
 	width: 20px;
 	height: 20px;
-	bottom: 12px;
-	right: 12px;
+	bottom: 4px;
+	right: 3px;
 	text-align: center;
 	align-items: center;
 }
@@ -448,8 +448,8 @@ body.hide-pieces .sp { display: none }
 
 .sp.cossack.ru.fresh 		{ background-image: url(counters.1x/ru_cossack_1.webp);}
 .sp.cossack.ru.exhausted 	{ background-image: url(counters.1x/ru_cossack_1_ex.webp);}
-.sp.guard.fr.fresh 		{ background-image: url(counters.1x/ru_guard_1.webp);}
-.sp.guard.fr.exhausted 		{ background-image: url(counters.1x/ru_guard_1_ex.webp);}
+.sp.guard.fr.fresh 		{ background-image: url(counters.1x/fr_guard_1.webp);}
+.sp.guard.fr.exhausted 		{ background-image: url(counters.1x/fr_guard_1_ex.webp);}
 
 /* TRACKS */
 
@@ -482,16 +482,15 @@ body.hide-pieces .sp { display: none }
 
 .marker.devastation {
 	border: 2px solid;
-	width: 50px;
-	height: 50px;
+	width: 36px;
+	height: 36px;
 	left: -15px;
 	z-index: -2;
 	border-radius: 50%;
 }
 
 .area > .marker.devastation { /* top left */
-	top: -35px;
-	left: -35px;
+	top: -10px;
 }
 
 .marker.devastation.lvl1 { background-image: url(counters.1x/devastation_1.webp) }
@@ -499,19 +498,17 @@ body.hide-pieces .sp { display: none }
 .marker.devastation.lvl3 { background-image: url(counters.1x/devastation_3.webp) }
 
 .marker.depot {
+	background-color: transparent;
+	border-color: transparent;
+	box-shadow: none;
 	position: relative;
-	width: 40px;
-	height: 40px;
-	margin: -14px 0px 0px -14px;
+	width: 37px;
+	height: 37px;
 }
 
 .area > .marker.depot {
 	bottom: -25px;
 	left: -40px;
-}
-
-.marker.depot.action {
-	box-shadow: 0 0 0 3px yellow;
 }
 
 .marker.depot.ru { background-image: url(pieces/green_cube.svg);}
