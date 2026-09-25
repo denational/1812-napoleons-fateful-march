@@ -18,6 +18,9 @@ body.France header.your_turn {background-color: var(--france);}
 #role_Russia { background-color: var(--russia);}
 #role_France { background-color: var(--france);}
 
+#chat_text .Russia { background-color: var(--russia);}
+#chat_text .France { background-color: var(--france);}
+
 /* MAP */
 #mapwrap {
 	width: 2214px;
