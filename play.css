@@ -202,6 +202,10 @@ body.France header.your_turn {background-color: var(--france);}
 	z-index: 20;
 }
 
+.area.action > * {
+	display: none;
+}
+
 /* PANELS */
 #panels {
 	margin: 20px auto;
@@ -231,9 +235,6 @@ body.France header.your_turn {background-color: var(--france);}
 	background-size: cover;
 	background-repeat: no-repeat;
 	Xfilter: drop-shadow(0px 2px 3px #0008);
-	transition-property: top, left;
-	transition-duration: 1s;
-	transition-timing-function: ease;
 }
 
 
@@ -462,9 +463,6 @@ body.hide-pieces .sp { display: none }
 	pointer-events: none;
 	background-size: cover;
 	background-repeat: no-repeat;
-	transition-property: top, left;
-	transition-duration: 1s;
-	transition-timing-function: ease;
 }
 
 .marker.vp, .marker.time, .marker.initiative {
@@ -474,7 +472,11 @@ body.hide-pieces .sp { display: none }
 }
 
 .marker.vp.action, .marker.time.action, .marker.initiative.action {
-	box-shadow: 0 0 0 3px skyblue;
+	filter:
+		drop-shadow(0 -2px 0 yellow)
+		drop-shadow(0 2px 0 yellow)
+		drop-shadow(-2px 0 0 yellow)
+		drop-shadow(2px 0 0 yellow)
 }
 
 .marker.vp.fr {background-image: url(counters.1x/marker_fr_vp.webp);}
