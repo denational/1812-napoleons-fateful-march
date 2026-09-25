@@ -633,7 +633,8 @@ function get_seniormost_leader_on_connection(who, from, to)  {
 }
 
 function update_leaders() {
-	for (let leader = V.leaders.length - 1; leader >= 0; --leader) {
+	let leaders = V.seniority.flat(1).reverse()
+	for (let leader of leaders) {
 		let location = get_leader_location(leader)
 		switch(location) {
 		case HIDDEN: break
