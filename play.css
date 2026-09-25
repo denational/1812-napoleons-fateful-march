@@ -510,6 +510,14 @@ body.hide-pieces .sp { display: none }
 	height: 37px;
 }
 
+.marker.depot.action {
+	filter:
+		drop-shadow(0 -2px 0 yellow)
+		drop-shadow(0 2px 0 yellow)
+		drop-shadow(-2px 0 0 yellow)
+		drop-shadow(2px 0 0 yellow)
+}
+
 .area > .marker.depot {
 	bottom: -25px;
 	left: -40px;

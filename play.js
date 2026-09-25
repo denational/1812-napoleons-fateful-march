@@ -654,7 +654,7 @@ function update_leaders() {
 							update_position("move", 0, move_offset_x(location), move_offset_y(location))
 							populate("move", 0, "leader", leader)
 						} else {
-							if (get_seniormost_leader_on_connection(get_leader_owner(leader), force.from, location) === leader) {
+							if (get_seniormost_leader_on_connection(get_leader_owner(leader), force.from, location) === leader || R === get_leader_owner(leader)) {
 								if (force.from === location) {
 									populate("area_stack", get_leader_location(leader), "leader", leader)
 								} else {
