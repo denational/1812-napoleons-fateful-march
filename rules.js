@@ -7617,7 +7617,6 @@ P.play_battle_events = script(`
 		set G.active FRANCE
 		call confusing_orders
 	}
-
 	for L.who in RUSSIA to FRANCE {
 		if (G.played_cards[L.who].length > 0) {
 			set G.active L.who

@@ -1060,7 +1060,8 @@ const data = {
 			"depot": false,
 			"vp": 0,
 			"track": [
-				54
+				54,
+				78
 			],
 			"road": [
 				51,
@@ -1552,7 +1553,8 @@ const data = {
 			"vp": 0,
 			"track": [
 				52,
-				79
+				79,
+				53
 			],
 			"road": [
 				56,
@@ -4150,6 +4152,10 @@ const data = {
 		[
 			3,
 			4
+		],
+		[
+			53,
+			78
 		]
 	],
 	"cards": [

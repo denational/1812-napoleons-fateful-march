@@ -398,7 +398,11 @@ body.hide-pieces .sp { display: none }
 }
 
 .sp.action {
-	box-shadow: 0 0 0 3px yellow;
+	filter:
+		drop-shadow(0 -2px 0 yellow)
+		drop-shadow(0 2px 0 yellow)
+		drop-shadow(-2px 0 0 yellow)
+		drop-shadow(2px 0 0 yellow)
 }
 
 .connection_stack > * {
@@ -525,8 +529,8 @@ body.hide-pieces .sp { display: none }
 }
 
 .half_strength_ru, .half_strength_fr {
-	width: 44px;
-	height: 44px;
+	width: 36px;
+	height: 36px;
 	background-size: 100%;
 	pointer-events: auto;
 }

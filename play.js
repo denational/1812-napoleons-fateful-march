@@ -310,7 +310,7 @@ function on_init() {
 		// Where leaders & SPs are populated
 		define_stack("area_stack", area, layout[get_area_name(area)], -8, -8, 0, -58, 0, 36, 1, 60)
 		// Where we populate orders
-		define_stack("orders_stack", area, translate_right(layout[get_area_name(area)], 52), 0, -85, 0, -125)
+		define_stack("orders_stack", area, translate_right(layout[get_area_name(area)], 60), 0, -85, 0, -125)
 	}
 
 	define_stack("move", 0, [0, 0, 25, 25], -15, -15, 0, -58, 0, 36, 1, 10)
