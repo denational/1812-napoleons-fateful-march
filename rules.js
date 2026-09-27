@@ -9929,12 +9929,11 @@ function log_attrition_info(who, area) {
 	if ((who === RUSSIA) && (is_seniormost_leader(L_TORMASOV, area)))
 		log_only(who, format_i(`-2 ${format_leader(L_TORMASOV)}`))
 
-	log_only(who, `Distance to nearest Depot: ${distance_to_nearest_depot}`)
+	log(`Distance to nearest Depot: ${distance_to_nearest_depot}`)
 	if (is_event_active(C_OVERSTRETCHED_LOGISTICS) && who === FRANCE)
-		log_only(who, format_i(`+1 ${format_card(C_OVERSTRETCHED_LOGISTICS)}`))
+		logi(`+1 ${format_card(C_OVERSTRETCHED_LOGISTICS)}`)
 
 	log_only(who, `Attrition ${size} &times; ${distance_to_nearest_depot <= MAX_SUPPLY_DISTANCE ? distance_to_nearest_depot : "OOS"}: ${get_attrition_result_name(size, distance_to_nearest_depot)}`)
-	log_only(enemy(who), `Attrition: ${get_attrition_result_name(size, distance_to_nearest_depot)}`)
 	log()
 }
 
@@ -11977,7 +11976,7 @@ P.exhausting_march = {
 	},
 	prompt() {
 		if (!L.has_assigned) {
-			prompt_card(L.card, `France must take ${L.sp_losses + L.track_losses} attrition losses.`)
+			prompt_card(L.card, `France must take attrition losses equal to one-fifth of the total number of moving SPs (rounded up) plus the number of Track connections used.`)
 			button_confirm()
 		} else {
 			prompt_card(L.card, `All done.`)
@@ -11986,9 +11985,9 @@ P.exhausting_march = {
 	},
 	confirm() {
 		push_undo()
-		log(`France must take ${L.sp_losses + L.track_losses} attrition losses.`)
-		logi(`+${L.sp_losses} SPs`)
-		logi(`+${L.track_losses} Tracks`)
+		log_masked(FRANCE, `France must take ${L.sp_losses + L.track_losses} attrition losses.`, `France must take attrition losses.`)
+		log_only(FRANCE, format_i(`+${L.sp_losses} SPs`))
+		log_only(FRANCE, format_i(`+${L.track_losses} Tracks`))
 
 		G.active = FRANCE
 		call("exhausting_march_assign_attrition_losses", { losses: L.sp_losses + L.track_losses })
