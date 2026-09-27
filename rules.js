@@ -7838,15 +7838,14 @@ function get_modifier(who, force) {
 	let modifier = 1
 
 	if (force.strength === HALF_STRENGTH) {
-		if (who !== FRANCE && !is_event_active(C_HARD_MARCHING_1) && !is_event_active(C_HARD_MARCHING_2))
+		if (who !== FRANCE || (!is_event_active(C_HARD_MARCHING_1) && !is_event_active(C_HARD_MARCHING_2)))
 			modifier *= 0.5
 	}
 
 	if (force.river_crossing) {
 		if (
 			who !== FRANCE
-			&& !is_battle_event_currently_active(C_EBLES_PONTONEERS)
-			&& (!is_battle_event_currently_active(C_SKILLFULL_MANEUVERS) || get_event_keyword(C_SKILLFULL_MANEUVERS, "cancels") !== "river")
+			|| (!is_battle_event_currently_active(C_EBLES_PONTONEERS) && (!is_battle_event_currently_active(C_SKILLFULL_MANEUVERS) || get_event_keyword(C_SKILLFULL_MANEUVERS, "cancels") !== "river"))
 		) {
 			modifier *= 0.5
 		}
