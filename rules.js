@@ -1418,8 +1418,16 @@ function filter_log(log, player) {
 function filter_leaders(leaders, player) {
 	let filtered_leaders = leaders.slice()
 	for (let leader = 0; leader < leaders.length; ++leader) {
-		if (get_leader_faction(leader) !== player && is_leader_on_map(leader) && !is_seniormost_leader(leader, get_leader_location(leader)))
-			filtered_leaders[leader] = HIDDEN
+		if (!has_battle(get_leader_location(leader))) {
+			if (get_leader_faction(leader) !== player && is_leader_on_map(leader) && !is_seniormost_leader(leader, get_leader_location(leader)))
+				filtered_leaders[leader] = HIDDEN
+		} else {
+			if (get_leader_faction(leader) !== player && is_leader_on_map(leader)) {
+				let force = get_player_battle_data(get_leader_faction(leader), get_leader_location(leader)).forces.find(force => set_has(force.leaders, leader))
+				if (get_seniormost_leader_from_list(get_leader_faction(leader), force.leaders) !== leader)
+					filtered_leaders[leader] = HIDDEN
+			}
+		}
 	}
 	return filtered_leaders
 }
