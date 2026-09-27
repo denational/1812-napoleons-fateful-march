@@ -7455,9 +7455,12 @@ function sort_battles_by_type() {
 	let battles_by_type = [[], [], []]
 
 	map_for_each_key(G.battles, (area) => {
-		if (has_leader_in_battle(get_battle_attacker(area)) && has_leader_in_battle(get_battle_defender(area)))
+		const attacker = get_battle_attacker(area)
+		const defender = get_battle_defender(area)
+
+		if (has_leader_in_battle(attacker, area) && has_leader_in_battle(defender, area))
 			set_add(battles_by_type[BATTLES_WHERE_BOTH_SIDES_HAVE_LEADERS], area)
-		else if (has_leader_in_battle(get_battle_attacker(area)) || has_leader_in_battle(get_battle_defender(area)))
+		else if (has_leader_in_battle(attacker, area) || has_leader_in_battle(defender, area))
 			set_add(battles_by_type[BATTLES_WHERE_ONE_SIDE_HAS_LEADER], area)
 		else
 			set_add(battles_by_type[BATTLES_WITHOUT_LEADERS], area)
