@@ -249,6 +249,11 @@ body.France header.your_turn {background-color: var(--france);}
 	position: relative;
 }
 
+.piece.standee {
+	width: 44px;
+	height: 100px;
+}
+
 .piece.leader.action {
 	box-shadow: 0 0 0 2px yellow;
 }
@@ -276,6 +281,22 @@ body.France header.your_turn {background-color: var(--france);}
 .piece.leader.Davout {background-image: url(counters.1x/fr_leader_davout.webp);}
 .piece.leader.Murat {background-image: url(counters.1x/fr_leader_murat.webp);}
 .piece.leader.Schwarzenberg {background-image: url(counters.1x/fr_leader_schwarzenberg.webp);}
+
+.piece.standee.Alexander { background-image: url(counters.1x/ru_standee_alexander_i.webp);}
+.piece.standee.Kutuzov {background-image: url(counters.1x/ru_standee_kutuzov.webp);}
+.piece.standee.Tolly {background-image: url(counters.1x/ru_standee_de_tolly.webp);}
+.piece.standee.Bagration {background-image: url(counters.1x/ru_standee_bagration.webp);}
+.piece.standee.Tormasov {background-image: url(counters.1x/ru_standee_tormasov.webp);}
+.piece.standee.Wittgenstein {background-image: url(counters.1x/ru_standee_wittgenstein.webp);}
+.piece.standee.Chichagov {background-image: url(counters.1x/ru_standee_chichagov.webp);}
+.piece.standee.Platov {background-image: url(counters.1x/ru_standee_platov.webp);}
+
+.piece.standee.Napoleon {background-image: url(counters.1x/fr_standee_napoleon.webp);}
+.piece.standee.Jerome {background-image: url(counters.1x/fr_standee_jerome.webp);}
+.piece.standee.Beauharnais {background-image: url(counters.1x/fr_standee_de_beauharnais.webp);}
+.piece.standee.Davout {background-image: url(counters.1x/fr_standee_davout.webp);}
+.piece.standee.Murat {background-image: url(counters.1x/fr_standee_murat.webp);}
+.piece.standee.Schwarzenberg {background-image: url(counters.1x/fr_standee_schwarzenberg.webp);}
 
 .leader_board {
 	position: relative;
@@ -498,9 +519,8 @@ body.hide-pieces .sp { display: none }
 	border-radius: 50%;
 }
 
-.area > .marker.devastation { /* top left */
-	top: -10px;
-}
+.area > .marker.devastation { top: -10px; }
+.area.key_city > .marker.devastation { top: 0px; }
 
 .marker.devastation.lvl1 { background-image: url(counters.1x/devastation_1.webp) }
 .marker.devastation.lvl2 { background-image: url(counters.1x/devastation_2.webp) }

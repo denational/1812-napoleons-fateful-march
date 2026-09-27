@@ -708,8 +708,6 @@ function update_sps() {
 				// Attacker: All SPs are populated on connections.
 				// Defender: Only SPs that entered the area after the battle was first declared.
 
-
-
 				for (let force of get_player_battle_data(player, area).forces) {
 					if (force.sps[type] > 0) {
 						let num_moving = 0

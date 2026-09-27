@@ -1856,7 +1856,6 @@ function on_setup(scenario, options) {
 	// Stores information necessary to conduct a battle.
 	G.battles = []
 
-	// [TODO]
 	// Organized as a plain array map keyed by area.
 	// In each area, roles that are not the player are only allowed to see the topmost SP in the stack.
 	// Since SPs are sorted on type, we pick a random SP type to be the topmost SP in the stack.
@@ -6440,7 +6439,7 @@ P.execute_evade = script(`
 	if (L.evader === FRANCE && can_play_event(C_TOUGH_REARGUARD) && hand_has(FRANCE, C_TOUGH_REARGUARD)) {
 		call may_play_tough_rearguard
 	}
-	if (L.unsuccessful_disengagement) {
+	if (is_event_active(C_UNSUCCESSFUL_DISENGAGEMENT) && get_event_keyword(C_UNSUCCESSFUL_DISENGAGEMENT, "area") === L.area) {
 		goto end_order { type: EVADE }
 	} else {
 		call select_evade_destination { area: L.area }
@@ -10916,8 +10915,6 @@ P.may_play_event = {
 			else
 				goto(L.goto_if_not_played)
 		} else {
-			if (L.current_event === C_UNSUCCESSFUL_DISENGAGEMENT)
-				L.L.unsuccessful_disengagement = false
 			end()
 		}
 	},
@@ -13458,14 +13455,11 @@ P.unsuccessful_disengagement = {
 	},
 	confirm() {
 		log(`Cancelled all Evade orders at ${format_area(L.area)}.`)
-		end()
-	},
-	_end() {
 		add_persistent_event(C_UNSUCCESSFUL_DISENGAGEMENT, {
 			area: L.area,
 			cancelled_orders: get_orders_at_area(RUSSIA, L.area).filter(order => get_order_type(order) === EVADE)
 		})
-		L.L.unsuccessful_disengagement = true
+		end()
 	}
 }
 
