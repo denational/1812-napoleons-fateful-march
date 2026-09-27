@@ -12285,8 +12285,10 @@ P.stoic_infantry_rally = {
 		battle_rally_sp(R, G.current_battle, type, strength, from)
 		logii(`1 Exh. Infantry`)
 
-		if (--L.count === 0)
+		if (--L.count === 0) {
+			map_delete(G.persistent_events, C_STOIC_INFANTRY)
 			goto("event_done", { card: C_STOIC_INFANTRY })
+		}
 	}
 }
 
