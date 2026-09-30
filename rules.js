@@ -1229,6 +1229,15 @@ function rally_sp(who, area, type, num = 1) {
 	add_sp(who, area, type - 1, num)
 }
 
+function get_areas_with_sps(who) {
+	let areas = []
+	map_for_each(G.sps, (area, entries) => {
+		if (entries.some(entry => decode_sp_player(entry) === who) && (area >= FIRST_AREA) && (area <= LAST_AREA))
+			set_add(areas, area)
+	})
+	return areas
+}
+
 /* ORDERS */
 function place_order(id, location) {
 	G.orders[id] = location
@@ -9371,24 +9380,16 @@ P.eliminate_leader = {
 		log("Eliminated")
 	},
 	prompt() {
-		if (L.leaders_to_eliminate.length > 0) {
-			V.prompt = `Select leaders to eliminate: ${join_array_with_and(L.leaders_to_eliminate.map(format_leader))}.`
-			L.leaders_to_eliminate.forEach(action_leader)
-		} else {
-			V.prompt = `Eliminate leaders — All done.`
-			button_done()
-		}
-
+		V.prompt = `Select leaders to eliminate: ${join_array_with_and(L.leaders_to_eliminate.map(format_leader))}.`
+		L.leaders_to_eliminate.forEach(action_leader)
 	},
 	leader(leader) {
 		push_undo()
 		logi(format_leader(leader))
 		set_delete(L.leaders_to_eliminate, leader)
 		eliminate_leader(leader)
-	},
-	done() {
-		log()
-		end()
+		if (!sudden_death() && L.leaders_to_eliminate.length === 0)
+			end()
 	}
 }
 
@@ -9765,27 +9766,32 @@ P.attrition = script(`
 	eval {
 		log_h2("Attrition")
 		L.player_with_initiative = get_who_has_initiative()
+		L.player_without_initiative = enemy(L.player_with_initiative)
 	}
+
 	call change_orders { current_type: FORAGE }
 
 	// FR #41 Freezing Weather: France may not use Forage orders.
 	if (is_event_active(C_FREEZING_WEATHER)) {
-		eval {
-			log_card(C_FREEZING_WEATHER)
-			logi("France may not execute Forage orders.")
-		}
+		call log_freezing_weather
 	}
 
-	set G.active (1 - L.player_with_initiative)
-	call attrition_events
-	set G.active L.player_with_initiative
-	call attrition_events
+	eval { log_h3("Events") }
+	if (could_play_any_attrition_event(L.player_without_initiative)) {
+		set G.active L.player_without_initiative
+		call attrition_events
+	}
+	if (could_play_any_attrition_event(L.player_with_initiative)) {
+		set G.active L.player_with_initiative
+		call attrition_events
+	}
 
+	eval { log_h3("Roll Weather Die") }
 	set G.active L.player_with_initiative
 	call roll_weather_die
 
 	eval { log_h3("Perform Attrition") }
-	set G.active (1 - L.player_with_initiative)
+	set G.active L.player_without_initiative
 	call do_attrition
 	set G.active L.player_with_initiative
 	call do_attrition
@@ -9796,26 +9802,36 @@ P.attrition = script(`
 	}
 `)
 
-function get_attrition_events(who) {
-	if (who === RUSSIA)
-		return [C_OVERSTRETCHED_LOGISTICS, C_DEVASTATED_LANDSCAPE, C_DISEASE_AND_STARVATION, C_COSSACK_PATROLS]
-	else
-		return [C_MUCH_NEEDED_VICTUALS]
+/* EVENTS */
+// NOTE: For expediency, a player is only given an oppurtunity to play events if
+// any cards are eligible to be played (not necessarily in hand).
+const ATTRITION_EVENTS = [
+	[C_OVERSTRETCHED_LOGISTICS, C_DEVASTATED_LANDSCAPE, C_DISEASE_AND_STARVATION, C_COSSACK_PATROLS],
+	[C_MUCH_NEEDED_VICTUALS]
+]
+
+// Called in P.attrition script
+// eslint-disable-next-line no-unused-vars
+function could_play_any_attrition_event(player) {
+	return ATTRITION_EVENTS[player].some(can_play_event)
+}
+
+function get_attrition_events(player) {
+	return ATTRITION_EVENTS[player]
 }
 
 P.attrition_events = {
 	_begin() {
-		L.events = get_attrition_events(G.active).filter(card => hand_has(G.active, card))
+		L.events = get_attrition_events(G.active).filter(card => hand_has(G.active, card) && can_play_event(card))
 	},
 	prompt() {
 		if (L.events.length > 0) {
-			V.prompt = `You may play events (${join_array_with_or(L.events.map(card => format_card(card)))}).`
-			for (let card of L.events)
-				action_card(card)
+			V.prompt = `You may play events. (${join_array_with_or(L.events.map(format_card))})`
+			L.events.forEach(action_card)
 			button_pass()
 		} else {
 			V.prompt = `Play Events: All done.`
-			button_done()
+			button_confirm()
 		}
 	},
 	card(card) {
@@ -9823,43 +9839,25 @@ P.attrition_events = {
 		set_delete(L.events, card)
 		call("event", { card })
 	},
-	done() {
+	confirm() 	{ end() },
+	pass() 	{
+		log(`${ROLES[G.active]} did not play events.`)
 		end()
 	},
-	pass() { end() }
 }
 
-P.roll_weather_die = {
-	_begin() {
-		log_h3("Roll Weather Die")
-		log()
-		L.roll = -1
-	},
-	prompt() {
-		if (L.roll === -1) {
-			V.prompt = `Roll the ${get_current_season() === SUMMER ? "Summer" : "Winter"} Weather Die.`
-			button_roll()
-		} else {
-			V.prompt = `Weather Roll: ${L.roll}.`
-			button_confirm()
-		}
-	},
-	roll() {
-		clear_undo()
-		L.roll = roll_d6()
-		G.weather_roll = L.roll
-		log(`Weather Die W${L.roll}.`)
-		log_weather_die_result(L.roll)
-	},
-	confirm() {
-		log()
-		end()
-	}
+/* ROLL WEATHER DIE */
+function get_weather_result(player) {
+	if (get_current_season() === SUMMER)
+		return get_summer_weather_die_result(player, G.weather_roll)
+	return get_winter_weather_die_result(player, G.weather_roll)
 }
 
-function log_weather_die_result(roll) {
-	let result = get_current_season() === SUMMER ? get_summer_weather_die_result(NONE, roll) : get_winter_weather_die_result(NONE, roll)
-	if (roll !== 3) {
+function log_weather_roll() {
+	log(`Weather Roll ${G.weather_roll}.`)
+
+	let result = get_weather_result(NONE)
+	if (G.weather_roll !== 3) {
 		logi(`${result >= 0 ? "+" : ""}${result} to Modified Size`)
 	} else {
 		if (get_current_season() == SUMMER) {
@@ -9872,15 +9870,29 @@ function log_weather_die_result(roll) {
 	}
 }
 
-function get_areas_with_sps(who) {
-	let areas = []
-	map_for_each(G.sps, (area, entries) => {
-		if (entries.some(entry => decode_sp_player(entry) === who) && (area >= FIRST_AREA) && (area <= LAST_AREA))
-			set_add(areas, area)
-	})
-	return areas
+P.roll_weather_die = {
+	_begin() {
+		G.weather_roll = -1
+	},
+	prompt() {
+		if (G.weather_roll === -1) {
+			const season_name = get_current_season() === SUMMER ? "Summer" : "Winter"
+			V.prompt = `Roll the ${season_name} Weather Die.`
+			button_roll()
+		} else {
+			V.prompt = `Weather Roll: ${G.weather_roll}.`
+			button_confirm()
+		}
+	},
+	roll() {
+		clear_undo()
+		G.weather_roll = roll_d6()
+		log_weather_roll()
+	},
+	confirm() {	end() },
 }
 
+/* PERFORM ATTRITION */
 function calculate_modified_size(who, area) {
 	let size = 0
 
@@ -9888,7 +9900,7 @@ function calculate_modified_size(who, area) {
 	size += count_num_sps(who, area)
 
 	// Apply weather effects
-	size += get_current_season() === SUMMER ? get_summer_weather_die_result(who, G.weather_roll) : get_winter_weather_die_result(who, G.weather_roll)
+	size += get_weather_result(who)
 
 	// Key City: -3 to Modified Size
 	if (is_key_city(area))
@@ -10147,121 +10159,97 @@ function must_assign_cavalry_attrition_loss() {
 	return G.attrition_data.num_sps_affected % 3 === 2 && !G.attrition_data.has_assigned_cavalry_loss && has_cavalry_or_cossack_in_area(G.active, L.area)
 }
 
-// TODO: Maybe have a single state to assign attrition losses? (to reduce clicking)
+function could_exhaust_sp(player, area, cavalry_loss = false) {
+	if (cavalry_loss)
+		return has_sp_of_type(player, FRESH_CAVALRY, area) || has_sp_of_type(player, FRESH_COSSACK, area)
+	return has_fresh_sp(player, area)
+}
+
+function could_eliminate_2_sp(player, area, cavalry_loss = false) {
+	if (cavalry_loss)
+		return has_sp_of_type(player, EXHAUSTED_CAVALRY, area) || has_sp_of_type(player, EXHAUSTED_COSSACK, area)
+
+	if (G.attrition_data.num_sps_affected % 3 === 0)
+		return true
+
+	if (G.attrition_data.num_sps_affected % 3 === 1 && L.count === 1 && has_exhausted_sp(G.active, L.area))
+		return true
+
+	return get_all_exhausted_sp_types(G.active, L.area).some(type => is_cavalry(type) || is_cossack(type))
+		|| G.attrition_data.has_assigned_cavalry_loss
+		|| (!G.attrition_data.has_assigned_cavalry_loss && !has_cavalry_or_cossack_in_area(G.active, L.area))
+}
+
+function generate_attrition_exhaustion_actions(player, area, cavalry_loss = false) {
+	get_all_fresh_sp_types(player, area).forEach(type => {
+		if (!cavalry_loss || (is_cavalry(type) || is_cossack(type)))
+			action_sp_alt(type, area)
+	})
+}
+
+function generate_attrition_elimination_actions(player, area, cavalry_loss = false) {
+	get_all_exhausted_sp_types(player, area).forEach(type => {
+		if (!cavalry_loss || (is_cavalry(type) || is_cossack(type)))
+			action_sp_alt(type, area)
+	})
+}
+
 P.assign_attrition_losses = {
+	_begin() {
+		// Since a player has to eliminate 2 exhausted SPs.
+		L.count = 0
+	},
 	prompt() {
 		V.prompt = `Assign attrition losses: ${G.attrition_data.num_losses_remaining} remaining.`
 
-		if (must_assign_cavalry_attrition_loss()) {
-			if (count_num_sps_of_type(G.active, FRESH_CAVALRY, L.area) > 0 || count_num_sps_of_type(G.active, FRESH_COSSACK, L.area) > 0)
-				button("exhaust")
+		if (must_assign_cavalry_attrition_loss())
+			V.prompt += ` Must assign an attrition loss to a Cavalry or Cossack SP.`
 
-			if (count_num_sps_of_type(G.active, EXHAUSTED_CAVALRY, L.area) > 0 || count_num_sps_of_type(G.active, EXHAUSTED_COSSACK, L.area) > 0)
-				button("eliminate_2")
-		}
-		else {
-			if (has_fresh_sp(G.active, L.area))
-				button("exhaust")
+		if (could_exhaust_sp(G.active, L.area, must_assign_cavalry_attrition_loss()) && (L.count !== 1 || !has_exhausted_sp(G.active, L.area)))
+			generate_attrition_exhaustion_actions(G.active, L.area, must_assign_cavalry_attrition_loss())
 
-			if (count_num_exhausted_sps(G.active, L.area) >= 2
-				|| ((has_friendly_sp(G.active, L.area) && count_num_sps(G.active, L.area) === count_num_exhausted_sps(G.active, L.area)))
-			) {
-				switch(G.attrition_data.num_sps_affected % 3) {
-				case 0:
-					button("eliminate_2")
-					break
-				case 1:
-				case 2:
-					button("eliminate_2", (
-						get_all_exhausted_sp_types(G.active, L.area).some(type => is_cavalry(type) || is_cossack(type))
-						|| G.attrition_data.has_assigned_cavalry_loss
-						|| (!G.attrition_data.has_assigned_cavalry_loss && !has_cavalry_or_cossack_in_area(G.active, L.area))
-					))
-				}
-			}
-		}
-	},
-	exhaust() {
-		push_undo()
-		call_or_goto(--G.attrition_data.num_losses_remaining > 0, "exhaust_sp", { area: L.area })
-	},
-	eliminate_2() {
-		push_undo()
-		call_or_goto((--G.attrition_data.num_losses_remaining > 0) && (count_num_sps(G.active, L.area) > 2), "eliminate_2_exhausted_sps", { area: L.area })
-	}
-}
-
-P.exhaust_sp = {
-	// L.area
-	prompt() {
-		V.prompt = `Exhaust 1 fresh SP at ${format_area(L.area)}.`
-		if (must_assign_cavalry_attrition_loss() && (count_num_sps_of_type(G.active, FRESH_CAVALRY, L.area) > 0 || count_num_sps_of_type(G.active, FRESH_COSSACK, L.area) > 0)) {
-			for (let type of get_all_fresh_sp_types(G.active, L.area)) {
-				if (is_cavalry(type) || is_cossack(type))
-					action_sp_alt(type, L.area)
-			}
-		} else {
-			get_all_fresh_sp_types(G.active, L.area).forEach(type => action_sp_alt(type, L.area))
-		}
+		if (could_eliminate_2_sp(G.active, L.area, must_assign_cavalry_attrition_loss()))
+			generate_attrition_elimination_actions(G.active, L.area, must_assign_cavalry_attrition_loss())
 	},
 	sp(entry) {
 		push_undo()
 		let type = decode_sp_type(entry)
 
-		exhaust_sp(G.active, L.area, type)
+		// i.e. is an exhaustion
+		if (is_sp_type_fresh(type)) {
+			exhaust_sp(G.active, L.area, type)
+			--G.attrition_data.num_losses_remaining
 
-		if (is_cavalry(type) || is_cossack(type))
-			G.attrition_data.has_assigned_cavalry_loss = true
-		if (++G.attrition_data.num_sps_affected % 3 === 0)
-			G.attrition_data.has_assigned_cavalry_loss = false
+			if (!map_has(G.attrition_data.previously_exhausted, type))
+				map_set(G.attrition_data.previously_exhausted, type, 1)
+			else
+				map_increment(G.attrition_data.previously_exhausted, type)
 
-		if (!map_has(G.attrition_data.previously_exhausted, type))
-			map_set(G.attrition_data.previously_exhausted, type, 1)
-		else
-			map_increment(G.attrition_data.previously_exhausted, type)
-
-		end()
-	}
-}
-
-P.eliminate_2_exhausted_sps = {
-	// L.area
-	_begin() {
-		L.count = Math.min(2, count_num_exhausted_sps(G.active, L.area))
-	},
-	prompt() {
-		V.prompt = `Eliminate ${L.count} SPs at ${format_area(L.area)}.`
-		if (must_assign_cavalry_attrition_loss() && (count_num_sps_of_type(G.active, EXHAUSTED_CAVALRY, L.area) > 0 || count_num_sps_of_type(G.active, EXHAUSTED_COSSACK, L.area) > 0)) {
-			for (let type of get_all_exhausted_sp_types(G.active, L.area)) {
-				if (is_cavalry(type) || is_cossack(type))
-					action_sp_alt(type, L.area)
-			}
 		} else {
-			get_all_exhausted_sp_types(G.active, L.area).forEach(type => action_sp_alt(type, L.area))
-		}
-	},
-	sp(entry) {
-		push_undo()
-		let type = decode_sp_type(entry)
+			eliminate_sp(G.active, L.area, type)
 
-		eliminate_sp(G.active, L.area, type)
+			if (!map_has(G.attrition_data.previously_eliminated, type))
+				map_set(G.attrition_data.previously_eliminated, type, 1)
+			else
+				map_increment(G.attrition_data.previously_eliminated, type)
 
-		if (is_cavalry(type) || is_cossack(type))
-			G.attrition_data.has_assigned_cavalry_loss = true
-		if (++G.attrition_data.num_sps_affected % 3 === 0)
-			G.attrition_data.has_assigned_cavalry_loss = false
+			if (++L.count === 2 || !has_exhausted_sp(G.active, L.area)) {
+				L.count = 0
+				--G.attrition_data.num_losses_remaining
+			}
 
-		if (!map_has(G.attrition_data.previously_eliminated, type))
-			map_set(G.attrition_data.previously_eliminated, type, 1)
-		else
-			map_increment(G.attrition_data.previously_eliminated, type)
-
-		if (--L.count === 0) {
 			if (!has_friendly_sp(G.active, L.area) && has_friendly_leader(G.active, L.area))
 				goto("eliminate_leader", { area: L.area })
-			else
-				end()
 		}
+
+		if (is_cavalry(type) || is_cossack(type))
+			G.attrition_data.has_assigned_cavalry_loss = true
+
+		if (++G.attrition_data.num_sps_affected % 3 === 0)
+			G.attrition_data.has_assigned_cavalry_loss = false
+
+		if (G.attrition_data.num_losses_remaining === 0 || !has_friendly_sp(G.active, L.area))
+			end()
 	}
 }
 
@@ -14236,6 +14224,11 @@ P.inferior_gunpowder = function() {
 // FR #40 Vulnerable Supply Lines (must-play event) -- see draw_card_to_hand
 
 // FR #41 Freezing Weather (must-play event) -- see draw_card_to_hand
+P.log_freezing_weather = function() {
+	log_card(C_FREEZING_WEATHER)
+	logi("France may not execute Forage orders.")
+	end()
+}
 
 // FR #42 Extreme Weather (must-play event) -- see draw_card_to_hand
 
