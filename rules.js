@@ -9442,6 +9442,14 @@ P.execute_rally = script(`
 	goto end_order { type: RALLY }
 `)
 
+function is_friendly_supply_source(player, area) {
+	return set_has(SUPPLY_SOURCES[player], area)
+}
+
+function could_rally_two_infantry(player, area) {
+	return !L.kutuzov && (has_friendly_depot(player, area) || is_friendly_supply_source(player, area))
+}
+
 P.rally = {
 	_begin() {
 		// L.area, L.kutuzov
@@ -9452,13 +9460,13 @@ P.rally = {
 		if (
 			!has_exhausted_sp(G.active, L.area)
 			// Second rally SP must be Infantry!
-			|| (L.count === 1 && !get_all_exhausted_sp_types(G.active, L.area).some(type => is_infantry(type)))
+			|| (L.count === 1 && get_all_exhausted_sp_types(G.active, L.area).every(type => !is_infantry(type)))
 		) {
 			V.prompt = `No ${L.count > 0 ? "more" : ""} exhausted SPs at ${format_area(L.area)} to Rally.`
 			button_confirm()
 		} else {
 			V.prompt = `You may flip back one of your exhausted SPs back to its fresh side.`
-			if (has_friendly_depot(G.active, L.area) && count_num_exhausted_infantry(G.active, L.area) >= 2 && !L.kutuzov)
+			if (could_rally_two_infantry(G.active, L.area) && count_num_exhausted_infantry(G.active, L.area) >= 2)
 				V.prompt += ` (2 if Infantry)`
 
 			for (let type of get_all_exhausted_sp_types(G.active, L.area)) {
@@ -9477,7 +9485,7 @@ P.rally = {
 		rally_sp(G.active, L.area, type)
 		log_masked(G.active, format_i(`1 ${get_sp_type_name(type)}`), format_i(`1 Exh. SP`))
 
-		if (!L.kutuzov && L.count === 0 && has_friendly_depot(G.active, L.area) && is_infantry(type))
+		if (L.count === 0 && could_rally_two_infantry(G.active, L.area) && is_infantry(type))
 			++L.count
 		else
 			end()
@@ -9608,11 +9616,14 @@ function has_executable_place_depot_order(who) {
 	if (!has_executable_order(who, PLACE_DEPOT))
 		return false
 
+	// .find since each side only has one Place Depot order
 	let order = get_placed_orders_of_type(PLACE_DEPOT).find(order => get_order_owner(order) === who)
+	let area = get_order_location(order)
 
-	return has_friendly_sp(who, get_order_location(order))
-		&& is_depot_town(get_order_location(order))
-		&& has_depot_within_four_road_connections(who, get_order_location(order))
+	return has_friendly_sp(who, area)
+		&& !has_friendly_depot(who, area)
+		&& is_depot_town(area)
+		&& has_depot_within_four_road_connections(who, area)
 		&& (!is_event_active(C_LOGISTICS_COLLAPSE) || who !== FRANCE || has_card_in_hand(who))
 }
 
