@@ -5772,7 +5772,7 @@ P.select_force = {
 function calculate_move_allowance(who, move_type, sps) {
 	// Exhausted Horses supersedes 'Fast Marching'. My assumption is that Freezing Weather does the same since it has the same wording.
 	// https://boardgamegeek.com/thread/3745296/fast-marching-and-exhausted-horses
-	if (is_event_active(C_EXHAUSTED_HORSES) || (is_event_active(C_FREEZING_WEATHER) && who === FRANCE))
+	if (who === FRANCE && (is_event_active(C_EXHAUSTED_HORSES) || is_event_active(C_FREEZING_WEATHER)))
 		return 1
 
 	if ((move_type === MARCH) && (who === FRANCE) && (is_event_active(C_FAST_MARCHING_1) || is_event_active(C_FAST_MARCHING_2)))
