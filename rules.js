@@ -471,6 +471,7 @@ function lookup_attrition_table(modified_size, distance_to_nearest_depot) {
 }
 
 function get_battle_vp_shift(losses) {
+	log(`${ROLES[get_battle_winner(G.current_battle)]} eliminated ${losses} SPs.`)
 	if (losses <= 1)
 		return 0
 	else if (losses <= 4)
@@ -9077,7 +9078,6 @@ P.battle_shift_vp_and_initiative = {
 	vp() {
 		push_undo()
 		if (L.step === -1) {
-			log(`${ROLES[G.active]} eliminated ${L.vp_shift} enemy SPs.`)
 			increase_vp(G.active, L.vp_shift)
 			if (losing_force_includes_king(G.active, G.current_battle))
 				++L.step
