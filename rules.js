@@ -2560,6 +2560,7 @@ P.finish_game = function() {
 	log()
 	for (let f of END_GAME_OBJECTIVES[G.scenario]) {
 		f()
+		sudden_death()
 		log()
 	}
 
@@ -3056,22 +3057,30 @@ P.select_new_cards = {
 }
 
 // === NORMAL TURNS ===
+const PHASE_DRAW_CARD_TO_HAND 			= "draw_card_to_hand"
+const PHASE_PLAY_CARD_FOR_ADDITIONAL_ORDERS 	= "play_card_for_additional_orders"
+const PHASE_SELECT_ORDERS 				= "select_orders"
+const PHASE_PLACE_ORDERS				= "place_orders"
+const PHASE_BATTLES_PHASE				= "battles_phase"
+const PHASE_ATTRITION					= "attrition"
+const PHASE_LINES_OF_COMMUNICATIONS			= "lines_of_communications"
+
 // Orders are defined as numbers instead of strings so that they can easily be funnelled into their specific order execution handler
 const TURN_PHASES = [
-	"draw_card_to_hand",
-	"play_card_for_additional_orders",
-	"select_orders",
-	"place_orders",
+	PHASE_DRAW_CARD_TO_HAND,
+	PHASE_PLAY_CARD_FOR_ADDITIONAL_ORDERS,
+	PHASE_SELECT_ORDERS,
+	PHASE_PLACE_ORDERS,
 	FORCED_MARCH,
 	CAVALRY_PATROLS,
 	MARCH,
 	EVADE,
-	"battles_phase",
+	PHASE_BATTLES_PHASE,
 	RALLY,
 	COSSACK_RAID,
 	PLACE_DEPOT,
-	"attrition",
-	"lines_of_communications"
+	PHASE_ATTRITION,
+	PHASE_LINES_OF_COMMUNICATIONS
 ]
 
 // Used in P.turn script
@@ -6880,6 +6889,7 @@ P.eliminate_all_sps = {
 		log("Eliminated")
 		logi(format_leader(leader))
 		eliminate_leader(leader)
+		sudden_death()
 	},
 	vp() {
 		push_undo()
@@ -6935,7 +6945,8 @@ P.evade = function() {
 
 	G.move = {}
 
-	end()
+	if (!sudden_death())
+		end()
 }
 
 P.finish_evade = {
@@ -6964,13 +6975,15 @@ P.finish_evade = {
 	},
 	pass() {
 		log()
-		if (is_vp_area(L.area) && !has_friendly_sp(L.evader, L.area)) {
+		if (is_vp_area(L.area) && !has_friendly_sp(L.evader, L.area))
 			increase_vp(enemy(L.evader), get_area_vp(L.area))
+
+		if (!sudden_death()) {
+			if (is_event_active(C_UNEXPECTED_RETREAT))
+				end()
+			else
+				goto("end_order", { type: EVADE })
 		}
-		if (is_event_active(C_UNEXPECTED_RETREAT))
-			end()
-		else
-			goto("end_order", { type: EVADE })
 	}
 }
 
@@ -8493,7 +8506,9 @@ P.assign_losses = {
 				})
 
 				push_local_undo(RUSSIA, "leader", { leader, strength, from })
-				advance_local_state(RUSSIA)
+
+				if (!sudden_death())
+					advance_local_state(RUSSIA)
 			},
 			on_next() {
 				push_local_undo(RUSSIA, "next")
@@ -9012,6 +9027,7 @@ P.end_battle = script(`
 			log()
 			log(ROLES[L.winner] + " captured S" + G.current_battle + "!")
 			increase_vp(L.winner, get_area_vp(G.current_battle))
+			sudden_death()
 		}
 		G.played_cards[RUSSIA].length = 0
 		G.played_cards[FRANCE].length = 0
@@ -9091,6 +9107,7 @@ P.battle_shift_vp_and_initiative = {
 			increase_vp(G.active)
 			L.has_shifted_vp = true
 		}
+		sudden_death()
 	},
 	initiative() {
 		push_undo()
@@ -11762,7 +11779,8 @@ P.city_ablaze = {
 	vp() {
 		push_undo()
 		increase_vp(RUSSIA)
-		++L.step
+		if (!sudden_death())
+			++L.step
 	},
 	initiative() {
 		push_undo()
@@ -12960,7 +12978,8 @@ P.treacherous_allies_betray = {
 			}
 		})
 
-		end()
+		if (!sudden_death())
+			end()
 	}
 }
 
@@ -13262,7 +13281,9 @@ P.war_weariness = {
 		increase_vp(FRANCE, L.french_vp)
 		L.controlled_areas.forEach(area => logi(`+1 ${format_area(area)}`))
 		L.eliminated_russian_leaders.forEach(leader => logi(format_leader(leader)))
-		goto("event_done", { card: C_WAR_WEARINESS })
+
+		if (!sudden_death())
+			goto("event_done", { card: C_WAR_WEARINESS })
 	}
 }
 
@@ -14739,6 +14760,7 @@ function on_assert() {
 	assert_sp_entries()
 	// TODO
 	// assert_lone_leaders()
+	// assert_sudden_death()
 }
 
 // Test invariant for G.sps: Each area has exactly one entry for each player & type.
@@ -14763,6 +14785,12 @@ function assert_lone_leaders() {
 				throw new Error(`${get_leader_short_name(leader)} is alone without SPs at ${get_area_name(get_leader_location(leader))}.`)
 		}
 	}
+}
+
+// A sudden death victory is immediately triggered if the absolute VP goes over 20 for a side.
+function assert_sudden_death() {
+	if (Math.abs(G.vp) >= 20)
+		throw new Error(`${possessive(G.vp > 0 ? FRANCE : RUSSIA)} Sudden Death Victory did not trigger.`)
 }
 
 // === COMMON FRAMEWORK - DO NOT EDIT ===
