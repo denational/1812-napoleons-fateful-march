@@ -3447,14 +3447,14 @@ P.draw_card_to_hand = {
 			on_begin() {
 				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining 	= Math.min(get_devastated_areas_with_french_sps().length, 2)
 				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice 		= null
-				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area 	= -1
 				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count 		= 0
 				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo 			= []
+				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_assigned 	= []
 			},
 			on_prompt() {
 				if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining > 0) {
 					if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === null) {
-						V.prompt = `Assign attrition losses: ${get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining} remaining.`
+						prompt_card(C_CHAOS_IN_THE_REAR_AREAS, `Assign attrition losses. (${get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining} remaining)`)
 						let any_action = false
 
 						if (get_devastated_areas_with_french_sps().some(area => has_fresh_sp(FRANCE, area))) {
@@ -3475,25 +3475,42 @@ P.draw_card_to_hand = {
 
 						if (!any_action)
 							button_done()
-					} else if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area === -1) {
-						V.prompt = `Select an area to ${get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice } a SP.`
+					} else if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count > 0) {
+						V.prompt = `Select an SP to ${get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice} (CANNOT BE UNDONE).`
+
 						let areas
 						if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "exhaust")
 							areas = get_devastated_areas_with_french_sps().filter(area => has_fresh_sp(FRANCE, area))
 						else
 							areas = get_devastated_areas_with_french_sps().filter(area => has_exhausted_sp(FRANCE, area))
 
-						if (areas.length <= 5)
-							V.prompt += ` (${join_array_with_or(areas.map(format_area))})`
-						areas.forEach(action_area)
-					} else if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count > 0) {
-						V.prompt = `Select an SP to ${get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice}.`
-						if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "exhaust") {
-							for (let type of get_all_fresh_sp_types(FRANCE, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area))
-								action_sp_alt(type, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area)
-						} else {
-							for (let type of get_all_exhausted_sp_types(FRANCE, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area))
-								action_sp_alt(type, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area)
+						for (let area of areas) {
+							if (have_sps_moved_in_area(area)) {
+								for (let type of get_sp_types_at_area(R, area)) {
+									if (
+										(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "exhaust" && is_sp_type_fresh(type))
+										|| (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "eliminate" && is_sp_type_exhausted(type))
+									) {
+										let count = count_num_sps_of_type(R, type, area)
+										for (let entry of get_moved_sps_in_area(area)) {
+											if (decode_sp_player(entry) === R && decode_sp_type(entry) === type) {
+												count -= decode_sp_num(entry)
+												action_sp_alt(type, area, decode_sp_strength(entry), decode_sp_from(entry))
+											}
+										}
+										if (count > 0)
+											action_sp_alt(type, area)
+									}
+								}
+							} else {
+								if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "exhaust") {
+									for (let type of get_all_fresh_sp_types(FRANCE, area))
+										action_sp_alt(type, area)
+								} else {
+									for (let type of get_all_exhausted_sp_types(FRANCE, area))
+										action_sp_alt(type, area)
+								}
+							}
 						}
 					}
 				} else {
@@ -3512,20 +3529,28 @@ P.draw_card_to_hand = {
 				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = "eliminate"
 				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count = 2
 			},
-			on_area(area) {
-				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.push({action: "select_area", area })
-				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area = area
-			},
 			on_sp(entry) {
 				let type = decode_sp_type(entry)
-				if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "exhaust") {
-					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.push({action: "exhaust", area: get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area, type })
-					exhaust_sp(FRANCE, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area, type)
-				} else {
-					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.push({action: "eliminate", area: get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area, type })
-					eliminate_sp(FRANCE, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area, type)
-				}
-				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area = -1
+				let area = decode_sp_area(entry)
+				let strength = decode_sp_strength(entry)
+				let from = decode_sp_from(entry)
+
+				// Offering an undo here would be very bug-prone as restoring the previous state would require modifying a lot of the game state.
+				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.length = 0
+
+				if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "exhaust")
+					exhaust_sp(FRANCE, area, type, 1, false, true, strength, from, has_battle(area))
+				else
+					eliminate_sp_new(FRANCE, area, type, 1, false, true, strength, from, has_battle(area))
+
+				if (!map_has(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_assigned, area))
+					map_set(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_assigned, area, [])
+
+				if (!map_has(map_get(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_assigned, area, []), type))
+					map_set(map_get(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_assigned, area, []), type, 1)
+				else
+					map_increment(map_get(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_assigned, area, []), type, 1)
+
 				if (--get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count === 0) {
 					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = null
 					--get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining
@@ -3533,6 +3558,7 @@ P.draw_card_to_hand = {
 			},
 			on_done() {
 				discard_or_remove_card(C_CHAOS_IN_THE_REAR_AREAS)
+				log_must_play_event(C_CHAOS_IN_THE_REAR_AREAS, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_assigned)
 				end_local_state(R)
 			},
 			on_undo() {
@@ -3542,24 +3568,6 @@ P.draw_card_to_hand = {
 					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = null
 					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count = 0
 					return
-				case "select_area":
-					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area = -1
-					return
-				case "exhaust":
-					rally_sp(FRANCE, action.area, action.type + 1)
-					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area = action.area
-					if (++get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count === 1) {
-						get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = "exhaust"
-						++get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining
-					}
-					return
-				case "eliminate":
-					add_sp(FRANCE, action.area, action.type)
-					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).selected_area = action.area
-					if (++get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count === 1) {
-						get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = "eliminate"
-						++get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining
-					}
 				}
 			}
 		},
@@ -9870,18 +9878,16 @@ P.attrition_events = {
 		if (L.events.length > 0) {
 			V.prompt = `You may play events. (${join_array_with_or(L.events.map(format_card))})`
 			L.events.forEach(action_card)
-			button_pass()
 		} else {
 			V.prompt = `Play Events: All done.`
-			button_confirm()
 		}
+		button_pass()
 	},
 	card(card) {
 		push_undo()
 		set_delete(L.events, card)
 		call("event", { card })
 	},
-	confirm() 	{ end() },
 	pass() 	{
 		log(`${ROLES[G.active]} did not play events.`)
 		end()
@@ -10679,6 +10685,39 @@ function log_must_play_event(card, info) {
 		else
 			log(`No effect – ${format_leader(L_JEROME)} is not on map.`)
 		break
+	case C_CHAOS_IN_THE_REAR_AREAS:
+		log(`Assigned attrition losses.`)
+		map_for_each(info, (area, entries) => {
+			log(format_area(area))
+			let count = 0
+			let any = false
+
+			any = map_keys(entries).some(type => is_sp_type_fresh(type))
+			if (any)
+				logi("Exhausted")
+			map_for_each(entries, (type, num) => {
+				if (is_sp_type_fresh(type)) {
+					log_only(R, format_ii(`${num} ${get_sp_type_name(type)}`))
+					count += num
+				}
+			})
+			if (any)
+				log_exclusive(R, format_ii(`${count} fresh SPs`))
+
+			any = map_keys(entries).some(type => is_sp_type_exhausted(type))
+			if (any)
+				logi("Eliminated")
+			count = 0
+			map_for_each(entries, (type, num) => {
+				if (is_sp_type_exhausted(type)) {
+					log_only(R, format_ii(`${num} ${get_sp_type_name(type)}`))
+					count += num
+				}
+			})
+			if (any)
+				log_exclusive(R, format_ii(`${count} exhausted SPs`))
+		})
+		break
 	case C_FREEZING_WEATHER:
 		log("FR may not use 'Place Depot' or 'Forage' orders this turn.")
 		log("All FR forces have a maximum move of 1.")
@@ -10706,7 +10745,6 @@ function log_must_play_event(card, info) {
 	}
 	card_box_end()
 }
-
 /* COMMON EVENT STATES */
 
 P.event = script(`
@@ -14777,9 +14815,13 @@ function log_france_only(text) {
 	log("HF" + text)
 }
 
+function log_exclusive(who, text) {
+	log(`E${who === FRANCE ? "F" : "R"}` + text)
+}
+
 function log_masked(who, text1, text2) {
 	log_only(who, text1)
-	log(`E${who === FRANCE ? "F" : "R"}` + text2)
+	log_exclusive(who, text2)
 }
 
 // === TESTS & ASSERTIONS ===
