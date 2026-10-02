@@ -6854,20 +6854,12 @@ P.evade_pursuit_exhaustion = {
 P.eliminate_all_sps = {
 	_begin() {
 		L.has_eliminated_sps = false
-		L.has_shifted_vp = false
+		L.has_shifted_vp = TURN_PHASES[G.phase] === PHASE_BATTLES_PHASE
 	},
 	prompt() {
 		if (!L.has_eliminated_sps) {
 			V.prompt = `Eliminate all SPs at ${format_area(L.area)}.`
 			button("eliminate")
-		} else if (!L.has_shifted_vp) {
-			if (has_friendly_leader(G.active, L.area)) {
-				V.prompt = `No friendly SPs: Eliminate all leaders at ${format_area(L.area)}.`
-				get_leaders_at_area(G.active, L.area).forEach(action_leader)
-			} else {
-				V.prompt = `Eliminated ${L.count} SPs: ${ROLES[G.active]} loses ${L.count} VP.`
-				action_vp_marker()
-			}
 		} else {
 			V.prompt = `Eliminate all SPs: All done.`
 			button_done()
@@ -6877,24 +6869,32 @@ P.eliminate_all_sps = {
 		push_undo()
 		log(`${ROLES[G.active]} has no more fresh SPs.`)
 		log(`Eliminated all SPs at ${format_area(L.area)}.`)
+
 		L.count = count_num_sps(G.active, L.area)
+		if (TURN_PHASES[G.phase] === PHASE_BATTLES_PHASE)
+			increment_eliminated(G.active, G.current_battle, L.count)
+
 		for (let type of get_sp_types_at_area(G.active, L.area))
 			eliminate_sp(G.active, L.area, type, count_num_sps_of_type(G.active, type, L.area))
 		L.has_eliminated_sps = true
-		if (G.phase === TURN_PHASES.findIndex(phase => phase === EVADE))
+
+		if (TURN_PHASES[G.phase] !== EVADE)
+			shift_initiative(enemy(G.active))
+		else
 			delete_battle_entry(L.area)
+
+		if (has_friendly_leader(G.active, L.area))
+			call("eliminate_leader", { area: L.area })
+		else if (!L.has_shifted_vp && TURN_PHASES[G.phase] !== EVADE)
+			this.call_shift_vp()
 	},
-	leader(leader) {
-		push_undo()
-		log("Eliminated")
-		logi(format_leader(leader))
-		eliminate_leader(leader)
-		sudden_death()
-	},
-	vp() {
-		push_undo()
+	call_shift_vp() {
 		L.has_shifted_vp = true
-		decrease_vp(G.active, L.count)
+		call("shift_vp", { in_favor_of: enemy(G.active), amount: L.count })
+	},
+	resume() {
+		if (!L.has_shifted_vp && TURN_PHASES[G.phase] !== EVADE)
+			this.call_shift_vp()
 	},
 	done() {
 		push_undo()
@@ -7566,8 +7566,24 @@ P.resolve_battles = {
 	}
 }
 
+function is_early_elimination(battle) {
+	return xor(has_fresh_sp(RUSSIA, G.current_battle), has_fresh_sp(FRANCE, G.current_battle))
+}
+
 P.battle = script(`
 	// L.area, L.attacker, L.defender
+
+	if (is_early_elimination(G.current_battle)) {
+		eval {
+			G.active = !has_fresh_sp(RUSSIA, G.current_battle) ? RUSSIA : FRANCE
+			set_battle_winner(1 - G.active, G.current_battle)
+			set_battle_loser(G.active, G.current_battle)
+		}
+		call eliminate_all_sps { area: G.current_battle }
+		log ""
+		goto end_battle
+	}
+
 	eval { log_h5("Play Battle Events") }
 	call play_battle_events { attacker: L.attacker, defender: L.defender, area: L.area }
 
@@ -8812,7 +8828,8 @@ P.determine_battle_winner = function() {
 			goto("pursuit")
 		}
 
-		// Standard tied battle: Defender wins if fortress, else the player with the Initiative wins
+		// Standard tied battle: Defender wins if fortress or all attacking forces crossed bridges
+		// else the player with the Initiative wins
 		else {
 			let winner
 			if (is_fortress_town(G.current_battle) || did_all_attacking_forces_cross_bridges(G.current_battle)) {
@@ -8982,9 +8999,7 @@ P.assign_pursuit_losses = {
 }
 
 function did_all_attacking_forces_cross_bridges(battle) {
-	let attacker_data = get_attacker_data(battle)
-
-	return attacker_data.forces.every(force => force.bridge === true)
+	return get_attacker_data(battle).forces.every(force => force.river_crossing)
 }
 
 function get_battle_events(battle) {
@@ -8997,46 +9012,57 @@ P.end_battle = script(`
 		L.winner = get_battle_winner(G.current_battle)
 		L.loser = get_battle_loser(G.current_battle)
 	}
+
 	if (!L.drawn_battle) {
 		call battle_shift_vp_and_initiative { winner: L.winner }
 	}
+
 	if (L.winner === RUSSIA && is_battle_event_currently_active(C_THE_IMPERIAL_GUARD)) {
 		set G.active FRANCE
 		call the_imperial_guard_penalty
 	}
+
 	if (has_friendly_sp(L.loser, G.current_battle)) {
 		call retreat { loser: L.loser }
 	}
+
 	if (has_friendly_leader(L.loser, G.current_battle)) {
 		set G.active L.loser
 		call eliminate_leader { area: G.current_battle }
 	}
+
 	if (has_friendly_depot(L.loser, G.current_battle)) {
 		set G.active L.loser
 		call remove_depot { area: G.current_battle }
 	}
+
 	if (get_battle_events(G.current_battle).length > 0) {
 		call battle_draw_card_to_hand
 	}
+
 	eval {
 		increase_devastation(G.current_battle)
 		log("Increased devastation at S" + G.current_battle + ".")
 	}
-	eval {
-		if (get_area_vp(G.current_battle) > 0 && is_battle_attacker(L.winner, G.current_battle)) {
-			log()
-			log(ROLES[L.winner] + " captured S" + G.current_battle + "!")
-			increase_vp(L.winner, get_area_vp(G.current_battle))
-			sudden_death()
-		}
-		G.played_cards[RUSSIA].length = 0
-		G.played_cards[FRANCE].length = 0
-		if (map_has(G.battles, G.current_battle)) {
-			delete_battle_entry(G.current_battle)
-		}
-		G.active = get_who_has_initiative()
-	}
+
+	goto cleanup_battle
 `)
+
+P.cleanup_battle = function() {
+	if (get_area_vp(G.current_battle) > 0 && is_battle_attacker(L.winner, G.current_battle)) {
+		log()
+		log(ROLES[L.winner] + " captured S" + G.current_battle + "!")
+		increase_vp(L.winner, get_area_vp(G.current_battle))
+		sudden_death()
+	}
+
+	G.played_cards[RUSSIA].length = 0
+	G.played_cards[FRANCE].length = 0
+	if (map_has(G.battles, G.current_battle))
+		delete_battle_entry(G.current_battle)
+	G.active = get_who_has_initiative()
+	end()
+}
 
 function get_current_initiative_level() {
 	return Math.abs(G.initiative)
@@ -9045,7 +9071,6 @@ function get_current_initiative_level() {
 P.battle_shift_vp_and_initiative = {
 	_begin() {
 		//L.winner
-		//console.log(get_battle_entry(G.current_battle, null))
 		log_h5("VP & Initiative Shifts")
 		G.active = L.winner
 		L.vp_shift = get_battle_vp_shift(get_player_battle_data(enemy(G.active), G.current_battle).num_eliminated)
@@ -14604,6 +14629,10 @@ function map_for_each_value(map, f) {
 
 function roll_d6() {
 	return random(6) + 1
+}
+
+function xor(a, b) {
+	return a !== b
 }
 
 // DEBUG: For quickly printing deeply nested objects (G.moved, G.battles)
