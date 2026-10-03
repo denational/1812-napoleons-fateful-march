@@ -1107,6 +1107,10 @@ function is_russian_disorganization_and_confusion() {
 	return G.options.russian_confusion
 }
 
+function is_leak_hand() {
+	return G.options.leak
+}
+
 // === STATE-MANIPULATING FUNCTIONS ===
 /* VP */
 function sudden_death() {
@@ -1942,6 +1946,10 @@ function log_special_and_optional_rules(scenario) {
 		add_order_of_type_from_pool(RUSSIA, RALLY, OUT_OF_PLAY)
 		log(`Russian Disorganization & Confusion.`)
 	}
+	log()
+
+	if (is_leak_hand())
+		log_italic("Interrupting cards are only prompted if held by a player.")
 }
 
 function update_supply(player) {
@@ -4342,6 +4350,7 @@ P.place_orders = script(`
 P.begin_place_orders_events = {
 	_begin() {
 		L.events = [C_INFIGHTING_AND_INTRIGUE, C_LETHARGIC_PURSUIT].filter(card => can_play_event(card) && hand_has(G.active, card))
+		if (L.events.length === 0) end()
 	},
 	prompt() {
 		if (L.events.length > 0) {
@@ -4578,6 +4587,7 @@ P.do_place_orders = {
 P.end_place_orders_events = {
 	_begin() {
 		L.events = [C_NEW_POSTING, C_EXHAUSTED_HORSES, C_DISORDERLY_MARCH].filter(card => can_play_event(card) && hand_has(G.active, card))
+		if (L.events.length === 0) end()
 	},
 	prompt() {
 		if (L.events.length > 0) {
@@ -5030,7 +5040,7 @@ P.change_orders = {
 	finish_state() {
 		set_delete(G.active, R)
 		if (G.active.length === 0) {
-			if (L.napoleon_choice !== null) {
+			if (L.napoleon_choice !== null && (!is_leak_hand() || hand_has(RUSSIA, C_INDECISION))) {
 				G.active = RUSSIA
 				goto("may_play_indecision", { response_to: "napoleon_change", napoleon_change: L.napoleon_change })
 			} else {
@@ -5051,11 +5061,11 @@ P.determine_who_goes_first = {
 		L.has_confirmed = false
 
 		// TODO: Add 'pass turn' feature for expediency.
-		if (L.type === FORCED_MARCH && can_play_event(C_EVASIVE_MANEUVERS)) {
+		if (L.type === FORCED_MARCH && can_play_event(C_EVASIVE_MANEUVERS) && (!is_leak_hand() || hand_has(RUSSIA, C_EVASIVE_MANEUVERS))) {
 			G.active = RUSSIA
 			L.event = C_EVASIVE_MANEUVERS
 			call("may_play_evasive_maneuvers")
-		} else if (can_play_event(C_ENERGETIC_LEADERSHIP)) {
+		} else if (can_play_event(C_ENERGETIC_LEADERSHIP) && (!is_leak_hand() || hand_has(C_ENERGETIC_LEADERSHIP))) {
 			G.active = FRANCE
 			L.event = C_ENERGETIC_LEADERSHIP
 			call("may_play_energetic_leadership", { type: L.type })
@@ -5268,6 +5278,13 @@ P.execute_next_order = {
 	},
 }
 
+function could_play_exhausting_march() {
+	return L.type === FORCED_MARCH
+		&& G.active === FRANCE
+		&& G.move.path.length > 1
+		&& (!is_leak_hand() || hand_has(RUSSIA, C_EXHAUSTING_MARCH_1) || hand_has(RUSSIA, C_EXHAUSTING_MARCH_2))
+}
+
 // TODO: Add 'pass turn' feature on Exhausting March for expediency
 P.end_order = {
 	prompt() {
@@ -5287,7 +5304,7 @@ P.end_order = {
 	confirm() {
 		if (L.type === FORCED_MARCH && G.active === RUSSIA && is_event_active(C_EVASIVE_MANEUVERS) && has_executable_order(RUSSIA, FORCED_MARCH)) {
 			goto("execute_next_order", { type: L.type })
-		} else if (L.type === FORCED_MARCH && G.active === FRANCE && G.move.path.length > 1) {
+		} else if (could_play_exhausting_march()) {
 			G.active = RUSSIA
 			goto("may_play_exhausting_march")
 		} else if (has_executable_order(enemy(G.active), L.type)) {
@@ -6470,7 +6487,7 @@ P.may_play_evade_events = {
 
 P.execute_evade = script(`
 	set L.evader G.active
-	if (L.evader === RUSSIA && can_play_event(C_UNSUCCESSFUL_DISENGAGEMENT)) {
+	if (L.evader === RUSSIA && can_play_event(C_UNSUCCESSFUL_DISENGAGEMENT) && (!is_leak_hand() || hand_has(FRANCE, C_UNSUCCESSFUL_DISENGAGEMENT))) {
 		set G.active FRANCE
 		call may_play_unsuccessful_disengagement { area: L.area }
 		set G.active RUSSIA
@@ -9846,7 +9863,7 @@ P.attrition = script(`
 	set G.active L.player_with_initiative
 	call do_attrition
 
-	if (can_play_event(C_NAPOLEON_RETURNS_TO_PARIS)) {
+	if (can_play_event(C_NAPOLEON_RETURNS_TO_PARIS) && (!is_leak_hand() || hand_has(FRANCE, C_NAPOLEON_RETURNS_TO_PARIS))) {
 		set G.active FRANCE
 		call may_play_napoleon_returns_to_paris
 	}
@@ -9873,6 +9890,10 @@ function get_attrition_events(player) {
 P.attrition_events = {
 	_begin() {
 		L.events = get_attrition_events(G.active).filter(card => hand_has(G.active, card) && can_play_event(card))
+		if (L.events.length === 0) {
+			log(`${ROLES[G.active]} did not play events.`)
+			end()
+		}
 	},
 	prompt() {
 		if (L.events.length > 0) {
