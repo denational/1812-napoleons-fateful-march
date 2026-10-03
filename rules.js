@@ -7622,7 +7622,7 @@ P.battle = script(`
 	call play_battle_events { attacker: L.attacker, defender: L.defender, area: L.area }
 
 	eval { log_h5("Reveal Defend Orders") }
-	call reveal_defend_orders
+	call reveal_defend_orders { defender: L.defender, area: L.area }
 
 	eval { log_h5("Calculate Combat Value") }
 	call calculate_combat_value
