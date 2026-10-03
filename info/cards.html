@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<meta name="viewport" content="width=1000">
+<title>Cards</title>
+<link rel="stylesheet" href="/fonts/fonts.css">
+<link rel="stylesheet" href="/style.css">
+
+<style>
+	html {
+		background-color: hsl(44, 28%, 82%); /* Roughly equivalent to a solarized light theme. */
+		margin: 20px;
+	}
+	body {
+		text-align: center;
+		max-width: 1900px;
+		margin: 0 auto;
+	}
+	h2 {
+		background-color: hsl(34, 36%, 74%);
+		color: black;
+		padding: 4px;
+		display: block;
+		font-size: 1.5em;
+		font-weight: bold;
+		border-bottom: 2px solid black;
+	}
+	#content {
+		background-color: hsl(44, 28%, 82%);
+	}
+	img {
+		margin: 10px;
+		border-radius: 5%;
+		border: 1px solid black;
+		box-shadow: 1px 1px 8px #0004;
+		width: 300px;
+	}
+
+</style>
+
+<script defer src="../data.js"></script>
+
+<body>
+	<div id="content"></div>
+
+	<script>
+		const RUSSIA = 0
+		const FRANCE = 1
+		const FIRST_FRENCH_CARD = 54
+
+		function fr_id(card) { return card - FIRST_FRENCH_CARD }
+		function get_first_card(player) { return player === RUSSIA ? 0 : 54 }
+		function get_last_card(player) { return player === RUSSIA ? 53: 107 }
+
+		function get_card(id) {
+			if (id < FIRST_FRENCH_CARD)
+				return `../cards.1x/card_ru_${id <= 9 ? "0" + id : id}.avif`
+			return `../cards.1x/card_fr_${fr_id(id) <= 9 ? "0" + fr_id(id) : fr_id(id)}.avif`
+		}
+
+		let html = ``
+		for (let player = RUSSIA; player <= FRANCE; ++player) {
+			html += `<h2> ${player === RUSSIA ? "Russian" : "French" } Cards </h2>`
+			html += `<img src="../cards.1x/card_${player === RUSSIA ? "ru" : "fr"}_back.avif"/>`
+			for (let card = get_first_card(player); card <= get_last_card(player); ++card)
+				html += `<img src="${get_card(card)}"/>`
+		}
+
+		document.getElementById("content").innerHTML = html
+	</script>
+</body>
