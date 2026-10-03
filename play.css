@@ -282,6 +282,8 @@ body.France header.your_turn {background-color: var(--france);}
 .piece.leader.Murat {background-image: url(counters.1x/fr_leader_murat.webp);}
 .piece.leader.Schwarzenberg {background-image: url(counters.1x/fr_leader_schwarzenberg.webp);}
 
+/* UNUSED
+
 .piece.standee.Alexander { background-image: url(counters.1x/ru_standee_alexander_i.webp);}
 .piece.standee.Kutuzov {background-image: url(counters.1x/ru_standee_kutuzov.webp);}
 .piece.standee.Tolly {background-image: url(counters.1x/ru_standee_de_tolly.webp);}
@@ -297,6 +299,8 @@ body.France header.your_turn {background-color: var(--france);}
 .piece.standee.Davout {background-image: url(counters.1x/fr_standee_davout.webp);}
 .piece.standee.Murat {background-image: url(counters.1x/fr_standee_murat.webp);}
 .piece.standee.Schwarzenberg {background-image: url(counters.1x/fr_standee_schwarzenberg.webp);}
+
+*/
 
 .leader_board {
 	position: relative;
@@ -334,37 +338,37 @@ body.France header.your_turn {background-color: var(--france);}
 	z-index: 4;
 }
 
-.leader_board.Alexander { background-image: url(boards.1x/leader_board_ru_1.avf);}
-.leader_board.Kutuzov { background-image: url(boards.1x/leader_board_ru_7.avf);}
-.leader_board.Tolly { background-image: url(boards.1x/leader_board_ru_3.avf);}
-.leader_board.Bagration { background-image: url(boards.1x/leader_board_ru_9.avf);}
-.leader_board.Tormasov { background-image: url(boards.1x/leader_board_ru_5.avf);}
-.leader_board.Wittgenstein {background-image: url(boards.1x/leader_board_ru_11.avf);}
-.leader_board.Chichagov { background-image: url(boards.1x/leader_board_ru_13.avf);}
-.leader_board.Platov { background-image: url(boards.1x/leader_board_ru_15.avf);}
+.leader_board.Alexander { background-image: url(boards.1x/leader_board_ru_1.avif);}
+.leader_board.Kutuzov { background-image: url(boards.1x/leader_board_ru_7.avif);}
+.leader_board.Tolly { background-image: url(boards.1x/leader_board_ru_3.avif);}
+.leader_board.Bagration { background-image: url(boards.1x/leader_board_ru_9.avif);}
+.leader_board.Tormasov { background-image: url(boards.1x/leader_board_ru_5.avif);}
+.leader_board.Wittgenstein {background-image: url(boards.1x/leader_board_ru_11.avif);}
+.leader_board.Chichagov { background-image: url(boards.1x/leader_board_ru_13.avif);}
+.leader_board.Platov { background-image: url(boards.1x/leader_board_ru_15.avif);}
 
-.leader_board.Napoleon {background-image: url(boards.1x/leader_board_fr_1.avf);}
-.leader_board.Jerome {background-image: url(boards.1x/leader_board_fr_3.avf);}
-.leader_board.Beauharnais { background-image: url(boards.1x/leader_board_fr_7.avf);}
-.leader_board.Davout { background-image: url(boards.1x/leader_board_fr_9.avf);}
-.leader_board.Murat {background-image: url(boards.1x/leader_board_fr_5.avf);}
-.leader_board.Schwarzenberg { background-image: url(boards.1x/leader_board_fr_11.avf);}
+.leader_board.Napoleon {background-image: url(boards.1x/leader_board_fr_1.avif);}
+.leader_board.Jerome {background-image: url(boards.1x/leader_board_fr_3.avif);}
+.leader_board.Beauharnais { background-image: url(boards.1x/leader_board_fr_7.avif);}
+.leader_board.Davout { background-image: url(boards.1x/leader_board_fr_9.avif);}
+.leader_board.Murat {background-image: url(boards.1x/leader_board_fr_5.avif);}
+.leader_board.Schwarzenberg { background-image: url(boards.1x/leader_board_fr_11.avif);}
 
-.leader_board.reverse.Alexander { background-image: url(boards.2x/leader_board_ru_1.avf);}
-.leader_board.reverse.Kutuzov { background-image: url(boards.1x/leader_board_ru_8.avf);}
-.leader_board.reverse.Tolly { background-image: url(boards.1x/leader_board_ru_4.avf);}
-.leader_board.reverse.Bagration { background-image: url(boards.1x/leader_board_ru_10.avf);}
-.leader_board.reverse.Tormasov { background-image: url(boards.1x/leader_board_ru_6.avf);}
-.leader_board.reverse.Wittgenstein {background-image: url(boards.1x/leader_board_ru_12.avf);}
-.leader_board.reverse.Chichagov { background-image: url(boards.1x/leader_board_ru_14.avf);}
-.leader_board.reverse.Platov { background-image: url(boards.1x/leader_board_ru_16.avf);}
+.leader_board.reverse.Alexander { background-image: url(boards.2x/leader_board_ru_1.avif);}
+.leader_board.reverse.Kutuzov { background-image: url(boards.1x/leader_board_ru_8.avif);}
+.leader_board.reverse.Tolly { background-image: url(boards.1x/leader_board_ru_4.avif);}
+.leader_board.reverse.Bagration { background-image: url(boards.1x/leader_board_ru_10.avif);}
+.leader_board.reverse.Tormasov { background-image: url(boards.1x/leader_board_ru_6.avif);}
+.leader_board.reverse.Wittgenstein {background-image: url(boards.1x/leader_board_ru_12.avif);}
+.leader_board.reverse.Chichagov { background-image: url(boards.1x/leader_board_ru_14.avif);}
+.leader_board.reverse.Platov { background-image: url(boards.1x/leader_board_ru_16.avif);}
 
-.leader_board.reverse.Napoleon {background-image: url(boards.1x/leader_board_fr_2.avf);}
-.leader_board.reverse.Jerome {background-image: url(boards.1x/leader_board_fr_4.avf);}
-.leader_board.reverse.Beauharnais { background-image: url(boards.1x/leader_board_fr_8.avf);}
-.leader_board.reverse.Davout { background-image: url(boards.1x/leader_board_fr_10.avf);}
-.leader_board.reverse.Murat {background-image: url(boards.1x/leader_board_fr_6.avf);}
-.leader_board.reverse.Schwarzenberg { background-image: url(boards.1x/leader_board_fr_12.avf);}
+.leader_board.reverse.Napoleon {background-image: url(boards.1x/leader_board_fr_2.avif);}
+.leader_board.reverse.Jerome {background-image: url(boards.1x/leader_board_fr_4.avif);}
+.leader_board.reverse.Beauharnais { background-image: url(boards.1x/leader_board_fr_8.avif);}
+.leader_board.reverse.Davout { background-image: url(boards.1x/leader_board_fr_10.avif);}
+.leader_board.reverse.Murat {background-image: url(boards.1x/leader_board_fr_6.avif);}
+.leader_board.reverse.Schwarzenberg { background-image: url(boards.1x/leader_board_fr_12.avif);}
 
 /* ORDERS */
 
