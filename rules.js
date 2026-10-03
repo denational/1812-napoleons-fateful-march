@@ -3982,36 +3982,9 @@ P.play_events_with_ops_card = {
 	done() { this.pass() }
 }
 
-//=== 3. CHOOSE ORDERS ===
-function calculate_num_orders() {
-	// Each player has two free orders by default
-	var orders = [2, 2]
-
-	// And some additional orders based on the OPs value of their committed card
-	orders[RUSSIA] += G.additional_orders[RUSSIA]
-	orders[FRANCE] += G.additional_orders[FRANCE]
-
-	// RU #11: Holy Mother Russia -- Russia +2 orders
-	if (is_event_active(C_HOLY_MOTHER_RUSSIA_RU)) {
-		orders[RUSSIA] += 2
-	}
-
-	// RU #14: Extreme Weather -- France -2 orders
-	if (is_event_active(C_EXTREME_WEATHER_RU)) {
-		orders[FRANCE] = Math.max(0, orders[FRANCE] - 2)
-	}
-
-	// FR #42: Extreme Weather -- Both sides -2 orders
-	if (is_event_active(C_EXTREME_WEATHER_FR)) {
-		orders[RUSSIA] = Math.max(0, orders[RUSSIA] - 2)
-		orders[FRANCE] = Math.max(0, orders[FRANCE] - 2)
-	}
-
-	return orders
-}
-
+//=== SELECT ORDERS ===
 /*
-	Choose Orders
+	Select Orders
 	Current order of selection: (mainly so that players are able to pick all the specified orders before moving to freely selectable ones)
 
 	Apply leader abilities first:
@@ -4062,6 +4035,33 @@ function calculate_num_orders() {
 	Some orders may not be used during a turn (dictated by events), but can be selected (and used as a Dummy).
 	TODO: Add warnings for this.
 */
+
+function calculate_num_orders() {
+	// Each player has two free orders by default
+	var orders = [2, 2]
+
+	// And some additional orders based on the OPs value of their committed card
+	orders[RUSSIA] += G.additional_orders[RUSSIA]
+	orders[FRANCE] += G.additional_orders[FRANCE]
+
+	// RU #11: Holy Mother Russia -- Russia +2 orders
+	if (is_event_active(C_HOLY_MOTHER_RUSSIA_RU)) {
+		orders[RUSSIA] += 2
+	}
+
+	// RU #14: Extreme Weather -- France -2 orders
+	if (is_event_active(C_EXTREME_WEATHER_RU)) {
+		orders[FRANCE] = Math.max(0, orders[FRANCE] - 2)
+	}
+
+	// FR #42: Extreme Weather -- Both sides -2 orders
+	if (is_event_active(C_EXTREME_WEATHER_FR) && G.turn !== get_event_removal_turn(C_EXTREME_WEATHER_FR)) {
+		orders[RUSSIA] = Math.max(0, orders[RUSSIA] - 2)
+		orders[FRANCE] = Math.max(0, orders[FRANCE] - 2)
+	}
+
+	return orders
+}
 
 function does_receive_platov_free_order(player) {
 	return player === RUSSIA && is_leader_on_map(L_PLATOV)
@@ -10631,7 +10631,7 @@ function get_event_removal_turn(event) {
 		return G.end_turn
 	if (event === C_WELL_DISCIPLINED_RETREAT || event === C_EXTREME_WEATHER_FR)
 		return G.turn + 1
-	if (is_must_play_event(event) && TURN_PHASES.indexOf(G.phase) > TURN_PHASES.indexOf("draw_card_to_hand"))
+	if ((event === C_COMMAND_FRICTION || event === C_POOR_COMMUNICATIONS) && TURN_PHASES[G.phase] > PHASE_PLACE_ORDERS)
 		return G.turn + 1
 	return G.turn
 }
@@ -10647,6 +10647,7 @@ function get_event_keyword(evt, keyword, fallback = null) {
 	return map_get(G.persistent_events, evt)?.[keyword] ?? fallback
 }
 
+// Log all the stuff for must-play events in one go to prevent confusing nesting between opposing sides' events.
 function log_must_play_event(card, info) {
 	card_box_begin(card)
 	switch(card) {
@@ -10745,6 +10746,7 @@ function log_must_play_event(card, info) {
 	}
 	card_box_end()
 }
+
 /* COMMON EVENT STATES */
 
 P.event = script(`
