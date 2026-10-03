@@ -1595,6 +1595,9 @@ function on_view() {
 	V.set_aside = G.set_aside
 	V.depots = G.depots
 	V.devastation = G.devastation
+	V.persistent_events = G.persistent_events ?? []
+	if (!V.persistent_events)
+		V.persistent_events = []
 
 	// Only pass each players' cards
 	V.current_hand = G.hand[R] ?? []
@@ -2497,8 +2500,13 @@ P.setup_hand = {
 		add_to_hand(R, L.discarded_cards[R].pop())
 	},
 	shuffle() {
-		for (let card of L.discarded_cards[R])
-			set_add(get_deck(R), card)
+		if (L.discarded_cards[R].length > 0) {
+			log_only(R, `Discarded`)
+			for (let card of L.discarded_cards[R]) {
+				set_add(get_deck(R), card)
+				log_only(R, format_i(format_card(card)))
+			}
+		}
 
 		shuffle(get_deck(R))
 		L.has_shuffled_deck[R] = true
@@ -2508,6 +2516,7 @@ P.setup_hand = {
 		L.drawn_card[R] = draw_card(R)
 	},
 	discard_and_redraw() {
+		log_masked(R, `Discarded ${format_card(L.drawn_card[R])}.`, `${ROLES[R]} discarded a Must-Play Event.`)
 		discard_card(L.drawn_card[R])
 		L.drawn_card[R] = draw_card(R)
 	},
@@ -10652,7 +10661,7 @@ function get_event_removal_turn(event) {
 		return G.end_turn
 	if (event === C_WELL_DISCIPLINED_RETREAT || event === C_EXTREME_WEATHER_FR)
 		return G.turn + 1
-	if ((event === C_COMMAND_FRICTION || event === C_POOR_COMMUNICATIONS) && TURN_PHASES[G.phase] > PHASE_PLACE_ORDERS)
+	if ((event === C_COMMAND_FRICTION || event === C_POOR_COMMUNICATIONS) && TURN_PHASES.indexOf(G.phase) > TURN_PHASES.indexOf(PHASE_PLACE_ORDERS))
 		return G.turn + 1
 	return G.turn
 }

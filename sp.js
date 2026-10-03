@@ -340,6 +340,23 @@ function package_sp_id(id) {
 	)
 }
 
+const C_HARD_MARCHING_1 = 55
+const C_HARD_MARCHING_2 = 56
+const C_SKILLFULL_MANEUVERS = 68
+const C_EBLES_PONTONEERS = 83
+
+function is_event_active(event) {
+	return map_has(V.persistent_events, event)
+}
+
+function is_battle_event_active(area, event) {
+	return set_has(map_get(V.battles, area, []).events, event)
+}
+
+function get_event_keyword(evt, keyword, fallback = null) {
+	return map_get(V.persistent_events, evt)?.[keyword] ?? fallback
+}
+
 // === SPECIAL TROOP ELEMENTS ===
 
 class SP extends Thing {
@@ -444,9 +461,23 @@ function toggle_sp_type_exhaustion(type) {
 }
 
 function populate_half_strength(player, parent_id, half_strength = true, count = 1) {
-	populate_generic("sp", parent_id, `half_strength_${get_abbreviation(player)}`, count)
-
 	let sp = lookup_sp(parent_id)
+
+	if (player === FRANCE && (is_event_active(C_HARD_MARCHING_1) || is_event_active(C_HARD_MARCHING_2)))
+		--count
+	if (
+		player === FRANCE
+		&& map_has(V.battles, sp.my_area)
+		&& (
+			(is_battle_event_active(sp.my_area, C_SKILLFULL_MANEUVERS) && get_event_keyword(C_SKILLFULL_MANEUVERS, "cancels") !== "river")
+			|| is_battle_event_active(sp.my_area, C_EBLES_PONTONEERS))
+	) {
+		--count
+	}
+
+	if (count > 0)
+		populate_generic("sp", parent_id, `half_strength_${get_abbreviation(player)}`, count)
+
 	if (half_strength)
 		sp.my_strength = HALF_STRENGTH
 }
