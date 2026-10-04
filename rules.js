@@ -2702,6 +2702,14 @@ P.resources_phase = script(`
 	eval { log_h2("Draw Cards") }
 	set G.active [RUSSIA, FRANCE]
 	call draw_card_to_hand { num_cards_to_draw: L.$ }
+
+	eval {
+		map_for_each(G.persistent_events, (card, info) => {
+			if (info.remove === G.turn) {
+				map_delete(G.persistent_events, card)
+			}
+		})
+	}
 `)
 
 P.add_winter_cards = function() {
@@ -4378,9 +4386,6 @@ P.begin_place_orders_events = {
 	confirm() { end() },
 	card(card) {
 		push_undo()
-		// Remove if played during Resources Phase
-		if (is_event_active(C_EXTREME_WEATHER_RU))
-			map_delete(G.persistent_events, C_EXTREME_WEATHER_RU)
 		set_delete(L.events, card)
 		call("event", { card })
 	}
