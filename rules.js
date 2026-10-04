@@ -9087,7 +9087,7 @@ P.end_battle = script(`
 		log("Increased devastation at S" + G.current_battle + ".")
 	}
 
-	goto cleanup_battle
+	goto cleanup_battle { winner: L.winner }
 `)
 
 P.cleanup_battle = function() {
