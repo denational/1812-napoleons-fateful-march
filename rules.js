@@ -10324,8 +10324,10 @@ P.assign_attrition_losses = {
 				--G.attrition_data.num_losses_remaining
 			}
 
-			if (!has_friendly_sp(G.active, L.area) && has_friendly_leader(G.active, L.area))
+			if (!has_friendly_sp(G.active, L.area) && has_friendly_leader(G.active, L.area)) {
 				goto("eliminate_leader", { area: L.area })
+				return
+			}
 		}
 
 		if (is_cavalry(type) || is_cossack(type))
