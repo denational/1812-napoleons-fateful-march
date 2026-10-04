@@ -4378,6 +4378,9 @@ P.begin_place_orders_events = {
 	confirm() { end() },
 	card(card) {
 		push_undo()
+		// Remove if played during Resources Phase
+		if (is_event_active(C_EXTREME_WEATHER_RU))
+			map_delete(G.persistent_events, C_EXTREME_WEATHER_RU)
 		set_delete(L.events, card)
 		call("event", { card })
 	}
@@ -5145,7 +5148,7 @@ P.execute_orders = script(`
 	} else {
 		call determine_who_goes_first { type: L.type }
 
-		if (L.type === CAVALRY_PATROLS) {
+		if (L.type === CAVALRY_PATROLS && (!is_leak_hand() || hand_has(RUSSIA, C_FLYING_COLUMNS))) {
 			set G.active RUSSIA
 			call may_play_flying_columns
 		}
@@ -5165,7 +5168,7 @@ P.execute_orders = script(`
 			call execute_place_depot
 		}
 
-		if (L.type === CAVALRY_PATROLS) {
+		if (L.type === CAVALRY_PATROLS && (!is_leak_hand() || hand_has(FRANCE, C_GOOD_LEADERSHIP))) {
 			set G.active FRANCE
 			call may_play_good_leadership
 		}
