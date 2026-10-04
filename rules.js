@@ -1450,6 +1450,12 @@ function filter_sps(player) {
 	let sps = []
 
 	map_for_each(G.sps, (area, entries) => {
+		// Don't hide French Casualties
+		if (area === FRENCH_CASUALTIES) {
+			map_set(sps, area, entries.slice())
+			return
+		}
+
 		let filtered_entries = []
 
 		// A player may see any of their own SPs.
