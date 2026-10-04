@@ -385,6 +385,11 @@ const RUSSIA_BATTLE_DIE = {
 const DEFENDING_ONLY_1 = 2
 
 function roll_russia_battle_die() {
+	if (get_seniormost_leader(RUSSIA, G.current_battle) === L_KUTUZOV) {
+		log(`${format_leader(L_KUTUZOV)}: Russian roll is automatically a 1.`)
+		return 1
+	}
+
 	let roll = random(6) + 1
 	log_battle_roll(roll, RUSSIA)
 	if (roll === DEFENDING_ONLY_1 && (get_battle_defender(G.current_battle) !== RUSSIA)) {
@@ -7674,14 +7679,12 @@ P.battle = script(`
 P.play_battle_events = script(`
 	set G.played_cards [[], []]
 
-	set G.active L.attacker
+	set G.active [RUSSIA, FRANCE]
 	call commit_battle_events { area: L.area }
-	set G.active L.defender
-	call commit_battle_events { area: L.area }
-
 	call reveal_battle_events
 
 	if (is_battle_event_currently_active(C_THE_IMPERIAL_GUARD) && hand_has(RUSSIA, C_INDECISION)) {
+		set G.active RUSSIA
 		call may_play_indecision { response_to: "the_imperial_guard" }
 	}
 
@@ -7728,39 +7731,54 @@ function get_num_battle_events_could_by_played(who, area) {
 
 P.commit_battle_events = {
 	_begin() {
-		// L.area
-		L.num_battle_events = get_num_battle_events_could_by_played(G.active, L.area)
-		L.num_battle_events_in_hand = count_num_battle_events_in_hand(G.active) + 1 // Dummy
+		L.num_battle_events = []
+		L.num_battle_events_in_hand = []
+
+		for (let player = RUSSIA; player <= FRANCE; ++player) {
+			L.num_battle_events.push(get_num_battle_events_could_by_played(player, G.current_battle))
+			L.num_battle_events_in_hand.push(count_num_battle_events_in_hand(player) + 1) // Dummy
+		}
+
+		L.selected_cards = [[], []]
 	},
 	inactive: "play battle events",
 	prompt() {
-		if ((G.played_cards[G.active].length === L.num_battle_events) || (L.num_battle_events_in_hand === 0)) {
+		if (
+			L.num_battle_events_in_hand[R] === 0
+			|| G.played_cards[R].length === L.num_battle_events[R]
+		) {
 			V.prompt = `Play Battle Events: All done.`
 		} else {
 			V.prompt = `You may play any battle cards, or a dummy.`
-			for (let card of get_hand(G.active)) {
-				if ((is_battle_card(card) && can_play_event(card)) || is_card_dummy(card))
+			for (let card of get_hand(R)) {
+				if (is_card_dummy(card) || (is_battle_card(card) && can_play_event(card)))
 					action_card(card)
 			}
 		}
-		G.committed_cards[G.active].forEach(action_card)
+		G.committed_cards[R].forEach(action_card)
 		button_done()
 	},
 	card(card) {
-		push_undo()
-		if (set_has(G.committed_cards[G.active], card)) {
-			add_to_hand(G.active, card)
-			set_delete(G.committed_cards[G.active], card)
-			L.num_battle_events_in_hand++
-		} else {
-			remove_card_from_hand(G.active, card)
+		if (!set_has(G.committed_cards[R], card)) {
+			L.selected_cards[R].push(card)
+			remove_card_from_hand(R, card)
 			commit_card(card)
-			L.num_battle_events_in_hand--
+			--L.num_battle_events_in_hand[R]
+		} else {
+			array_delete_item(L.selected_cards[R], card)
+			this.uncommit_card(card)
 		}
 	},
+	uncommit_card(card) {
+		add_to_hand(R, card)
+		set_delete(G.committed_cards[R], card)
+		++L.num_battle_events_in_hand[R]
+	},
+	undo() { this.uncommit_card(L.selected_cards[R].pop()) },
 	done() {
-		clear_undo()
-		end()
+		set_delete(G.active, R)
+		if (G.active.length === 0)
+			end()
 	}
 }
 
@@ -8135,56 +8153,39 @@ function get_exhausted_strength(who, battle_data) {
 }
 
 /* ROLL BATTLE DIE */
-function modify_battle_roll(who, roll) {
-	switch(get_seniormost_leader(who, G.current_battle)) {
-	case L_ALEXANDER: return roll - 1
-	case L_KUTUZOV: return 1
-	case L_BAGRATION: return is_battle_defender(who, G.current_battle) ? roll + 1 : roll
-	case L_NAPOLEON: return roll + 1
-	case L_JEROME: return roll - 1
-	case L_DAVOUT: return roll + 1
+function modify_battle_roll(player, roll) {
+	let modifier = 0
+
+	switch(get_seniormost_leader(player, G.current_battle)) {
+	case L_ALEXANDER: modifier = -1; break
+	case L_BAGRATION:
+		if (is_battle_defender(player, G.current_battle))
+			modifier = 1
+		else
+			return roll
+		break
+	case L_NAPOLEON: modifier = 1; break
+	case L_JEROME: modifier = -1; break
+	case L_DAVOUT: modifier = 1; break
 	default: return roll
 	}
+
+	logi(`${format_leader(get_seniormost_leader(player, G.current_battle))}: ${modifier >= 0 ? "+" : ""}${modifier} to the roll.`)
+	return roll + modifier
 }
 
-P.roll_battle_die = {
-	_begin() {
-		// L.combat_value
-		L.has_rolled_battle_die = [false, false]
-		L.battle_roll = [-1, -1]
-	},
-	prompt() {
-		if (!L.has_rolled_battle_die[R]) {
-			V.prompt = `Roll battle die (current combat value: ${L.combat_value[R]}).`
-			button_roll()
-		} else {
-			V.prompt = `Roll battle die: All done. (final combat value: ${L.combat_value[R]})`
-			button_done()
-		}
-	},
-	roll() {
-		clear_undo()
-
-		if (R === FRANCE)
-			L.battle_roll[FRANCE] = roll_france_battle_die()
-		else
-			L.battle_roll[RUSSIA] = roll_russia_battle_die()
-
-		L.battle_roll[RUSSIA] = modify_battle_roll(RUSSIA, L.battle_roll[RUSSIA])
-		L.battle_roll[FRANCE] = modify_battle_roll(FRANCE, L.battle_roll[FRANCE])
-
-		L.combat_value[R] += L.battle_roll[R]
-		L.has_rolled_battle_die[R] = true
-	},
-	done() {
-		set_delete(G.active, R)
-
-		if (G.active.length === 0) {
-			L.L.$ = L.combat_value.map(value => value >= 0 ? Math.floor(value): 0).slice()
-			log()
-			end()
-		}
+P.roll_battle_die = function() {
+	// L.combat_value
+	for (let player = RUSSIA; player <= FRANCE; ++player) {
+		log_only(player, `${possessive(player)} base combat value: ${L.combat_value[player]}`)
+		let roll = player === RUSSIA ? roll_russia_battle_die() : roll_france_battle_die()
+		L.combat_value[player] = Math.max(0, Math.floor(L.combat_value[player] + modify_battle_roll(player, roll)))
 	}
+	log()
+	for (let player = RUSSIA; player <= FRANCE; ++player)
+		log(`${possessive(player)} combat value: ${L.combat_value[player]}`)
+	log()
+	end(L.combat_value)
 }
 
 // TODO: Improve logging
@@ -9147,6 +9148,7 @@ P.battle_shift_vp_and_initiative = {
 				if (L.vp_shift > 0) {
 					V.prompt = `Battle Winner: Shift VP marker ${L.vp_shift} spaces in your favor.`
 					action_vp_marker()
+					button_next()
 				} else {
 					V.prompt = `No VP shift.`
 					button_pass()
@@ -9157,12 +9159,14 @@ P.battle_shift_vp_and_initiative = {
 				else
 					V.prompt = `Losing force included ${format_leader(L_ALEXANDER)}: Gain an additional VP shift.`
 				action_vp_marker()
+				button_next()
 			}
 		} else if (!L.has_finished) {
 			if (G.active === get_who_has_initiative()) {
 				if ((get_current_initiative_level() < 4) && (L.vp_shift >= get_current_initiative_level())) {
 					V.prompt = `Shift Initiative Marker 1 in your favor for eliminating more losing SPs than the current Initiative level.`
 					action_initiative_marker()
+					button_next()
 				} else if (get_current_initiative_level() === 4) {
 					V.prompt = `Initiative cannot be shifted further.`
 					button_pass()
@@ -9173,11 +9177,18 @@ P.battle_shift_vp_and_initiative = {
 			} else {
 				V.prompt = `Shift Initiative Marker 1 in your favor for winning the battle.`
 				action_initiative_marker()
+				button_next()
 			}
 		} else {
 			V.prompt = `VP and Initiative Shifts: All done.`
 			button_done()
 		}
+	},
+	next() {
+		if (L.step === -1)
+			this.vp()
+		else
+			this.initiative()
 	},
 	vp() {
 		push_undo()
