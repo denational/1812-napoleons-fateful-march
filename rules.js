@@ -4725,11 +4725,11 @@ function generate_change_order_actions(leader, current_type, type) {
 	// Example: Kutuzov can change a Defend order to a Rally order prior to resolving battles.
 	if (current_type < type) {
 		get_orders_at_area(R, get_leader_location(leader))
-			.filter(order => get_order_type(order) === current_type)
+			.filter(order => get_order_type(order) !== DUMMY_ORDER && get_order_type(order) === current_type)
 			.forEach(action_order)
 	} else if (current_type === type) {
 		get_orders_at_area(R, get_leader_location(leader))
-			.filter(order => get_order_type(order) !== current_type)
+			.filter(order => get_order_type(order) !== DUMMY_ORDER && get_order_type(order) !== current_type)
 			.forEach(action_order)
 	}
 }
@@ -5077,12 +5077,17 @@ P.determine_who_goes_first = {
 		L.first_player = -1
 		L.has_confirmed = false
 
+		if (L.type === COSSACK_RAID) {
+			L.first_player = RUSSIA
+			this.determine_first()
+		}
+
 		// TODO: Add 'pass turn' feature for expediency.
 		if (L.type === FORCED_MARCH && can_play_event(C_EVASIVE_MANEUVERS) && (!is_leak_hand() || hand_has(RUSSIA, C_EVASIVE_MANEUVERS))) {
 			G.active = RUSSIA
 			L.event = C_EVASIVE_MANEUVERS
 			call("may_play_evasive_maneuvers")
-		} else if (can_play_event(C_ENERGETIC_LEADERSHIP) && (!is_leak_hand() || hand_has(C_ENERGETIC_LEADERSHIP))) {
+		} else if (can_play_event(C_ENERGETIC_LEADERSHIP) && (!is_leak_hand() || hand_has(FRANCE, C_ENERGETIC_LEADERSHIP))) {
 			G.active = FRANCE
 			L.event = C_ENERGETIC_LEADERSHIP
 			call("may_play_energetic_leadership", { type: L.type })
@@ -5118,7 +5123,13 @@ P.determine_who_goes_first = {
 	},
 	confirm() {
 		push_undo()
-		log(`${ROLES[G.active]} chose ${ROLES[L.first_player]} to go first.`)
+		this.determine_first()
+	},
+	determine_first() {
+		if (L.type !== COSSACK_RAID)
+			log(`${ROLES[G.active]} chose ${ROLES[L.first_player]} to go first.`)
+		else
+			log(`Russia goes first.`)
 		L.L.$ = L.first_player
 		end()
 	}
@@ -7108,8 +7119,9 @@ function find_path_distance(a, b, connection_type = -1, ignore_enemy_sps = false
 //Returns a set of depots that are closest to an area (for retreat purposes)
 function find_closest_depot_for_retreat(who, area, ignore_enemy_sps = false) {
 	let depots = get_areas_with_depots(who)
-	// If there are NO depots on the map, use supply sources instead (mostly relevant for first-turn evasions)
-	if (depots.length === 0) depots = get_supply_sources(who)
+	// Use supply sources instead if there would be no valid depot(mostly relevant for first-turn evasions)
+	if (depots.length === 0 || (depots.length === 1 && has_friendly_depot(who, area)))
+		depots = get_supply_sources(who)
 
 	let visited = []
 	set_add(visited, area) //Depots that are in the area are excluded for retreat purposes
@@ -9076,10 +9088,12 @@ P.end_battle = script(`
 	if (has_friendly_depot(L.loser, G.current_battle)) {
 		set G.active L.loser
 		call remove_depot { area: G.current_battle }
+		log ""
 	}
 
 	if (get_battle_events(G.current_battle).length > 0) {
 		call battle_draw_card_to_hand
+		log ""
 	}
 
 	eval {
@@ -9095,7 +9109,6 @@ P.cleanup_battle = function() {
 		log()
 		log(ROLES[L.winner] + " captured S" + G.current_battle + "!")
 		increase_vp(L.winner, get_area_vp(G.current_battle))
-		sudden_death()
 	}
 
 	G.played_cards[RUSSIA].length = 0
@@ -9103,7 +9116,9 @@ P.cleanup_battle = function() {
 	if (map_has(G.battles, G.current_battle))
 		delete_battle_entry(G.current_battle)
 	G.active = get_who_has_initiative()
-	end()
+
+	if (!sudden_death())
+		end()
 }
 
 function get_current_initiative_level() {
@@ -9212,12 +9227,16 @@ function get_valid_defender_retreat_connections(battle) {
 	return possible_areas.filter(area => !set_has(get_connections_used_by_attacker(battle), area))
 }
 
-function get_valid_retreat_destinations(who, area, ignore_enemy_sps = false) {
+function get_valid_retreat_destinations(who, area, no_valid_dest = false) {
+	// A force with no valid retreat destination must retreat towards the nearest Depot marker.
+	if (no_valid_dest)
+		return find_retreat_destinations(who, G.current_battle, get_all_adjacent_areas(area), true)
+
 	// Attackers in battle must select among the areas used to enter battle
 	if (is_battle_attacker(who, area))
-		return find_retreat_destinations(who, G.current_battle, get_valid_attacker_retreat_connections(area), ignore_enemy_sps)
+		return find_retreat_destinations(who, G.current_battle, get_valid_attacker_retreat_connections(area), no_valid_dest)
 	else
-		return find_retreat_destinations(who, G.current_battle, get_valid_defender_retreat_connections(area), ignore_enemy_sps)
+		return find_retreat_destinations(who, G.current_battle, get_valid_defender_retreat_connections(area), no_valid_dest)
 }
 
 function has_retreat_destination(who, area) {
@@ -9243,21 +9262,23 @@ P.select_retreat_destination = {
 			if (L.has_valid_retreat_destination)
 				L.retreat_destinations = get_all_adjacent_areas(G.current_battle).filter(area => !has_russian_sp(area))
 			else
-				L.retreat_destinations = get_valid_retreat_destinations(G.active, G.current_battle, !L.has_valid_retreat_destination)
+				L.retreat_destinations = get_valid_retreat_destinations(G.active, G.current_battle, false)
 		} else {
 			L.has_valid_retreat_destination = has_retreat_destination(G.active, G.current_battle)
 			L.retreat_destinations = get_valid_retreat_destinations(G.active, G.current_battle, !L.has_valid_retreat_destination)
 		}
 	},
 	prompt() {
-		V.prompt = `Select a destination to retreat from ${format_area(G.current_battle)}.`
+		V.prompt = `Select a destination to retreat from ${format_area(G.current_battle)}. (${join_array_with_or(L.retreat_destinations.map(format_area))})`
 		L.retreat_destinations.forEach(action_area)
 	},
 	area(area) {
 		push_undo()
 		L.L.$ = area
-		if (!L.has_valid_retreat_destination)
+		if (!L.has_valid_retreat_destination) {
+			log(`No valid retreat destinations.`)
 			goto("exhaust_half_sps")
+		}
 		else
 			end()
 	}
@@ -9265,7 +9286,9 @@ P.select_retreat_destination = {
 
 P.exhaust_half_sps = {
 	_begin() {
-		L.num_sps_to_exhaust = Math.ceil(count_num_sps(G.active, G.current_battle) / 2)
+		log_masked(G.active, `Exhausted`, `Must exhaust half of all fresh SPs at ${format_area(G.current_battle)}.`)
+		L.num_sps_to_exhaust = Math.ceil(count_num_fresh_sps(G.active, G.current_battle) / 2)
+		L.exhausted = []
 	},
 	prompt() {
 		if (!has_fresh_sp(G.active, G.current_battle) && has_fresh_sp(enemy(G.active), G.current_battle)) {
@@ -9275,9 +9298,9 @@ P.exhaust_half_sps = {
 			V.prompt = `Assign exhaustion — All done.`
 			button_next()
 		} else {
-			V.prompt = `No valid retreat destination: exhaust half of the SPs at ${format_area(G.current_battle)}.`
+			V.prompt = `No valid retreat destination: exhaust half of the fresh SPs at ${format_area(G.current_battle)}.`
 			get_player_battle_data(G.active, G.current_battle).forces.forEach(force => {
-				for (let type = 0; type < force.sps.length; ++type)
+				for (let type of get_all_fresh_sp_types(G.active, G.current_battle))
 					action_sp_alt(type, G.current_battle, force.strength, force.from)
 			})
 		}
@@ -9288,6 +9311,10 @@ P.exhaust_half_sps = {
 		let strength = decode_sp_strength(entry)
 		let from = decode_sp_from(entry)
 		battle_exhaust_sp(G.active, G.current_battle, type, strength, from)
+		if (!map_has(L.exhausted, type))
+			map_set(L.exhausted, type, 1)
+		else
+			map_increment(L.exhausted, type)
 		--L.num_sps_to_exhaust
 	},
 	confirm() {
@@ -9297,6 +9324,13 @@ P.exhaust_half_sps = {
 	next() {
 		push_undo()
 		end()
+	},
+	_end() {
+		if (L.exhausted.length > 0)
+			map_for_each(L.exhausted, (type, num) => { log_only(G.active, format_i(`${num} ${get_sp_type_name(type)}`)) })
+		else
+			log_only(G.active, format_i(`Nothing`))
+		log()
 	}
 }
 
@@ -9914,7 +9948,7 @@ P.attrition_events = {
 	},
 	prompt() {
 		if (L.events.length > 0) {
-			V.prompt = `You may play events. (${join_array_with_or(L.events.map(format_card))})`
+			V.prompt = `You may play events. (${join_array_with_or(L.events.map(card => format_card(card)))})`
 			L.events.forEach(action_card)
 		} else {
 			V.prompt = `Play Events: All done.`
@@ -11620,7 +11654,7 @@ P.end_russian_disorganization_and_confusion = {
 	_begin() {
 		L.order = G.orders.findIndex(location => location === OUT_OF_PLAY)
 	},
-	inactive: "rally the sps",
+	inactive: "rally the troops",
 	prompt() {
 		V.prompt = `End of Russian Disorganization & Confusion: Add the removed Rally order to your pool.`
 		button_confirm()
@@ -11631,6 +11665,7 @@ P.end_russian_disorganization_and_confusion = {
 		push_undo()
 		G.orders[order] = POOL
 		log(`End of Russian Disorganization & Confusion.`)
+		logi(`Returned Rally order.`)
 		end()
 	}
 }
@@ -11642,7 +11677,7 @@ function get_finland_corps_destinations() {
 	let areas = [S_RIGA, S_LIVONIA, S_PSKOV].filter(area => is_ru_controlled(area))
 	for (let area of [S_RIGA, S_LIVONIA, S_PSKOV]) {
 		for (let adj of get_all_adjacent_areas(area)) {
-			if (is_ru_controlled(area) && !set_has(areas, adj))
+			if (is_ru_controlled(adj) && !set_has(areas, adj))
 				set_add(areas, adj)
 		}
 	}
