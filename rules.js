@@ -4669,6 +4669,18 @@ function is_leader_ability_used(leader) {
 	return !!(G.abilities_used & (1 << leader))
 }
 
+function get_leader_changeable_type(leader) {
+	switch(leader) {
+	case L_KUTUZOV: return RALLY
+	case L_DE_TOLLY: return EVADE
+	case L_BAGRATION: return DEFEND
+	case L_CHICHAGOV: return FORCED_MARCH
+	case L_NAPOLEON: return NONE
+	case L_DAVOUT: return MARCH
+	case L_SCHWARZENBERG: return EVADE
+	}
+}
+
 function can_change_order_to(leader, current_type, type_to, area) {
 	// TWO OPTIONS:
 	// 1. The leader may change any of the type that is currently being executed to the order type he can change to.
@@ -4726,21 +4738,21 @@ function can_change_order(leader, current_type) {
 	}
 }
 
-function prompt_change_order(leader, type) {
-	prompt_leader(leader, `Change an order at ${format_area(get_leader_location(leader))} to ${get_order_type_name(type)}.`)
-}
+function prompt_change_order(leader) {
+	let type = get_leader_changeable_type(leader)
 
-function generate_change_order_actions(leader, current_type, type) {
+	prompt_leader(leader, `Change an order at ${format_area(get_leader_location(leader))} to ${get_order_type_name(type)}.`)
+
 	// If the order that the leader could change to would occur AFTER the execution of the current type,
 	// the leader may change any orders of the current type to the future type that he is eligible to change to.
 	// Example: Kutuzov can change a Defend order to a Rally order prior to resolving battles.
-	if (current_type < type) {
+	if (L.current_type < type) {
 		get_orders_at_area(R, get_leader_location(leader))
-			.filter(order => get_order_type(order) !== DUMMY_ORDER && get_order_type(order) === current_type)
+			.filter(order => get_order_type(order) !== DUMMY_ORDER && get_order_type(order) === L.current_type)
 			.forEach(action_order)
-	} else if (current_type === type) {
+	} else if (L.current_type === type) {
 		get_orders_at_area(R, get_leader_location(leader))
-			.filter(order => get_order_type(order) !== DUMMY_ORDER && get_order_type(order) !== current_type)
+			.filter(order => get_order_type(order) !== DUMMY_ORDER && get_order_type(order) !== L.current_type)
 			.forEach(action_order)
 	}
 }
@@ -4750,6 +4762,7 @@ function change_order(leader, order, type_to) {
 	let replacement = add_order_of_type_from_pool(R, type_to, get_leader_location(leader))
 	push_local_undo(R, "change_order", { leader, removed: order, placed: replacement })
 	mark_ability_used(leader)
+	L.leaders_who_have_used_abilities[R].push(leader)
 
 	// If changing an order with Napoléon, France needs to see the warning for RU #7 Indecision.
 	if (leader === L_NAPOLEON) {
@@ -4763,17 +4776,17 @@ function change_order(leader, order, type_to) {
 	}
 }
 
-function prompt_discard_card_to_place(leader, type_to, has_discarded) {
-	if (!has_discarded)
-		prompt_leader(leader, `Discard a card to place a ${get_order_type_name(type_to)} order.`)
-	else
-		prompt_leader(leader, `Place a ${get_order_type_name(type_to)} order at ${format_area(get_leader_location(leader))}.`)
+function log_change_order(type_to) {
+	logi(`Changed an order to ${get_order_type_name(type_to)}.`)
 }
 
-function generate_discard_card_to_place_actions(leader, type_to, has_discarded) {
-	if (!has_discarded) {
+function prompt_discard_card_to_place(leader) {
+	let type_to = get_leader_changeable_type(leader)
+	if (!L.has_discarded[get_leader_faction(leader)]) {
+		prompt_leader(leader, `Discard a card to place a ${get_order_type_name(type_to)} order.`)
 		get_non_dummy_cards_in_hand(get_leader_faction(leader)).forEach(action_card)
 	} else {
+		prompt_leader(leader, `Place a ${get_order_type_name(type_to)} order at ${format_area(get_leader_location(leader))}.`)
 		get_orders_at_area(get_leader_faction(leader), POOL)
 			.filter(order => get_order_type(order) === type_to)
 			.forEach(action_order)
@@ -4784,10 +4797,15 @@ function generate_discard_card_to_place_actions(leader, type_to, has_discarded) 
 function complete_place_order_after_discard(leader, order, area) {
 	push_local_undo(R, "place_order", { order, area, leader })
 	mark_ability_used(leader)
+	L.leaders_who_have_used_abilities[R].push(leader)
 	if (L.leaders_who_can_use_abilities[R].length === 0)
 		goto_local_state(R, "all_done")
 	else
 		goto_local_state(R, "select_next_leader")
+}
+
+function log_discard_card_to_place(type_to) {
+	logi(`Discarded a card to place ${get_order_type_name(type_to)}.`)
 }
 
 P.change_orders = {
@@ -4808,8 +4826,6 @@ P.change_orders = {
 			L.leaders_who_can_use_abilities[who] = L.leaders_who_can_use_abilities[who].filter(leader => can_change_order(leader, L.current_type))
 			if (L.leaders_who_can_use_abilities[who].length > 0)
 				set_add(G.active, who)
-			else
-				log(`${ROLES[who]} did not change orders.`)
 		}
 
 		// Finish state if neither side could change an order.
@@ -4832,6 +4848,9 @@ P.change_orders = {
 			removed: -1,
 			placed: -1,
 		}
+
+		// For logging
+		L.leaders_who_have_used_abilities = [[], []]
 	},
 	inactive: "change orders",
 	states: {
@@ -4856,35 +4875,23 @@ P.change_orders = {
 		},
 		// May change any order to Rally.
 		"kutuzov": {
-			on_prompt() {
-				prompt_change_order(L_KUTUZOV, RALLY)
-				generate_change_order_actions(L_KUTUZOV, L.current_type, RALLY)
-			},
+			on_prompt() { prompt_change_order(L_KUTUZOV) },
 			on_order(order) { change_order(L_KUTUZOV, order, RALLY) },
 		},
 		// May change any order to Evade.
 		"tolly": {
-			on_prompt() {
-				prompt_change_order(L_DE_TOLLY, EVADE)
-				generate_change_order_actions(L_DE_TOLLY, L.current_type, EVADE)
-			},
+			on_prompt() { prompt_change_order(L_DE_TOLLY) },
 			on_order(order) { change_order(L_DE_TOLLY, order, EVADE) },
 		},
 		// May change any order to Defend.
 		"bagration": {
-			on_prompt() {
-				prompt_change_order(L_BAGRATION, DEFEND)
-				generate_change_order_actions(L_BAGRATION, L.current_type, DEFEND)
-			},
+			on_prompt() { prompt_change_order(L_BAGRATION) },
 			on_order(order) { change_order(L_BAGRATION, order, DEFEND) },
 		},
 		// May discard a card to place a Forced March order during that order's step.
 		"chichagov": {
 			on_begin() { L.has_discarded[R] = false },
-			on_prompt() {
-				prompt_discard_card_to_place(L_CHICHAGOV, FORCED_MARCH, L.has_discarded[R])
-				generate_discard_card_to_place_actions(L_CHICHAGOV, FORCED_MARCH, L.has_discarded[R])
-			},
+			on_prompt() { prompt_discard_card_to_place(L_CHICHAGOV) },
 			on_card(card) {
 				push_local_undo(R, "discard", { card })
 				discard_card(card)
@@ -4973,19 +4980,13 @@ P.change_orders = {
 		},
 		// May change an order to March.
 		"davout": {
-			on_prompt() {
-				prompt_change_order(L_DAVOUT, MARCH)
-				generate_change_order_actions(L_DAVOUT, L.current_type, MARCH)
-			},
+			on_prompt() { prompt_change_order(L_DAVOUT) },
 			on_order(order) { change_order(L_DAVOUT, order, MARCH) },
 		},
 		// May discard a card to place an Evade order during that order's step.
 		"schwarzenberg": {
 			on_begin() { L.has_discarded[R] = false },
-			on_prompt() {
-				prompt_discard_card_to_place(L_SCHWARZENBERG, EVADE, L.has_discarded[R])
-				generate_discard_card_to_place_actions(L_SCHWARZENBERG, EVADE, L.has_discarded[R])
-			},
+			on_prompt() { prompt_discard_card_to_place(L_SCHWARZENBERG) },
 			on_card(card) {
 				push_local_undo(R, "discard", { card })
 				discard_card(card)
@@ -5027,6 +5028,7 @@ P.change_orders = {
 			place_order(undo.info.removed, get_leader_location(undo.info.leader))
 			set_add(L.leaders_who_can_use_abilities[R], undo.info.leader)
 			mark_ability_unused(undo.info.leader)
+			L.leaders_who_have_used_abilities[R].pop()
 			if (undo.info.leader === L_NAPOLEON) {
 				L.napoleon_choice = null
 				L.napoleon_change.placed = -1
@@ -5042,6 +5044,7 @@ P.change_orders = {
 			remove_order(undo.info.order)
 			set_add(L.leaders_who_can_use_abilities[R], undo.info.leader)
 			mark_ability_unused(undo.info.leader)
+			L.leaders_who_have_used_abilities[R].pop()
 			if (undo.info.leader === L_NAPOLEON) {
 				L.napoleon_change.placed = -1
 				L.has_changed_order = false
@@ -5058,16 +5061,32 @@ P.change_orders = {
 		L.leaders_who_can_use_abilities[R] = LEADERS_WHO_CAN_CHANGE_ORDERS[R].slice().filter(leader => can_change_order(leader, L.current_type))
 	},
 	leader(leader)			{ this.states[L.state[R]].on_leader(leader) },
-	leader_button(leader) 	{ this.states[L.state[R]].on_leader_button(leader) },
+	leader_button(leader) 		{ this.states[L.state[R]].on_leader_button(leader) },
 	area(area) 				{ this.states[L.state[R]].on_area(area) },
 	order(order) 			{ this.states[L.state[R]].on_order(order) },
 	card(card)				{ this.states[L.state[R]].on_card(card) },
-	pass()					{ this.states[L.state[R]].on_pass() },
-	next()					{ this.states[L.state[R]].on_next() },
+	pass()				{ this.states[L.state[R]].on_pass() },
+	next()				{ this.states[L.state[R]].on_next() },
 	confirm()				{ this.states[L.state[R]].on_confirm() },
 	finish_state() {
 		set_delete(G.active, R)
 		if (G.active.length === 0) {
+			for (let player = RUSSIA; player <= FRANCE; ++player) {
+				if (L.leaders_who_have_used_abilities[player].length === 0) {
+					log(`${ROLES[player]} did not change orders.`)
+				} else {
+					for (let leader of L.leaders_who_have_used_abilities[player]) {
+						log(`${format_leader(leader)} at ${format_area(get_leader_location(leader))}`)
+						if (leader === L_NAPOLEON)
+							logi(`Changed an order.`)
+						else if (leader === L_CHICHAGOV || leader === L_SCHWARZENBERG)
+							log_discard_card_to_place(get_leader_changeable_type(leader))
+						else
+							log_change_order(get_leader_changeable_type(leader))
+					}
+				}
+			}
+
 			if (L.napoleon_choice !== null && (!is_leak_hand() || hand_has(RUSSIA, C_INDECISION))) {
 				G.active = RUSSIA
 				goto("may_play_indecision", { response_to: "napoleon_change", napoleon_change: L.napoleon_change })
