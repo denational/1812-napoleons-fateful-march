@@ -4968,6 +4968,7 @@ P.change_orders = {
 					set_delete(L.leaders_who_can_use_abilities[R], L_NAPOLEON)
 					mark_ability_used(L_NAPOLEON)
 					L.has_changed_order = true
+					L.leaders_who_have_used_abilities[R].push(L_NAPOLEON)
 				}
 			},
 			on_next() {
@@ -5435,7 +5436,7 @@ P.forced_march = script(`
 `)
 
 P.execute_march = script(`
-	if (G.active === FRANCE && (hand_has(FRANCE, C_FAST_MARCHING_1)) || hand_has(FRANCE, C_FAST_MARCHING_2)) {
+	if (G.active === FRANCE && (hand_has(FRANCE, C_FAST_MARCHING_1) || hand_has(FRANCE, C_FAST_MARCHING_2))) {
 		call may_play_fast_marching { area: L.area }
 	}
 	call select_force { type: MARCH, area: L.area }
@@ -10888,6 +10889,7 @@ P.may_play_event = {
 		// L.suffix? (more info about the event if necessary)
 		// L.info? (any information that needs to be handed down to the card state)
 		// L.goto_if_not_played? (name of state we should go to if the card is not played)
+		// L.no_event_done?
 		L.suffix = L.suffix === undefined ? "" : ` ${L.suffix}`
 		if (Array.isArray(L.event)) {
 			L.event = L.event.filter(card => hand_has(G.active, card))
@@ -10946,7 +10948,9 @@ P.may_play_event = {
 	_resume() {
 		card_box_end()
 		discard_or_remove_card(L.current_event)
-		if (L.current_event !== C_EVASIVE_MANEUVERS)
+		if (L.no_event_done)
+			end()
+		else if (L.current_event !== C_EVASIVE_MANEUVERS)
 			goto("event_done", { card: L.current_event })
 		else
 			end(RUSSIA)
@@ -13582,7 +13586,8 @@ P.infighting_and_intrigue = {
 P.may_play_fast_marching = function() {
 	goto("may_play_event", {
 		event: [C_FAST_MARCHING_1, C_FAST_MARCHING_2],
-		info: { area: L.area }
+		info: { area: L.area },
+		no_event_done: true,
 	})
 }
 
@@ -14351,7 +14356,7 @@ function count_num_exhausted_infantry(who, area) {
 }
 
 P.may_play_poniatowskis_v_corps = function() {
-	goto("may_play_event", { event: C_PONIATOWSKIS_V_CORPS })
+	goto("may_play_event", { event: C_PONIATOWSKIS_V_CORPS, no_event_done: true })
 }
 
 P.poniatowskis_v_corps = {
@@ -14572,7 +14577,7 @@ P.napoleon_returns_to_paris = {
 
 // FR #49 Tough Rearguard
 P.may_play_tough_rearguard = function() {
-	goto("may_play_event", { event: C_TOUGH_REARGUARD })
+	goto("may_play_event", { event: C_TOUGH_REARGUARD, no_event_done: true })
 }
 
 P.tough_rearguard = function() {
