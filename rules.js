@@ -12031,8 +12031,8 @@ P.may_play_stubborn_rearguard = {
 			action_card(L.card)
 		} else {
 			V.prompt = `You do not have ${format_card(L.card)} in hand.`
-			button_pass()
 		}
+		button_pass()
 	},
 	card(card) {
 		push_undo()
