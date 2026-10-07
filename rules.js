@@ -1443,8 +1443,10 @@ function filter_leaders(leaders, player) {
 		} else {
 			if (get_leader_faction(leader) !== player && is_leader_on_map(leader)) {
 				let force = get_player_battle_data(get_leader_faction(leader), get_leader_location(leader)).forces.find(force => set_has(force.leaders, leader))
-				if (get_seniormost_leader_from_list(get_leader_faction(leader), force.leaders) !== leader)
-					filtered_leaders[leader] = HIDDEN
+				if (force) {
+					if (get_seniormost_leader_from_list(get_leader_faction(leader), force.leaders) !== leader)
+						filtered_leaders[leader] = HIDDEN
+				}
 			}
 		}
 	}
@@ -7573,34 +7575,39 @@ const BATTLES_WITHOUT_LEADERS = 0
 const BATTLES_WHERE_ONE_SIDE_HAS_LEADER = 1
 const BATTLES_WHERE_BOTH_SIDES_HAVE_LEADERS = 2
 
+function get_battle_bucket(area) {
+	const attacker = get_battle_attacker(area)
+	const defender = get_battle_defender(area)
+
+	if (has_leader_in_battle(attacker, area) && has_leader_in_battle(defender, area))
+		return BATTLES_WHERE_BOTH_SIDES_HAVE_LEADERS
+	else if (has_leader_in_battle(attacker, area) || has_leader_in_battle(defender, area))
+		return BATTLES_WHERE_ONE_SIDE_HAS_LEADER
+
+	return BATTLES_WITHOUT_LEADERS
+}
+
 function sort_battles_by_type() {
-	let battles_by_type = [[], [], []]
+	L.battles_by_type = [[], [], []]
 
 	map_for_each_key(G.battles, (area) => {
-		const attacker = get_battle_attacker(area)
-		const defender = get_battle_defender(area)
-
-		if (has_leader_in_battle(attacker, area) && has_leader_in_battle(defender, area))
-			set_add(battles_by_type[BATTLES_WHERE_BOTH_SIDES_HAVE_LEADERS], area)
-		else if (has_leader_in_battle(attacker, area) || has_leader_in_battle(defender, area))
-			set_add(battles_by_type[BATTLES_WHERE_ONE_SIDE_HAS_LEADER], area)
-		else
-			set_add(battles_by_type[BATTLES_WITHOUT_LEADERS], area)
+		set_add(L.battles_by_type[get_battle_bucket(area)], area)
 	})
-
-	return battles_by_type
 }
 
 P.resolve_battles = {
 	_begin() {
 		G.active = get_who_has_initiative()
-		L.battles_by_type = sort_battles_by_type()
+		sort_battles_by_type()
 		L.current_battle_type = L.battles_by_type.findIndex(type => type.length > 0)
 	},
 	prompt() {
 		if (L.current_battle_type === -1) {
 			V.prompt = `No battles to execute this turn.`
 			button_confirm()
+		} else if (L.$ !== undefined) {
+			V.prompt = `Select next battle that must be executed now: ${format_area(L.$)}.`
+			action_area(L.$)
 		} else if (L.battles_by_type.every(list => list.length === 0)) {
 			V.prompt = "Execute battles: all done."
 			button_done()
@@ -7629,18 +7636,25 @@ P.resolve_battles = {
 	},
 	area(area) {
 		clear_undo()
+		if (L.$ !== undefined)
+			L.$ = undefined
 		G.current_battle = area
-		log_h4(`${format_area(area)}`, get_battle_attacker(area))
-		log()
 		call("battle", { area: area, attacker: get_battle_attacker(area), defender: get_battle_defender(area) })
 	},
 	_resume() {
 		set_delete(L.battles_by_type[L.current_battle_type], G.current_battle)
-		while (L.current_battle_type < BATTLES_WHERE_BOTH_SIDES_HAVE_LEADERS) {
-			if (L.battles_by_type[L.current_battle_type].length === 0)
-				++L.current_battle_type
-			else
-				break
+
+		// i.e. there is no battle that must be executed now.
+		if (L.$ === undefined) {
+			while (L.current_battle_type < BATTLES_WHERE_BOTH_SIDES_HAVE_LEADERS) {
+				if (L.battles_by_type[L.current_battle_type].length === 0)
+					++L.current_battle_type
+				else
+					break
+			}
+		} else {
+			sort_battles_by_type()
+			L.current_battle_type = L.battles_by_type.findIndex(type => type.length > 0)
 		}
 
 		G.current_battle = -1
@@ -7648,6 +7662,8 @@ P.resolve_battles = {
 	_end() {
 		clear_moved()
 		log()
+		if (G.battles.length > 0)
+			throw new Error(`Not all battles have been executed this turn!`)
 	}
 }
 
@@ -7657,6 +7673,10 @@ function is_early_elimination(battle) {
 
 P.battle = script(`
 	// L.area, L.attacker, L.defender
+	eval {
+		log_h4(format_area(G.current_battle), get_battle_attacker(G.current_battle))
+		log()
+	}
 
 	if (is_early_elimination(G.current_battle)) {
 		eval {
@@ -9128,7 +9148,7 @@ P.end_battle = script(`
 		log("Increased devastation at S" + G.current_battle + ".")
 	}
 
-	goto cleanup_battle { winner: L.winner }
+	goto cleanup_battle { winner: L.winner, next_battle: L.$ }
 `)
 
 P.cleanup_battle = function() {
@@ -9143,6 +9163,9 @@ P.cleanup_battle = function() {
 	if (map_has(G.battles, G.current_battle))
 		delete_battle_entry(G.current_battle)
 	G.active = get_who_has_initiative()
+
+	if (L.next_battle !== undefined)
+		L.L.$ = L.next_battle
 
 	if (!sudden_death())
 		end()
@@ -9290,6 +9313,8 @@ P.retreat = script(`
 			call do_retreat { destination: L.$ }
 		}
 	}
+	// We use L.next_battle instead of L.$ so that we can disambiguate what we are using the value for.
+	set L.L.$ L.next_battle
 `)
 
 P.select_retreat_destination = {
@@ -9519,8 +9544,12 @@ P.do_retreat = function() {
 			log(`Joined existing battle at ${format_area(L.destination)}.`)
 		} else {
 			add_attacker_to_battle(G.active, G.current_battle, L.destination, NONE, G.move.leaders, sps)
+			add_defender_to_battle(enemy(G.active), L.destination, L.destination, NONE, get_leaders_at_area(enemy(G.active), L.destination), get_sp_list_by_type(enemy(G.active), L.destination))
 			log(`Battle declared at ${format_area(L.destination)}.`)
 		}
+
+		// This battle must be the next one to be executed.
+		L.L.next_battle = L.destination
 	}
 
 	G.move = {}
