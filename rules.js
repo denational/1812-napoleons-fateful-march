@@ -6225,7 +6225,7 @@ function conduct_movement(from, to) {
 				// If any SPs or leaders who haven't yet been added to the battle, add them now at full strength.
 				// March orders are not tracked for battle purposes, since they fight identically to SPs that did not move.
 				if (leaders_at_area.length > 0 || sps_at_area.some(type => type > 0))
-					add_defender_to_battle(G.active, to, to, NONE, leaders_at_area.slice(), sps_at_area.slice())
+					add_defender_to_battle(enemy(G.active), to, to, NONE, leaders_at_area.slice(), sps_at_area.slice())
 			}
 		}
 		// If reinforcing an existing battle, simply add them in as a separate force.
@@ -7328,6 +7328,9 @@ function add_attacker_to_battle(who, from, area, move_type, leaders, sps) {
 	let battle = get_battle_entry(area, null)
 	let strength = get_move_strength(move_type)
 
+	if (battle.defender?.who && battle.defender.who === who)
+		throw new Error(`Same side cannot be attacker and defender in battle!`)
+
 	//	Merge entries if there is already another with the same characteristics
 	if (battle.attacker.forces.some(force => force.from === from && force.strength === strength)) {
 		let force = battle.attacker.forces.find(f => f.from === from && f.strength === strength)
@@ -7376,6 +7379,9 @@ function add_defender_to_battle(who, from, area, move_type, leaders, sps) {
 
 	let battle = get_battle_entry(area, null)
 	let strength = get_move_strength(move_type)
+
+	if (battle.attacker?.who && battle.attacker.who === who)
+		throw new Error(`Same side cannot be attacker and defender in battle!`)
 
 	if (battle.defender.forces.some(force => force.from === from && force.strength === strength)) {
 		let force = battle.defender.forces.find(f => f.from === from && f.strength === strength)
