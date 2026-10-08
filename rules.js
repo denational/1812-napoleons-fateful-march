@@ -7673,7 +7673,9 @@ P.resolve_battles = {
 	}
 }
 
-function is_early_elimination(battle) {
+// Used in P.battle script
+// eslint-disable-next-line no-unused-vars
+function is_early_elimination() {
 	return xor(has_fresh_sp(RUSSIA, G.current_battle), has_fresh_sp(FRANCE, G.current_battle))
 }
 
@@ -7684,7 +7686,7 @@ P.battle = script(`
 		log()
 	}
 
-	if (is_early_elimination(G.current_battle)) {
+	if (is_early_elimination()) {
 		eval {
 			G.active = !has_fresh_sp(RUSSIA, G.current_battle) ? RUSSIA : FRANCE
 			set_battle_winner(1 - G.active, G.current_battle)
@@ -9113,7 +9115,6 @@ function get_battle_events(battle) {
 	return get_battle_entry(battle, null)?.events ?? null
 }
 
-//TODO: Response trigger for City Ablaze! if France take control of a key city
 P.end_battle = script(`
 	eval {
 		L.winner = get_battle_winner(G.current_battle)
@@ -9181,101 +9182,36 @@ function get_current_initiative_level() {
 	return Math.abs(G.initiative)
 }
 
-P.battle_shift_vp_and_initiative = {
-	_begin() {
-		//L.winner
-		log_h5("VP & Initiative Shifts")
-		G.active = L.winner
-		L.vp_shift = get_battle_vp_shift(get_player_battle_data(enemy(G.active), G.current_battle).num_eliminated)
-		L.has_shifted_vp = false
-		L.has_finished = false
-		L.step = -1
-	},
-	prompt() {
-		if (!L.has_shifted_vp) {
-			if (L.step === -1) {
-				if (L.vp_shift > 0) {
-					V.prompt = `Battle Winner: Shift VP marker ${L.vp_shift} spaces in your favor.`
-					action_vp_marker()
-					button_next()
-				} else {
-					V.prompt = `No VP shift.`
-					button_pass()
-				}
-			} else {
-				if (G.active === RUSSIA)
-					V.prompt = `Losing force included ${format_leader(L_NAPOLEON)}: Gain an additional VP shift.`
-				else
-					V.prompt = `Losing force included ${format_leader(L_ALEXANDER)}: Gain an additional VP shift.`
-				action_vp_marker()
-				button_next()
-			}
-		} else if (!L.has_finished) {
-			if (G.active === get_who_has_initiative()) {
-				if ((get_current_initiative_level() < 4) && (L.vp_shift >= get_current_initiative_level())) {
-					V.prompt = `Shift Initiative Marker 1 in your favor for eliminating more losing SPs than the current Initiative level.`
-					action_initiative_marker()
-					button_next()
-				} else if (get_current_initiative_level() === 4) {
-					V.prompt = `Initiative cannot be shifted further.`
-					button_pass()
-				} else {
-					V.prompt = `No Initiative shift: number of enemy SPs eliminated is not greater than the current initiative level.`
-					button_pass()
-				}
-			} else {
-				V.prompt = `Shift Initiative Marker 1 in your favor for winning the battle.`
-				action_initiative_marker()
-				button_next()
-			}
-		} else {
-			V.prompt = `VP and Initiative Shifts: All done.`
-			button_done()
-		}
-	},
-	next() {
-		if (L.step === -1)
-			this.vp()
-		else
-			this.initiative()
-	},
-	vp() {
-		push_undo()
-		if (L.step === -1) {
-			increase_vp(G.active, L.vp_shift)
-			if (losing_force_includes_king(G.active, G.current_battle))
-				++L.step
-			else
-				L.has_shifted_vp = true
-		} else {
-			if (G.active === RUSSIA)
-				log(`Losing force included ${format_leader(L_NAPOLEON)}.`)
-			else
-				log(`Losing force included ${format_leader(L_ALEXANDER)}`)
-			increase_vp(G.active)
-			L.has_shifted_vp = true
-		}
-		sudden_death()
-	},
-	initiative() {
-		push_undo()
-		shift_initiative(G.active)
-		L.has_finished = true
-	},
-	pass() {
-		push_undo()
-		if (!L.has_shifted_vp) {
-			log("No VP shift.")
-			L.has_shifted_vp = true
-		} else {
-			log("No Initiative shift.")
-			L.has_finished = true
-		}
-	},
-	done() {
-		log()
-		end()
+P.battle_shift_vp_and_initiative = function() {
+	log_h5("VP and Initiative Shifts")
+	const num_sps_eliminated = get_player_battle_data(enemy(L.winner), G.current_battle).num_eliminated
+
+	const vp_shift = get_battle_vp_shift(num_sps_eliminated)
+	if (vp_shift > 0)
+		increase_vp(L.winner, vp_shift)
+	else
+		log(`No VP shift.`)
+
+	if (
+		(L.winner !== get_who_has_initiative()|| num_sps_eliminated > get_current_initiative_level())
+		&& get_current_initiative_level() < 4
+	) {
+		shift_initiative(L.winner)
+	} else {
+		log(`No Initiative shift.`)
 	}
+
+	if (losing_force_includes_king(L.winner, G.current_battle)) {
+		if (L.winner === RUSSIA)
+			log(`Losing force included ${format_leader(L_NAPOLEON)}.`)
+		else
+			log(`Losing force included ${format_leader(L_ALEXANDER)}.`)
+		increase_vp(L.winner)
+	}
+
+	log()
+	if (!sudden_death())
+		end()
 }
 
 function losing_force_includes_king(winner, battle) {
@@ -10777,7 +10713,7 @@ function get_event_removal_turn(event) {
 		return G.end_turn
 	if (event === C_WELL_DISCIPLINED_RETREAT || event === C_EXTREME_WEATHER_FR)
 		return G.turn + 1
-	if ((event === C_COMMAND_FRICTION || event === C_POOR_COMMUNICATIONS) && TURN_PHASES.indexOf(G.phase) > TURN_PHASES.indexOf(PHASE_PLACE_ORDERS))
+	if ((event === C_COMMAND_FRICTION || event === C_POOR_COMMUNICATIONS) && (TURN_PHASES.indexOf(G.phase) > TURN_PHASES.indexOf(PHASE_PLACE_ORDERS)))
 		return G.turn + 1
 	return G.turn
 }
