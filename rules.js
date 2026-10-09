@@ -357,7 +357,8 @@ const FRANCE_BATTLE_DIE = {
 	6: 4,
 }
 
-const WINTER_ONLY_MINUS_1 = 1
+// See /icons for the order in with the dice are arranged
+const WINTER_ONLY_MINUS_1 = 2
 const SUMMER_ONLY_4 = 6
 
 function roll_france_battle_die() {
@@ -3798,7 +3799,8 @@ P.draw_card_to_hand = {
 				G.depots[depot] = POOL
 				increment_event_tracker(C_CHAOTIC_FOOD_DISTRIBUTION)
 			},
-			on_sp(type) {
+			on_sp(entry) {
+				let type = decode_sp_type(entry)
 				rally_sp(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area, type)
 				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type = type
 				increment_event_tracker(C_CHAOTIC_FOOD_DISTRIBUTION)
@@ -3842,7 +3844,7 @@ P.draw_card_to_hand = {
 	card(card) 		{ this.states[L.state[R]].on_card(card)},
 	depot(depot) 	{ this.states[L.state[R]].on_depot(depot)},
 	leader(leader) 	{ this.states[L.state[R]].on_leader(leader) },
-	sp(type) 	{ this.states[L.state[R]].on_sp(type) },
+	sp(entry) 		{ this.states[L.state[R]].on_sp(entry) },
 	done() 		{ this.states[L.state[R]].on_done() },
 	undo() 		{ this.states[L.state[R]].on_undo() },
 	finish_state() {
@@ -10821,8 +10823,7 @@ function log_must_play_event(card, info) {
 			if (get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area) log(`Removed depot from ${format_area(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)}.`)
 			if (get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type) {
 				log(`Rallied`)
-				log_only(FRANCE, format_i(`1 ${get_sp_type_name(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type)}`))
-				log_only(RUSSIA, format_i(`1 Exh. SP`))
+				log_masked(FRANCE, format_i(`1 ${get_sp_type_name(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type)}`, `1 Exh. SP`))
 			}
 		}
 	}
