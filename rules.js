@@ -1595,7 +1595,21 @@ function filter_battles(player) {
 	return battles
 }
 
+function show_delayed_view() {
+	if (!G.delayed || !G.delayed.length) {
+		return false
+	}
+	var faction = G.delayed[0].state.active
+	return R !== faction
+}
+
 function on_view() {
+	var stored_g = G
+	if (show_delayed_view()) {
+		V.log = stored_g.log.slice()
+		V.log.length = G.delayed[0].state.log
+		G = G.delayed[0].state
+	}
 	// Global stuff
 	// G.turn will be undefined before the 'main' script is called.
 	V.initiative = G.initiative
@@ -1638,6 +1652,7 @@ function on_view() {
 	V.battles = filter_battles(R)
 	V.moved = filter_moved(R)
 	V.move = (G.move.player !== undefined && G.move.player === R) ? G.move : {}
+	G = stored_g
 }
 
 // === ACTION/BUTTON WRAPPER FUNCTIONS ===
@@ -5224,6 +5239,7 @@ P.execute_orders = script(`
 			call may_play_good_leadership
 		}
 	}
+	call commit_delayed_reaction
 `)
 
 P.log_no_orders_placed = function() {
@@ -5305,6 +5321,9 @@ function get_order_state_name(type) {
 
 P.execute_next_order = {
 	_begin() {
+		if (have_delayed_reaction()) {
+			call("commit_delayed_reaction")
+		}
 		// L.type
 		filter_orders(G.active, L.type)
 	},
@@ -5365,16 +5384,14 @@ P.end_order = {
 					action("depot", depot)
 	},
 	confirm() {
+		delay_reaction("exhausting_march", [C_EXHAUSTING_MARCH_1, C_EXHAUSTING_MARCH_2], {})
 		if (L.type === FORCED_MARCH && G.active === RUSSIA && is_event_active(C_EVASIVE_MANEUVERS) && has_executable_order(RUSSIA, FORCED_MARCH)) {
-			goto("execute_next_order", { type: L.type })
-		} else if (could_play_exhausting_march()) {
-			G.active = RUSSIA
-			goto("may_play_exhausting_march")
+			goto("execute_next_order", {type: L.type})
 		} else if (has_executable_order(enemy(G.active), L.type)) {
 			G.active = enemy(G.active)
-			goto("execute_next_order", { type: L.type })
+			goto("execute_next_order", {type: L.type})
 		} else if (has_executable_order(G.active, L.type)) {
-			goto("execute_next_order", { type: L.type })
+			goto("execute_next_order", {type: L.type})
 		} else {
 			end()
 		}
@@ -6254,6 +6271,11 @@ P.confirm_remove_depot = {
 
 P.remove_depot = {
 	_begin() {
+		if (find_depot_at_location(FRANCE, L.area) > 0) {
+			G.active = FRANCE
+		} else {
+			G.active = RUSSIA
+		}
 		//L.area
 		L.has_removed_depot = false
 		L.has_discarded = false
@@ -11857,10 +11879,74 @@ P.russia_may_play_city_ablaze = {
 		button_confirm()
 	},
 	confirm() {
-		clear_undo()
-		G.active = RUSSIA
-		goto("may_play_city_ablaze", { area: L.area })
+		var data = {area: L.area}
+		end()
+		delay_reaction("city_ablaze", [C_CITY_ABLAZE], data)
 	}
+}
+
+function delay_reaction(dialog, cards, data) {
+	var faction = cards[0] < C_DUMMY_FR ? RUSSIA : FRANCE
+	if (G.active === faction) {
+		return
+	}
+	if (!G.delayed) {
+		G.delayed = []
+	}
+	G.delayed.push({dialog, cards, data, state: copy_state(), state_number: G.undo.length})
+}
+
+function have_delayed_reaction() {
+	return G.delayed && G.delayed.length && G.delayed[0].state.active !== G.active
+}
+
+P.commit_delayed_reaction = function () {
+	if (!G.delayed || G.delayed.length === 0) {
+		end()
+		return
+	}
+	clear_undo()
+	goto("apply_delayed_reaction")
+}
+
+P.apply_delayed_reaction = {
+	_begin() {
+		G.active = 1 - G.delayed[0].state.active
+	},
+	prompt() {
+		var state = G.delayed[0]
+		if (!L.card) {
+			V.prompt = `You may play ${format_card(state.cards[0])}.`
+			state.cards.forEach(c => action_card(c))
+			button_pass()
+		} else {
+			V.prompt = `Confirm play ${format_card(L.card)} (cannot be undone).`
+			button_confirm()
+		}
+	},
+	pass() {
+		clear_undo()
+		G.delayed.shift()
+		if (G.delayed.length === 0) {
+			end()
+			return
+		}
+	},
+	card(card) {
+		push_undo()
+		L.card = card
+	},
+	confirm() {
+		var state = G.delayed[0]
+		apply_state(state.state)
+		if (state.data) {
+			state.data.card = L.card
+		}
+		G.delayed = []
+		L = G.L
+		G.active = 1 - state.state.active
+		call(state.dialog, state.data)
+	},
 }
 
 P.may_play_city_ablaze = {
@@ -15499,34 +15585,51 @@ function clear_undo() {
 	if (G.undo) {
 		G.undo.length = 0
 	}
+	if (G.delayed) {
+		G.delayed.forEach(s => s.state_number = -1)
+	}
 }
 
 function push_undo() {
-	var copy, k, v
+	var copy
 	if (G.undo) {
-		copy = {}
-		for (k in G) {
-			v = G[k]
-			if (k === "undo")
-				continue
-			else if (k === "log")
-				v = v.length
-			else if (typeof v === "object" && v !== null)
-				v = object_copy(v)
-			copy[k] = v
-		}
+		copy = copy_state()
 		G.undo.push(copy)
 	}
 }
 
+function copy_state() {
+	var copy, k, v
+	copy = {}
+	for (k in G) {
+		v = G[k]
+		if (k === "undo")
+			continue
+		else if (k === "delayed")
+			continue
+		else if (k === "log")
+			v = v.length
+		else if (typeof v === "object" && v !== null)
+			v = object_copy(v)
+		copy[k] = v
+	}
+	return copy
+}
+
+function apply_state(new_state) {
+	var state_number = G.undo.length
+	if (G.delayed) {
+		new_state.delayed = G.delayed.filter(s => s.state_number < state_number)
+	}
+	G.log.length = new_state.log
+	new_state.log = G.log
+	new_state.undo = G.undo
+	G = new_state
+}
+
 function pop_undo() {
 	if (G.undo) {
-		var save_log = G.log
-		var save_undo = G.undo
-		G = save_undo.pop()
-		save_log.length = G.log
-		G.log = save_log
-		G.undo = save_undo
+		apply_state(G.undo.pop())
 	}
 }
 
