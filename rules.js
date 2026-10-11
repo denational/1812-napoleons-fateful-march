@@ -5406,7 +5406,8 @@ P.end_order = {
 					action("depot", depot)
 	},
 	confirm() {
-		delay_reaction("exhausting_march", [C_EXHAUSTING_MARCH_1, C_EXHAUSTING_MARCH_2], {})
+		if (L.type === FORCED_MARCH)
+			delay_reaction("exhausting_march", [C_EXHAUSTING_MARCH_1, C_EXHAUSTING_MARCH_2], {})
 		if (L.type === FORCED_MARCH && G.active === RUSSIA && is_event_active(C_EVASIVE_MANEUVERS) && has_executable_order(RUSSIA, FORCED_MARCH)) {
 			goto("execute_next_order", {type: L.type})
 		} else if (has_executable_order(enemy(G.active), L.type)) {
