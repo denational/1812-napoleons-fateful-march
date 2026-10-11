@@ -767,6 +767,8 @@ function init_sp_entry(area) {
 
 function delete_sp_entry(area) {
 	map_delete(G.sps, area)
+	if (map_has(G.visible_sp_type, area))
+		map_delete(G.visible_sp_type, area)
 }
 
 function get_sp_entry(who, area, type, fallback) {
@@ -1378,28 +1380,59 @@ function package_visible_sp_type(player, type, strength, from) {
 // A random type among the types the player has in the area is selected to be the 'topmost' counter in the stack.
 // All other entries are filtered out.
 // To keep the counters consistent, the values are stored in G.
+function update_visible_sps(role) {
+	map_for_each(G.sps, (area, entries) => {
+		// Update new visible type, if necessary.
+		for (let player = RUSSIA; player <= FRANCE; ++player) {
+			if (player !== role && has_friendly_sp(player, area)) {
+				if (has_battle(area)) {
+					get_player_battle_data(player, area).forces.forEach(force => {
+						const visible_type = get_visible_type(player, area, force.strength, force.from)
+						if (force.leaders.length === 0 && (visible_type === -1 || force.sps[visible_type] === 0))
+							set_visible_type(player, area, force.strength, force.from)
+					})
+				} else {
+					if (!has_friendly_leader(player, area)) {
+						const visible_type = get_visible_type(player, area)
+						if (visible_type === -1 || !has_sp_of_type(player, visible_type, area))
+							set_visible_type(player, area)
+					}
+				}
+			}
+		}
+
+		// Clear any unused visible types.
+		for (let player = RUSSIA; player <= FRANCE; ++player) {
+			if (!has_friendly_sp(player, area) || (has_friendly_leader(player, area) && get_visible_type(RUSSIA, area) > -1))
+				reset_visible_type(player, area)
+		}
+	})
+}
 
 function get_visible_type(player, area, strength = FULL_STRENGTH, from = POOL) {
-	let entry = map_get(G.visible_sp_type, area, []).find(item => {
+	if (!map_has(G.visible_sp_type, area))
+		return -1
+
+	let entry = map_get(G.visible_sp_type, area).find(item => {
 		return decode_sp_player(item) === player
 			&& decode_sp_strength(item) === strength
 			&& decode_sp_from(item) === from
-	}) ?? -1
+	})
 
-	if (entry > -1)
-		return decode_sp_type(entry)
-
-	return -1
+	return entry === undefined ? -1 : decode_sp_type(entry)
 }
 
 function set_visible_type(player, area, strength = FULL_STRENGTH, from = POOL) {
-	let entries = map_get_set(G.visible_sp_type, area)
+	var entries
+	if (!map_has(G.visible_sp_type, area))
+		map_set(G.visible_sp_type, area, [])
+	entries = map_get(G.visible_sp_type, area, null)
 
 	if (get_visible_type(player, area, strength, from) > -1) {
 		return -1
 	} else {
 		let types = get_sp_types_at_area(player, area)
-		let random_type = types[random(types.length)]
+		let random_type = types[0] // NOTE: TEMPORARY VALUE UNTIL WE FIND A BETTER WAY
 
 		set_add(entries, package_visible_sp_type(player, random_type, strength, from))
 
@@ -1408,10 +1441,11 @@ function set_visible_type(player, area, strength = FULL_STRENGTH, from = POOL) {
 }
 
 function reset_visible_type(player, area) {
-	let entries = map_get(G.visible_sp_type, area, [])
-	entries = entries.filter(entry => decode_sp_player(entry) !== player)
+	let entries = map_get(G.visible_sp_type, area, []).filter(entry => decode_sp_player(entry) !== player)
 	if (entries.length === 0)
 		map_delete(G.visible_sp_type, area)
+	else
+		map_set(G.visible_sp_type, area, entries)
 }
 
 function is_observer(role) {
@@ -1472,42 +1506,28 @@ function filter_sps(player) {
 				set_add(filtered_entries, entry)
 		}
 
-		// A player may only see the topmost SP in areas/connections without enemy leaders.
 		for (let who = RUSSIA; who <= FRANCE; ++who) {
-			if (player !== who && has_friendly_sp(who, area)) {
-				if (has_battle(area)) {
-					get_player_battle_data(who, area).forces.forEach(force => {
-						if (force.leaders.length === 0) {
-							if (
-								get_visible_type(who, area, force.strength, force.from) === -1
-								|| force.sps[get_visible_type(who, area, force.strength, force.from)] === 0
-							) {
-								set_visible_type(who, area, force.strength, force.from)
+			if (map_has(G.visible_sp_type, area)) {
+				var visible = map_get(G.visible_sp_type, area).filter(vis => decode_sp_player(vis) !== player)
+				if (visible.length > 0) {
+					for (let vis of visible) {
+						if (has_battle(area)) {
+							get_player_battle_data(who, area).forces.forEach(force => {
+								if (force.strength === decode_sp_strength(vis) && force.from === decode_sp_from(vis) && force.sps[decode_sp_type(vis)] > 0)
+									set_add(filtered_entries, entries.find(entry => decode_sp_player(entry) == who && decode_sp_type(entry) == decode_sp_type(vis)))
+							})
+						} else {
+							for (let entry of entries) {
+								if (decode_sp_player(entry) === decode_sp_player(vis) && decode_sp_type(entry) === decode_sp_type(vis))
+									set_add(filtered_entries, entry)
 							}
-
-							set_add(filtered_entries, entries.find(entry => {
-								return decode_sp_player(entry) === who
-								&& decode_sp_type(entry) === get_visible_type(who, area, force.strength, force.from)
-							}))
 						}
-					})
-				} else {
-					if (player !== who && has_friendly_sp(who, area) && !has_friendly_leader(who, area)) {
-						if (get_visible_type(who, area) === -1 || !has_sp_of_type(who, get_visible_type(who, area), area))
-							set_visible_type(who, area)
-						set_add(filtered_entries, entries.find(entry => decode_sp_player(entry) === who && decode_sp_type(entry) === get_visible_type(who, area)))
 					}
 				}
 			}
 		}
 
-		// Nothing is revealed in areas/connections with enemy leaders.
-		for (let who = RUSSIA; who <= FRANCE; ++who) {
-			if (!has_friendly_sp(who, area) || (has_friendly_leader(RUSSIA, area) && get_visible_type(RUSSIA, area) > -1))
-				reset_visible_type(who, area)
-		}
-
-		map_set(sps, area, filtered_entries)
+		map_set(sps, area, filtered_entries.reverse())
 	})
 
 	return sps
@@ -1552,7 +1572,7 @@ function filter_moved(player) {
 			}
 		}
 
-		map_set(moved.sps, area, filtered_entries)
+		map_set(moved.sps, area, filtered_entries.reverse())
 	})
 
 	return moved
@@ -1899,11 +1919,6 @@ function on_setup(scenario, options) {
 	// Stores information necessary to conduct a battle.
 	G.battles = []
 
-	// Organized as a plain array map keyed by area.
-	// In each area, roles that are not the player are only allowed to see the topmost SP in the stack.
-	// Since SPs are sorted on type, we pick a random SP type to be the topmost SP in the stack.
-	G.visible_sp_type = []
-
 	//To track who commands who (particularly in cases where both leaders have the same seniority)
 	G.seniority = [
 		[L_ALEXANDER, L_KUTUZOV, L_DE_TOLLY, L_BAGRATION, L_TORMASOV, L_WITTGENSTEIN, L_CHICHAGOV, L_PLATOV],
@@ -1931,8 +1946,15 @@ function on_setup(scenario, options) {
 	case OCT: setup_oct(); break
 	}
 
+	// Organized as a plain array map keyed by area.
+	// In each area, roles that are not the player are only allowed to see the topmost SP in the stack.
+	// Since SPs are sorted on type, we pick a random SP type to be the topmost SP in the stack.
+	G.visible_sp_type = []
+	update_visible_sps(RUSSIA)
+	update_visible_sps(FRANCE)
+
 	G.active = [RUSSIA, FRANCE]
-	call("setup_hand", {scenario, hand_size: SCENARIO_DATA.hand_size.slice()})
+	call("setup_hand", { scenario, hand_size: SCENARIO_DATA.hand_size.slice() })
 }
 
 function log_special_and_optional_rules(scenario) {
@@ -15132,6 +15154,7 @@ exports.action = function (state, role, action, argument) {
 	if (this_state && typeof this_state[action] === "function") {
 		this_state[action](argument)
 		_run()
+		update_visible_sps(enemy(R))
 	} else if (action === "undo" && G.undo.length > 0) {
 		pop_undo()
 	} else {
