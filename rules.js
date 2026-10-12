@@ -7838,10 +7838,7 @@ P.commit_battle_events = {
 	},
 	inactive: "play battle events",
 	prompt() {
-		if (
-			L.num_battle_events_in_hand[R] === 0
-			|| G.played_cards[R].length === L.num_battle_events[R]
-		) {
+		if (L.num_battle_events_in_hand[R] === 0 || G.committed_cards[R].length === L.num_battle_events[R]) {
 			V.prompt = `Play Battle Events: All done.`
 		} else {
 			V.prompt = `You may play any battle cards, or a dummy.`
@@ -8030,12 +8027,10 @@ P.calculate_combat_value = function() {
 	}
 
 	// RU #12, FR #6, FR #17: Outflanking
-	if (attacker.who === FRANCE && is_outflanking_currently_active(FRANCE)) {
-		combat_value[RUSSIA] -= calculate_outflanking_strength(G.current_battle)
-		log(`Outflanking: -${calculate_outflanking_strength(G.current_battle)}`)
-	} else if (attacker.who === RUSSIA && is_outflanking_currently_active(RUSSIA)) {
-		combat_value[FRANCE] -= calculate_outflanking_strength(G.current_battle)
-		log(`Outflanking: -${calculate_outflanking_strength(G.current_battle)}`)
+	if (is_outflanking_currently_active(attacker_who)) {
+		const outflanking_strength = calculate_outflanking_strength(G.current_battle)
+		combat_value[defender_who] = Math.max(0, combat_value[defender_who] - outflanking_strength)
+		log(`Outflanking.`)
 	}
 
 	L.L.$ = combat_value
@@ -10604,7 +10599,7 @@ function calculate_distance_to_nearest_depot(who) {
 }
 
 /* LINES OF COMMUNICATIONS */
-function check_lines_of_communications(player) {
+function check_lines_of_communications(player, specific_depot = null) {
 	let sources = get_supply_sources(player)
 
 	let depots = []
@@ -10639,6 +10634,8 @@ function check_lines_of_communications(player) {
 				queue.push(area)
 				if (set_has(depots, area) && !set_has(sources, area)) {
 					set_add(sources, area)
+					if (specific_depot !== null && specific_depot === area)
+						return true
 					set_add(status.connected, area)
 					set_delete(status.remove, area)
 					map_set(distance, area, 0)
@@ -10648,6 +10645,9 @@ function check_lines_of_communications(player) {
 			}
 		}
 	}
+
+	if (specific_depot !== null)
+		return false
 
 	if (status.remove.length > 0) {
 		let clustered_depots = []
@@ -10713,7 +10713,10 @@ function has_depot_within_four_road_connections(who, area) {
 		if (map_get(distance, current) > 4)
 			return false
 
-		if (set_has(get_supply_sources_and_depots(who), current))
+		if (is_friendly_supply_source(who, current))
+			return true
+
+		if (has_friendly_depot(who, current) && check_lines_of_communications(who, current))
 			return true
 
 		for (let adj of get_adjacent_areas_by_road(current)) {
@@ -10741,8 +10744,10 @@ function get_event_state_name(event) {
 }
 
 function can_play_event(card) {
-	if ((get_card_season(card) !== BOTH) && (get_card_season(card) !== get_season(G.turn))) return false
-	if (is_battle_card(card) && (!G.current_battle || (G.current_battle === -1))) return false
+	if ((get_card_season(card) !== BOTH) && (get_card_season(card) !== get_season(G.turn)))
+		return false
+	if (is_battle_card(card) && (!G.current_battle || (G.current_battle === -1)))
+		return false
 
 	let evt = E[get_event_state_name(card)]
 	if (evt && typeof evt === "function")
@@ -10760,7 +10765,7 @@ function get_event_removal_turn(event) {
 		return G.end_turn
 	if (event === C_WELL_DISCIPLINED_RETREAT || event === C_EXTREME_WEATHER_FR)
 		return G.turn + 1
-	if ((event === C_COMMAND_FRICTION || event === C_POOR_COMMUNICATIONS) && (TURN_PHASES.indexOf(G.phase) > TURN_PHASES.indexOf(PHASE_PLACE_ORDERS)))
+	if ((event === C_COMMAND_FRICTION || event === C_POOR_COMMUNICATIONS) && (is_resource_turn(G.turn) || G.phase > TURN_PHASES.indexOf(PHASE_PLACE_ORDERS)))
 		return G.turn + 1
 	return G.turn
 }
