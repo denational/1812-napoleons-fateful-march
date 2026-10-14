@@ -13534,22 +13534,14 @@ P.war_weariness = {
 	_begin() {
 		L.controlled_areas = [S_MOSCOW, S_TORZHOK, S_BEZHANITZY, S_OSTROV, S_VENDEN].filter(s => is_fr_controlled(s))
 		L.eliminated_russian_leaders = get_eliminated_leaders(RUSSIA)
+		L.vp_shift = L.controlled_areas.length + L.eliminated_russian_leaders.length
+		call("shift_vp", { in_favor_of: FRANCE, amount: L.vp_shift })
 	},
 	inactive: "press for a negotiated settlement",
-	prompt() {
-		prompt_card(C_WAR_WEARINESS, `Shift the VP marker ${ L.controlled_areas.length + L.eliminated_russian_leaders.length } in France's favor.`)
-		action_vp_marker()
-		button_next()
-	},
-	next() { this.vp() },
-	vp() {
-		push_undo()
-		increase_vp(FRANCE, L.french_vp)
+	_resume() {
 		L.controlled_areas.forEach(area => logi(`+1 ${format_area(area)}`))
-		L.eliminated_russian_leaders.forEach(leader => logi(format_leader(leader)))
-
-		if (!sudden_death())
-			goto("event_done", { card: C_WAR_WEARINESS })
+		L.eliminated_russian_leaders.forEach(leader => logi(`+1 ${format_leader(leader)}`))
+		goto("event_done", { card: C_WAR_WEARINESS })
 	}
 }
 
