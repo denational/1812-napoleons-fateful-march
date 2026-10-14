@@ -4462,11 +4462,12 @@ function cleanup_order(player) {
 		goto_local_state(player, "all_done")
 }
 
-function undo_cleanup_order(player, order) {
+function undo_cleanup_order(player, order, pass = false) {
 	L.orders_to_place[player].push(order)
 	set_delete(L.orders_placed[player], order)
 	L.selected_order[player] = order
-	G.selected_orders[player].push(order)
+	if (!pass)
+		G.selected_orders[player].push(order)
 }
 
 P.do_place_orders = {
@@ -4493,12 +4494,15 @@ P.do_place_orders = {
 				if (!L.has_placed_platov_order && does_receive_platov_free_order(R)) {
 					prompt_leader(L_PLATOV, `Select an ${get_order_name(G.platov_order)} order.`)
 					action_order(G.platov_order)
+					button_pass()
 				} else if (!L.has_placed_superior_staff_officers_order && does_receive_superior_staff_officers_free_order(R)) {
 					V.prompt = `Superior Staff Officers: Select a Cavalry Patrols order.`
 					action_order(G.superior_staff_officers_order)
+					button_pass()
 				} else {
 					V.prompt = `Select next order to place. (${L.orders_to_place[R].length} remaining)`
 					L.orders_to_place[R].forEach(action_order)
+					button("end_place_orders")
 				}
 			},
 			on_order(order) {
@@ -4506,6 +4510,16 @@ P.do_place_orders = {
 				L.selected_order[R] = order
 				G.selected_orders[R].push(order) // Using existing client logic to highlight orders.
 				goto_local_state(R, "place_order")
+			},
+			on_pass() {
+				let order = (R === RUSSIA) ? G.platov_order : G.superior_staff_officers_order
+				push_local_undo(R, "pass_place_order", { order })
+				L.selected_order[R] = order
+				if (R === RUSSIA)
+					L.has_placed_platov_order = true
+				else
+					L.has_placed_superior_staff_officers_order = true
+				cleanup_order(R)
 			}
 		},
 		"place_order": {
@@ -4548,12 +4562,12 @@ P.do_place_orders = {
 				cleanup_order(R)
 			},
 			on_area(area) {
+				if (!L.has_placed_platov_order && does_receive_platov_free_order(R))
+					L.has_placed_platov_order = true
 				if (R === RUSSIA && is_event_active(C_COMMAND_FRICTION) && get_event_keyword(C_COMMAND_FRICTION, "area") === area && !L.has_discarded_card) {
 					goto_local_state(R, "command_friction_discard_card")
 				} else {
-					if (!L.has_placed_platov_order && does_receive_platov_free_order(R))
-						L.has_placed_platov_order = true
-					else if (!L.has_placed_superior_staff_officers_order && does_receive_superior_staff_officers_free_order(R))
+					if (!L.has_placed_superior_staff_officers_order && does_receive_superior_staff_officers_free_order(R))
 						L.has_placed_superior_staff_officers_order = true
 					do_place_order(R, area)
 				}
@@ -4607,6 +4621,13 @@ P.do_place_orders = {
 				L.has_placed_platov_order = false
 			undo_cleanup_order(R, undo.info.order)
 			return
+		case "pass_place_order":
+			if (R === RUSSIA && L.has_placed_platov_order && undo.info.order === G.platov_order)
+				L.has_placed_platov_order = false
+			else if (R === FRANCE && L.has_placed_superior_staff_officers_order && undo.info.order === G.superior_staff_officers_order)
+				L.has_placed_superior_staff_officers_order = false
+			undo_cleanup_order(R, undo.info.order, true)
+			return
 		case "discard":
 			add_to_hand(R, undo.info.card)
 			set_delete(get_discard(R), undo.info.card)
@@ -4620,16 +4641,16 @@ P.do_place_orders = {
 
 			remove_order(undo.info.order)
 			undo_cleanup_order(R, undo.info.order)
-
 			return
 		}
 	},
 	order(order) 	{ this.states[L.state[R]].on_order(order) },
 	area(area) 		{ this.states[L.state[R]].on_area(area) },
 	card(card) 		{ this.states[L.state[R]].on_card(card) },
-	pass()			{ this.states[L.state[R]].on_pass() },
-	next()			{ this.states[L.state[R]].on_next() },
+	pass()		{ this.states[L.state[R]].on_pass() },
+	next()		{ this.states[L.state[R]].on_next() },
 	confirm() 		{ this.states[L.state[R]].on_confirm() },
+	end_place_orders() { this.finish_state(R) },
 	finish_state() {
 		set_delete(G.active, R)
 		if (G.active.length === 0)
@@ -13268,12 +13289,14 @@ function remove_order(id) {
 // RU #48: Disorderly March
 P.disorderly_march = script(`
 	call shift_initiative { in_favor_of: RUSSIA }
-	call disorderly_march_designate
-	set G.active FRANCE
-	call disorderly_march_remove_orders { area: L.$ }
-	call disorderly_march_confirm_effect { area: L.$ }
-	call event_done { card: C_DISORDERLY_MARCH }
-	set G.active RUSSIA
+	if (get_areas_with_french_orders().length > 0) {
+		call disorderly_march_designate
+		set G.active FRANCE
+		call disorderly_march_remove_orders { area: L.$ }
+		call disorderly_march_confirm_effect { area: L.$ }
+		call event_done { card: C_DISORDERLY_MARCH }
+		set G.active RUSSIA
+	}
 	goto event_done { card: C_DISORDERLY_MARCH }
 `)
 
@@ -13963,11 +13986,15 @@ P.poor_communications = {
 		if (L.selected_area === -1) {
 			let areas = get_areas_with_french_orders()
 
-			prompt_card(C_POOR_COMMUNICATIONS, `Designate an area to randomly remove a French order.`)
-			if (areas.length <= 5)
-				V.prompt += ` (${join_array_with_or(areas.map(format_area))})`
-
-			areas.forEach(action_area)
+			if (areas.length > 0) {
+				prompt_card(C_POOR_COMMUNICATIONS, `Designate an area to randomly remove a French order.`)
+				if (areas.length <= 5)
+					V.prompt += ` (${join_array_with_or(areas.map(format_area))})`
+				areas.forEach(action_area)
+			} else {
+				prompt_card(C_POOR_COMMUNICATIONS, `No French orders placed this turn.`)
+				button_done()
+			}
 		} else {
 			prompt_card(C_POOR_COMMUNICATIONS, `A random French order will be removed from ${format_area(L.selected_area)}. Confirm? (cannot be undone)`)
 			button_confirm()
@@ -13984,9 +14011,14 @@ P.poor_communications = {
 		remove_order(orders_at_area[order_to_remove])
 		log(`Removed from ${format_area(L.selected_area)}`)
 		log_masked(FRANCE, format_i(`1 ${get_order_name(orders_at_area[order_to_remove])}`), format_i(`1 random order`))
-		card_box_end()
 		goto("event_done", { card: C_POOR_COMMUNICATIONS })
-	}
+	},
+	done() {
+		push_undo()
+		log(`No French orders placed this turn.`)
+		goto("event_done", { card: C_POOR_COMMUNICATIONS })
+	},
+	_end() { card_box_end() }
 }
 
 // FR #23: Poor Coordination

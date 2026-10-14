@@ -988,6 +988,8 @@ function on_update() {
 			action_button_with_argument("card_button", card, `#${data.cards[card].id} ${data.cards[card].name}`)
 	}
 
+	confirm_action_button("end_place_orders", "Done", "You have not yet placed all orders. Confirm passing?")
+
 	action_button("undo", "Undo")
 
 	end_update()
