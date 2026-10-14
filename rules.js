@@ -4132,7 +4132,7 @@ function calculate_num_orders() {
 	}
 
 	// FR #42: Extreme Weather -- Both sides -2 orders
-	if (is_event_active(C_EXTREME_WEATHER_FR) && G.turn !== get_event_removal_turn(C_EXTREME_WEATHER_FR)) {
+	if (is_event_active(C_EXTREME_WEATHER_FR) && G.turn !== get_event_keyword(C_EXTREME_WEATHER_FR, "remove")) {
 		orders[RUSSIA] = Math.max(0, orders[RUSSIA] - 2)
 		orders[FRANCE] = Math.max(0, orders[FRANCE] - 2)
 	}
