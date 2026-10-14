@@ -7869,6 +7869,7 @@ P.commit_battle_events = {
 			}
 		}
 		G.committed_cards[R].forEach(action_card)
+		button_undo(G.committed_cards[R].length > 0)
 		button_done()
 	},
 	card(card) {
