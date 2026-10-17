@@ -97,6 +97,8 @@ const EXHAUSTED_PRUSSIAN_INFANTRY = 9
 const FRESH_AUSTRIAN_INFANTRY = 10
 const EXHAUSTED_AUSTRIAN_INFANTRY = 11
 
+const NUM_SP_TYPES = 12
+
 // Strength flags
 // Conveniently coincides with FORCED_MARCH
 const HALF_STRENGTH = 0
@@ -303,6 +305,25 @@ function get_sp_selector(type) {
 		return "guard"
 	else
 		throw new Error(`Unknown SP selector: ${type}`)
+}
+
+function get_sp_type_name(type) {
+	switch(type) {
+	case FRESH_INFANTRY: return "Infantry"
+	case EXHAUSTED_INFANTRY: return "Exh. Infantry"
+	case FRESH_CAVALRY: return "Cavalry"
+	case EXHAUSTED_CAVALRY: return "Exh. Cavalry"
+	case FRESH_COSSACK: return "Cossack"
+	case EXHAUSTED_COSSACK: return "Exh. Cossack"
+	case FRESH_GUARD: return "Guard"
+	case EXHAUSTED_GUARD: return "Exh. Guard"
+	case FRESH_PRUSSIAN_INFANTRY: return "Pr. Infantry"
+	case EXHAUSTED_PRUSSIAN_INFANTRY: return "Exh. Pr. Infantry"
+	case FRESH_AUSTRIAN_INFANTRY: return "Au. Infantry"
+	case EXHAUSTED_AUSTRIAN_INFANTRY: return "Exh. Au. Infantry"
+	default:
+		return "unknown"
+	}
 }
 
 function get_exhaustion_selector(type) {
@@ -681,23 +702,6 @@ function translate_right(rect, amt) {
 	return rect
 }
 
-function define_leader_board(leader) {
-	const leader_board = define_thing("leader_board", leader)
-		.keyword(get_leader_short_name(leader))
-	define_thing("subordinate_leaders", leader)
-		.static_child(leader_board)
-		.keyword("square")
-	define_thing("subordinate_infantry", leader)
-		.static_child(leader_board)
-		.keyword("square")
-	define_thing("subordinate_cavalry", leader)
-		.static_child(leader_board)
-		.keyword("square")
-	define_thing("subordinate_special", leader)
-		.static_child(leader_board)
-		//.keyword("square")
-}
-
 function define_sp(type, id) {
 	return new SP(document.createElement("div"), type, "sp", id)
 }
@@ -795,15 +799,11 @@ function on_init() {
 		define_piece("order", order, get_order_keyword(order))
 
 	/* LEADERS */
-	for (let leader = first_russia_leader; leader <= last_russia_leader; ++leader) {
-		define_piece("leader", leader, "ru " + get_leader_short_name(leader))
-			.stackable()
-		define_leader_board(leader)
-	}
-	for (let leader = first_france_leader; leader <= last_france_leader; ++leader) {
-		define_piece("leader", leader, "fr " + get_leader_short_name(leader))
-			.stackable()
-		define_leader_board(leader)
+	for (let player = RUSSIA; player <= FRANCE; ++player) {
+		for (let leader = get_first_leader(player); leader <= get_last_leader(player); ++leader) {
+			define_piece("leader", leader, `${get_abbreviation(player)} ${get_leader_short_name(leader)}`)
+				.stackable()
+		}
 	}
 
 	/* SPs */
@@ -838,6 +838,11 @@ function on_init() {
 }
 
 //=== UPDATE VIEW ===
+function populate_moving(area, child_name, child_id) {
+	update_position("move", 0, move_offset_x(area), move_offset_y(area))
+	populate("move", 0, child_name, child_id)
+}
+
 // eslint-disable-next-line no-unused-vars
 function on_update() {
 	begin_update()
@@ -886,9 +891,6 @@ function on_update() {
 		}
 	}
 
-	update_panel_show("leaders", RUSSIA, false)
-	update_panel_show("leaders", FRANCE, false)
-
 	for (let leader = 0; leader <= 13; ++leader) {
 		action_button_with_argument(`leader_button`, leader, leaders[leader].log_name)
 		if (V.move && V.move.leaders) {
@@ -904,50 +906,13 @@ function on_update() {
 			populate("area_stack", area, "attrition_checked", marker++)
 	}
 
-	action_button_with_argument("sp_button", FRESH_INFANTRY, "Infantry")
-	action_button_with_argument("sp_button", EXHAUSTED_INFANTRY, "Exh. Infantry")
-	action_button_with_argument("sp_button", FRESH_CAVALRY, "Cavalry")
-	action_button_with_argument("sp_button", EXHAUSTED_CAVALRY, "Exh. Cavalry")
-	action_button_with_argument("sp_button", FRESH_COSSACK, "Cossack")
-	action_button_with_argument("sp_button", EXHAUSTED_COSSACK, "Exh. Cossack")
-	action_button_with_argument("sp_button", FRESH_GUARD, "Guard")
-	action_button_with_argument("sp_button", EXHAUSTED_GUARD, "Exh. Guard")
-	action_button_with_argument("sp_button", FRESH_PRUSSIAN_INFANTRY, "Pr. Infantry")
-	action_button_with_argument("sp_button", EXHAUSTED_PRUSSIAN_INFANTRY, "Exh. Pr. Infantry")
-	action_button_with_argument("sp_button", FRESH_AUSTRIAN_INFANTRY, "Au. Infantry")
-	action_button_with_argument("sp_button", EXHAUSTED_AUSTRIAN_INFANTRY, "Exh. Au. Infantry")
-
-	action_button_with_argument("sp_2x", FRESH_INFANTRY, "2x Infantry")
-	action_button_with_argument("sp_2x", FRESH_PRUSSIAN_INFANTRY, "2x Pr. Infantry")
-	action_button_with_argument("sp_2x", FRESH_AUSTRIAN_INFANTRY, "2x Au. Infantry")
-	action_button_with_argument("sp_2x", EXHAUSTED_INFANTRY, "2x Exh. Infantry")
-	action_button_with_argument("sp_2x", EXHAUSTED_PRUSSIAN_INFANTRY, "2x Exh. Pr. Infantry")
-	action_button_with_argument("sp_2x", EXHAUSTED_AUSTRIAN_INFANTRY, "2x Exh. Au. Infantry")
-
-	action_button_with_argument("add_sp", FRESH_INFANTRY, "+ Inf.")
-	action_button_with_argument("remove_sp", FRESH_INFANTRY, "- Inf.")
-	action_button_with_argument("add_sp", EXHAUSTED_INFANTRY, "+ Exh. Inf.")
-	action_button_with_argument("remove_sp", EXHAUSTED_INFANTRY, "- Exh. Inf.")
-	action_button_with_argument("add_sp", FRESH_CAVALRY, "+ Cav.")
-	action_button_with_argument("remove_sp", FRESH_CAVALRY, "- Cav.")
-	action_button_with_argument("add_sp", EXHAUSTED_CAVALRY, "+ Exh. Cav.")
-	action_button_with_argument("remove_sp", EXHAUSTED_CAVALRY, "- Exh. Cav.")
-	action_button_with_argument("add_sp", FRESH_COSSACK, "+ Coss.")
-	action_button_with_argument("remove_sp", FRESH_COSSACK, "- Coss.")
-	action_button_with_argument("add_sp", EXHAUSTED_COSSACK, "+ Exh. Coss.")
-	action_button_with_argument("remove_sp", EXHAUSTED_COSSACK, "- Exh. Coss.")
-	action_button_with_argument("add_sp", FRESH_GUARD, "+ Guard")
-	action_button_with_argument("remove_sp", FRESH_GUARD, "- Guard")
-	action_button_with_argument("add_sp", EXHAUSTED_GUARD, "+ Exh. Guard")
-	action_button_with_argument("remove_sp", EXHAUSTED_GUARD, "- Exh. Guard")
-	action_button_with_argument("add_sp", FRESH_PRUSSIAN_INFANTRY, "+ Pr. Inf.")
-	action_button_with_argument("remove_sp", FRESH_PRUSSIAN_INFANTRY, "- Pr. Inf.")
-	action_button_with_argument("add_sp", EXHAUSTED_PRUSSIAN_INFANTRY, "+ Exh. Pr. Inf.")
-	action_button_with_argument("remove_sp", EXHAUSTED_PRUSSIAN_INFANTRY, "- Exh. Pr. Inf.")
-	action_button_with_argument("add_sp", FRESH_AUSTRIAN_INFANTRY, "+ Au. Inf.")
-	action_button_with_argument("remove_sp", FRESH_AUSTRIAN_INFANTRY, "- Au. Inf.")
-	action_button_with_argument("add_sp", EXHAUSTED_AUSTRIAN_INFANTRY, "+ Exh. Au. Inf.")
-	action_button_with_argument("remove_sp", EXHAUSTED_AUSTRIAN_INFANTRY, "- Exh. Au. Inf.")
+	for (let type = 0; type < NUM_SP_TYPES; ++type) {
+		action_button_with_argument("sp_button", type, get_sp_type_name(type))
+		if (is_infantry(type))
+			action_button_with_argument("sp_2x", type, `2x ${get_sp_type_name(type)}`)
+		action_button_with_argument("add_sp", type, `+ ${get_sp_type_name(type)}`)
+		action_button_with_argument("remove_sp", type, `+ ${get_sp_type_name(type)}`)
+	}
 
 	action_button("select_all", "Select All")
 	action_button("shuffle", "Shuffle Deck")
@@ -997,24 +962,16 @@ function on_update() {
 
 /* TIME, VP, INITIATIVE */
 function update_tracks() {
-	//Time
+	// Time
 	populate("track-time", V.turn, "time", 0)
 	populate("track-time", V.end_turn, "time", 1)
 
-	//VP
-	if (V.vp >= 0) {
-		update_keyword("vp", 0, "fr")
-	} else {
-		update_keyword("vp", 0, "ru")
-	}
+	// VP
+	update_keyword("vp", 0, V.vp >= 0 ? "fr" : "ru")
 	populate("track-vp", Math.min(Math.max(0, Math.abs(V.vp)), 20), "vp", 0)
 
-	//Initiative
-	if (V.initiative >= 0) {
-		update_keyword("initiative", 0, "fr")
-	} else {
-		update_keyword("initiative", 0, "ru")
-	}
+	// Initiative
+	update_keyword("initiative", 0, V.initiative > 0 ? "fr" : "ru")
 	populate("track-initiative", Math.abs(V.initiative), "initiative", 0)
 }
 
@@ -1039,8 +996,7 @@ function update_leaders() {
 				for (let force of get_player_battle_data(get_leader_owner(leader), location).forces) {
 					if (set_has(force.leaders, leader)) {
 						if (V.move && (V.move.type === EVADE || V.move.type === NONE) && V.move.leaders && set_has(V.move.leaders, leader)) {
-							update_position("move", 0, move_offset_x(location), move_offset_y(location))
-							populate("move", 0, "leader", leader)
+							populate_moving(location, "leader", leader)
 						} else {
 							if (get_seniormost_leader_on_connection(get_leader_owner(leader), force.from, location) === leader || R === get_leader_owner(leader)) {
 								if (force.from === location) {
@@ -1053,10 +1009,8 @@ function update_leaders() {
 					}
 				}
 			} else {
-				if (V.move && V.move.leaders && V.move.path && V.move.path.length === 1 && set_has(V.move.leaders, leader)) {
-					update_position("move", 0, move_offset_x(location), move_offset_y(location))
-					populate("move", 0, "leader", leader)
-				}
+				if (V.move && V.move.leaders && V.move.path && V.move.path.length === 1 && set_has(V.move.leaders, leader))
+					populate_moving(location, "leader", leader)
 				else if (R === get_leader_owner(leader) || (R !== get_leader_owner(leader) && is_seniormost_leader(leader, location)))
 					populate("area_stack", get_leader_location(leader), "leader", leader)
 			}
@@ -1096,12 +1050,14 @@ function populate_half_strength(player, parent_id, half_strength = true, count =
 
 	if (player === FRANCE && (is_event_active(C_HARD_MARCHING_1) || is_event_active(C_HARD_MARCHING_2)))
 		--count
+
 	if (
 		player === FRANCE
 		&& map_has(V.battles, sp.my_area)
 		&& (
 			(is_battle_event_active(sp.my_area, C_SKILLFULL_MANEUVERS) && get_event_keyword(C_SKILLFULL_MANEUVERS, "cancels") !== "river")
-			|| is_battle_event_active(sp.my_area, C_EBLES_PONTONEERS))
+			|| is_battle_event_active(sp.my_area, C_EBLES_PONTONEERS)
+		)
 	) {
 		--count
 	}
@@ -1336,13 +1292,6 @@ function update_orders() {
 
 }
 
-/*
-// === ADJUST STACK ACTION ===
-function send_action_adjust_stacks() {
-	if (could_adjust_stacks(R))
-		send_action("adjust_stacks")
-}
-*/
 //=== LOG/PROMPT (WIP) ===
 function escape_text(text) {
 	escape_html(text)
