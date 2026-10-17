@@ -1649,7 +1649,7 @@ function on_view() {
 
 	// Only pass each players' cards
 	V.current_hand = G.hand[R] ?? []
-	V.current_discard = G.discard[R] ?? []
+	V.discard = G.discard
 	V.committed_cards = G.committed_cards[R] ?? []
 	V.hand_length = [G.hand[RUSSIA].length, G.hand[FRANCE].length]
 	V.num_enemy_committed_cards = G.committed_cards[enemy(R)]?.length ?? 0

@@ -258,10 +258,6 @@ body.France header.your_turn {background-color: var(--france);}
 	box-shadow: 0 0 0 2px yellow;
 }
 
-.piece.leader.selected {
-	box-shadow: 0 0 0 2px lightgreen;
-}
-
 .stack > .piece.leader {
 	position: absolute;
 }
@@ -282,61 +278,6 @@ body.France header.your_turn {background-color: var(--france);}
 .piece.leader.Murat {background-image: url(counters.1x/fr_leader_murat.webp);}
 .piece.leader.Schwarzenberg {background-image: url(counters.1x/fr_leader_schwarzenberg.webp);}
 
-/* UNUSED
-
-.piece.standee.Alexander { background-image: url(counters.1x/ru_standee_alexander_i.webp);}
-.piece.standee.Kutuzov {background-image: url(counters.1x/ru_standee_kutuzov.webp);}
-.piece.standee.Tolly {background-image: url(counters.1x/ru_standee_de_tolly.webp);}
-.piece.standee.Bagration {background-image: url(counters.1x/ru_standee_bagration.webp);}
-.piece.standee.Tormasov {background-image: url(counters.1x/ru_standee_tormasov.webp);}
-.piece.standee.Wittgenstein {background-image: url(counters.1x/ru_standee_wittgenstein.webp);}
-.piece.standee.Chichagov {background-image: url(counters.1x/ru_standee_chichagov.webp);}
-.piece.standee.Platov {background-image: url(counters.1x/ru_standee_platov.webp);}
-
-.piece.standee.Napoleon {background-image: url(counters.1x/fr_standee_napoleon.webp);}
-.piece.standee.Jerome {background-image: url(counters.1x/fr_standee_jerome.webp);}
-.piece.standee.Beauharnais {background-image: url(counters.1x/fr_standee_de_beauharnais.webp);}
-.piece.standee.Davout {background-image: url(counters.1x/fr_standee_davout.webp);}
-.piece.standee.Murat {background-image: url(counters.1x/fr_standee_murat.webp);}
-.piece.standee.Schwarzenberg {background-image: url(counters.1x/fr_standee_schwarzenberg.webp);}
-
-*/
-
-.leader_board {
-	position: relative;
-	width: 590px;
-	height: 236px;
-	background-size: 590px 236px;
-}
-
-.leader_board > * {
-	position: absolute;
-	width: 190px;
-	height: 75px;
-	border: 5px;
-	display: flex;
-	flex-direction: row;
-	justify-content: center;
-}
-
-.subordinate_special {
-	top: 225px;
-	z-index: 1;
-}
-
-.subordinate_cavalry {
-	top: 150px;
-	z-index: 2;
-}
-
-.subordinate_infantry {
-	top: 75px;
-	z-index: 3;
-}
-
-.subordinate_leaders {
-	z-index: 4;
-}
 
 .leader_board.Alexander { background-image: url(boards.1x/leader_board_ru_1.avif);}
 .leader_board.Kutuzov { background-image: url(boards.1x/leader_board_ru_7.avif);}
@@ -353,22 +294,6 @@ body.France header.your_turn {background-color: var(--france);}
 .leader_board.Davout { background-image: url(boards.1x/leader_board_fr_9.avif);}
 .leader_board.Murat {background-image: url(boards.1x/leader_board_fr_5.avif);}
 .leader_board.Schwarzenberg { background-image: url(boards.1x/leader_board_fr_11.avif);}
-
-.leader_board.reverse.Alexander { background-image: url(boards.2x/leader_board_ru_1.avif);}
-.leader_board.reverse.Kutuzov { background-image: url(boards.1x/leader_board_ru_8.avif);}
-.leader_board.reverse.Tolly { background-image: url(boards.1x/leader_board_ru_4.avif);}
-.leader_board.reverse.Bagration { background-image: url(boards.1x/leader_board_ru_10.avif);}
-.leader_board.reverse.Tormasov { background-image: url(boards.1x/leader_board_ru_6.avif);}
-.leader_board.reverse.Wittgenstein {background-image: url(boards.1x/leader_board_ru_12.avif);}
-.leader_board.reverse.Chichagov { background-image: url(boards.1x/leader_board_ru_14.avif);}
-.leader_board.reverse.Platov { background-image: url(boards.1x/leader_board_ru_16.avif);}
-
-.leader_board.reverse.Napoleon {background-image: url(boards.1x/leader_board_fr_2.avif);}
-.leader_board.reverse.Jerome {background-image: url(boards.1x/leader_board_fr_4.avif);}
-.leader_board.reverse.Beauharnais { background-image: url(boards.1x/leader_board_fr_8.avif);}
-.leader_board.reverse.Davout { background-image: url(boards.1x/leader_board_fr_10.avif);}
-.leader_board.reverse.Murat {background-image: url(boards.1x/leader_board_fr_6.avif);}
-.leader_board.reverse.Schwarzenberg { background-image: url(boards.1x/leader_board_fr_12.avif);}
 
 /* ORDERS */
 
@@ -578,6 +503,11 @@ body.hide-pieces .sp { display: none }
 
 .half_strength_ru { background-image: url(counters.1x/ru_half.webp) }
 .half_strength_fr { background-image: url(counters.1x/fr_half.webp) }
+
+/* WINDOWS */
+dt { padding-left: 10px; }
+dd > span { color: navy; }
+
 
 /* BEVELS */
 

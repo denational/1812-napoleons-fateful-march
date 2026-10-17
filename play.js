@@ -4,7 +4,7 @@
 /* global world, Thing, V, R, data, layout, _focus_stack, _blur_stack, begin_update, end_update */
 /* global define_thing, define_layout, define_panel, define_space, define_stack, define_layout_track_h, define_layout_track_v */
 /* global define_board, define_piece, define_marker, define_card_list, define_marker_list, define_html_thing */
-/* global populate, update_keyword, lookup_thing, update_panel_show, update_position, populate_generic, update_text */
+/* global populate, update_keyword, lookup_thing, update_panel_show, update_position, populate_generic, update_text, create_window */
 /* global escape_tip_class_sub, escape_tip_light, escape_html, escape_typography, escape_dice, update_log_boxes, apply_log_boxes, open_log_box, close_log_box */
 
 // TODO: Animate positions
@@ -18,6 +18,10 @@ const ROLES = ["Russia", "France"]
 const ABBREVIATIONS = ["ru", "fr", "pr", "au"]
 
 const NONE = -1
+
+function is_mobile() {
+	return ("ontouchstart" in window) || (window.innerWidth < 800)
+}
 
 // === CONSTANTS ===
 /* AREAS */
@@ -34,6 +38,11 @@ const POOL = 0
 const FRENCH_CASUALTIES = 157
 
 /* CARDS */
+const FIRST_RUSSIAN_CARD = 0
+const LAST_RUSSIAN_CARD = 53
+const FIRST_FRENCH_CARD = 54
+const LAST_FRENCH_CARD = 107
+
 // Either cards that could be selected during a Resource Turn,
 // or those that need special layout handling.
 const C_SCORCHED_EARTH = 10
@@ -233,6 +242,19 @@ function process_area_name(name) {
 
 function has_bridge(from, to) {
 	return data.areas[from].bridge.includes(to)
+}
+
+/* CARDS */
+function get_card_ops(card) {
+	return data.cards[card].ops
+}
+
+function get_first_card(player) {
+	return player === RUSSIA ? FIRST_RUSSIAN_CARD : FIRST_FRENCH_CARD
+}
+
+function get_last_card(player) {
+	return player === RUSSIA ? LAST_RUSSIAN_CARD : LAST_FRENCH_CARD
 }
 
 /* LEADERS */
@@ -704,27 +726,19 @@ function move_offset_y(area) {
 function on_init() {
 	define_board("#map", 2500, 2027, [0, 0, 0, 0])
 
-	// Panel containing orders that are in the player's pool
 	define_panel("#plan_orders", "plan_orders", 0)
-	// Panel for cards that have been revealed ('on the table')
 	define_panel("#table", "table", 0)
-	// Player hand
 	define_panel("#hand", "hand", 0)
-	// Leaders
-	define_panel("#ru_leaders", "leaders", RUSSIA)
-	define_panel("#fr_leaders", "leaders", FRANCE)
-
 	define_html_thing("#vp_display", "vp_display", 0)
+
+	create_window("russian_cards_dialog", "Inspect Russian Cards", update_russian_cards_dialog, true)
+	create_window("french_cards_dialog", "Inspect French Cards", update_french_cards_dialog, true)
 
 	/* AREAS */
 	for (let area = FIRST_AREA; area <= LAST_AREA; ++area) {
-		// For actions & populating static markers (devastation, depots)
 		define_space("area", area, layout[get_area_name(area)], get_area_type(area))
 			.tooltip(`${process_area_name(get_area_name(area))} (${get_area_zone(area)})`)
-
-		// Where leaders & SPs are populated
 		define_stack("area_stack", area, layout[get_area_name(area)], -8, -8, 0, -58, 0, 36, 1, 60)
-		// Where we populate orders
 		define_stack("orders_stack", area, translate_right(layout[get_area_name(area)], 60), 0, -85, 0, -125)
 	}
 
@@ -738,11 +752,7 @@ function on_init() {
 
 	/* CONNECTIONS */
 	for (let connection = FIRST_CONNECTION; connection <= LAST_CONNECTION; ++connection) {
-		// A clickable action space
 		define_space("connection", connection, layout[`Connection${connection}`])//.tooltip(connection)
-
-		// Where leaders & SPs are populated
-		// Same as area stack
 		define_stack("connection_stack", connection, layout[`Connection${connection}`], -8, -8, 0, -58, 0, 36, 1, 60)
 	}
 
@@ -805,12 +815,19 @@ function populate_moving(area, child_name, child_id) {
 	populate("move", 0, child_name, child_id)
 }
 
+function scroll_to_hand() {
+	scroll_into_view(document.getElementById("hand"))
+}
+
 // eslint-disable-next-line no-unused-vars
 function on_update() {
 	begin_update()
 
 	roles[RUSSIA].stat.innerHTML = `${V.hand_length[RUSSIA]} cards`
 	roles[FRANCE].stat.innerHTML = `${V.hand_length[FRANCE]} cards`
+
+	if (!is_observer(R))
+		roles[R].stat.addEventListener("click", scroll_to_hand)
 
 	reset_sp_trackers()
 
@@ -1257,6 +1274,49 @@ function define_buttons() {
 	action_button("undo", "Undo")
 }
 
+// === UPDATE DIALOGS ===
+function format_card(card, highlight = NONE) {
+	return escape_text(`C${highlight === NONE ? "N" : ROLES[highlight][0]}${card}`)
+}
+
+function print_cards_section(arr, acc, title, list, del = true) {
+	arr.push(`<dt>` + title + ` (` + list.length + `)`)
+	if (list.length > 0) {
+		for (let card of list) {
+			arr.push(`<dd>[${get_card_ops(card)}] ${format_card(card)}`)
+			if (del)
+				set_delete(acc, card)
+		}
+	} else {
+		arr.push(`<dd>Nothing`)
+	}
+}
+
+function update_cards_dialog(player, viewer) {
+	var text = []
+	var cards = []
+	for (let i = get_first_card(player); i <= get_last_card(player); ++i)
+		cards.push(i)
+
+	text.push(`<d1>`)
+	if (V.discard)
+		print_cards_section(text, cards, `Discarded Cards`, V.discard[player])
+	print_cards_section(text, cards, `Removed from Play`, V.removed[player])
+	print_cards_section(text, cards, `Set Aside`, V.set_aside[player])
+	print_cards_section(text, cards, `In Hand or Deck`, cards, false)
+	text.push(`</d1>`)
+
+	return text.join("")
+}
+
+function update_russian_cards_dialog() {
+	return update_cards_dialog(RUSSIA, R)
+}
+
+function update_french_cards_dialog() {
+	return update_cards_dialog(FRANCE, R)
+}
+
 //=== LOG/PROMPT (WIP) ===
 function escape_text(text) {
 	escape_html(text)
@@ -1360,6 +1420,13 @@ function array_insert(array, index, item) {
 	array[index] = item
 }
 
+function array_delete(array, index) {
+	var i, n = array.length
+	for (i = index + 1; i < n; ++i)
+		array[i - 1] = array[i]
+	array.length = n - 1
+}
+
 function array_insert_pair(array, index, key, value) {
 	for (var i = array.length; i > index; i -= 2) {
 		array[i] = array[i-2]
@@ -1389,6 +1456,23 @@ function set_add(set, item) {
 			return
 	}
 	array_insert(set, a, item)
+}
+
+function set_delete(set, item) {
+	var a = 0
+	var b = set.length - 1
+	while (a <= b) {
+		var m = (a + b) >> 1
+		var x = set[m]
+		if (item < x)
+			b = m - 1
+		else if (item > x)
+			a = m + 1
+		else {
+			array_delete(set, m)
+			return
+		}
+	}
 }
 
 function set_has(set, item) {
