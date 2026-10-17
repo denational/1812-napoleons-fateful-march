@@ -351,7 +351,7 @@ const last_france_depot = 20
 const FRANCE_BATTLE_DIE = {
 	1: -1,
 	2: -1,
-	3: -1,
+	3: 2,
 	4: 2,
 	5: 3,
 	6: 4,
@@ -8132,8 +8132,8 @@ function get_infantry_strength(who, force) {
 		// Prussian and Austrian SPs
 		// RU #51 Unreliable Germans: Prussian and Austrian SPs fight at X0.
 		if (!is_battle_event_currently_active(C_UNRELIABLE_GERMANS)) {
-			strength += force.sps[FRESH_PRUSSIAN_INFANTRY]
-			strength += force.sps[FRESH_AUSTRIAN_INFANTRY]
+			strength += force.sps[FRESH_PRUSSIAN_INFANTRY] * modifier
+			strength += force.sps[FRESH_AUSTRIAN_INFANTRY] * modifier
 		}
 
 		// RU #51 Unreliable Germans: French Infantry fights at X0.5

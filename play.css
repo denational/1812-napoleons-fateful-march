@@ -444,6 +444,9 @@ body.hide-pieces .sp { display: none }
 	left: 20px;
 }
 
+.sp > .half_strength_ru ~ .half_strength_ru { bottom: 60px; left: 40px; }
+.sp > .half_strength_fr ~ .half_strength_fr { bottom: 45px; left: 30px; }
+
 .sp-text {
 	position: absolute;
 	color: rgb(255, 255, 255);
@@ -569,6 +572,7 @@ body.hide-pieces .sp { display: none }
 	width: 36px;
 	height: 36px;
 	background-size: 100%;
+	border: 1px solid white;
 	pointer-events: auto;
 }
 
