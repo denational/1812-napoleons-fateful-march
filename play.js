@@ -14,6 +14,7 @@ const FRANCE = 1
 const PRUSSIA = 2
 const AUSTRIA = 3
 
+const ROLES = ["Russia", "France"]
 const ABBREVIATIONS = ["ru", "fr", "pr", "au"]
 
 const NONE = -1
@@ -33,8 +34,8 @@ const POOL = 0
 const FRENCH_CASUALTIES = 157
 
 /* CARDS */
-// TODO: Maybe add to data.js later?
-// Cards that could be selected during a Resources Turn (defined as action buttons with argument in on_update())
+// Either cards that could be selected during a Resource Turn,
+// or those that need special layout handling.
 const C_SCORCHED_EARTH = 10
 const C_PRIDE_AND_HESITATION = 15
 const C_KUTUZOV_APPOINTED = 16
@@ -129,6 +130,18 @@ const last_ru_cossack = 230
 
 const first_fr_guard = 231
 const last_fr_guard = 240
+
+const FIRST_SPS = [
+	[first_ru_inf, first_fr_inf, first_fr_pr_inf, first_fr_au_inf],
+	[first_ru_cav, first_fr_cav],
+	[first_ru_cossack, first_fr_guard]
+]
+
+const LAST_SPS = [
+	[last_ru_inf, last_fr_inf, last_fr_pr_inf, last_fr_au_inf],
+	[last_ru_cav, last_fr_cav],
+	[last_ru_cossack, last_fr_guard]
+]
 
 var used_sps = [
 	[first_ru_inf, first_fr_inf, first_fr_pr_inf, first_fr_au_inf],
@@ -271,7 +284,7 @@ function is_seniormost_leader(leader, area) {
 
 /* SPs */
 function is_infantry(type) {
-	return set_has([FRESH_INFANTRY, EXHAUSTED_INFANTRY, FRESH_PRUSSIAN_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, FRESH_AUSTRIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY], type)
+	return (type === FRESH_INFANTRY || type === EXHAUSTED_INFANTRY || (type >= FRESH_PRUSSIAN_INFANTRY && type < NUM_SP_TYPES))
 }
 
 function is_cavalry(type) {
@@ -328,6 +341,24 @@ function get_sp_type_name(type) {
 
 function get_exhaustion_selector(type) {
 	return is_exhausted(type) ? EXHAUSTED : FRESH
+}
+
+function get_sp_bucket(type) {
+	if (is_infantry(type))
+		return INFANTRY
+	if (is_cavalry(type))
+		return CAVALRY
+	if (is_cossack(type) || is_guard(type))
+		return SPECIAL
+}
+
+function get_sp_nationality(player, type) {
+	if (type < FRESH_PRUSSIAN_INFANTRY)
+		return player
+	else if (type === FRESH_PRUSSIAN_INFANTRY || type === EXHAUSTED_PRUSSIAN_INFANTRY)
+		return PRUSSIA
+	else if (type === FRESH_AUSTRIAN_INFANTRY || type === EXHAUSTED_AUSTRIAN_INFANTRY)
+		return AUSTRIA
 }
 
 /* ORDERS */
@@ -606,85 +637,19 @@ function decode_sp_num(entry) {
 }
 
 function get_first_counter(player, type) {
-	if (type === FRESH_INFANTRY || type === EXHAUSTED_INFANTRY) {
-		if (player === RUSSIA) return first_ru_inf
-		if (player === FRANCE) return first_fr_inf
-	} else if (type === FRESH_CAVALRY || type === EXHAUSTED_CAVALRY ) {
-		if (player === RUSSIA) return first_ru_cav
-		if (player === FRANCE) return first_fr_cav
-	} else if (type === FRESH_COSSACK || type === EXHAUSTED_COSSACK) {
-		return first_ru_cossack
-	} else if (type === FRESH_GUARD || type === EXHAUSTED_GUARD) {
-		return first_fr_guard
-	} else if (type === FRESH_PRUSSIAN_INFANTRY || type === EXHAUSTED_PRUSSIAN_INFANTRY) {
-		return first_fr_pr_inf
-	} else if (type === FRESH_AUSTRIAN_INFANTRY || type === EXHAUSTED_AUSTRIAN_INFANTRY) {
-		return first_fr_au_inf
-	}
+	return FIRST_SPS[get_sp_bucket(type)][get_sp_nationality(player, type)]
 }
 
 function get_last_counter(player, type) {
-	if (type === FRESH_INFANTRY || type === EXHAUSTED_INFANTRY) {
-		if (player === RUSSIA) return last_ru_inf
-		if (player === FRANCE) return last_fr_inf
-	} else if (type === FRESH_CAVALRY || type === EXHAUSTED_CAVALRY ) {
-		if (player === RUSSIA) return last_ru_cav
-		if (player === FRANCE) return last_fr_cav
-	} else if (type === FRESH_COSSACK || type === EXHAUSTED_COSSACK) {
-		return last_ru_cossack
-	} else if (type === FRESH_GUARD || type === EXHAUSTED_GUARD) {
-		return last_fr_guard
-	} else if (type === FRESH_PRUSSIAN_INFANTRY || type === EXHAUSTED_PRUSSIAN_INFANTRY) {
-		return last_fr_pr_inf
-	} else if (type === FRESH_AUSTRIAN_INFANTRY || type === EXHAUSTED_AUSTRIAN_INFANTRY) {
-		return last_fr_au_inf
-	}
+	return LAST_SPS[get_sp_bucket(type)][get_sp_nationality(player, type)]
 }
 
-function get_used(who, type) {
-	switch(type) {
-	case FRESH_INFANTRY:
-	case EXHAUSTED_INFANTRY:
-		return used_sps[INFANTRY][who]
-	case FRESH_CAVALRY:
-	case EXHAUSTED_CAVALRY:
-		return used_sps[CAVALRY][who]
-	case FRESH_COSSACK:
-	case EXHAUSTED_COSSACK:
-		return used_sps[SPECIAL][RUSSIA]
-	case FRESH_GUARD:
-	case EXHAUSTED_GUARD:
-		return used_sps[SPECIAL][FRANCE]
-	case FRESH_PRUSSIAN_INFANTRY:
-	case EXHAUSTED_PRUSSIAN_INFANTRY:
-		return used_sps[INFANTRY][PRUSSIA]
-	case FRESH_AUSTRIAN_INFANTRY:
-	case EXHAUSTED_AUSTRIAN_INFANTRY:
-		return used_sps[INFANTRY][AUSTRIA]
-	}
+function get_used(player, type) {
+	return used_sps[get_sp_bucket(type)][get_sp_nationality(player, type)]
 }
 
-function incr_used(who, type) {
-	switch(type) {
-	case FRESH_INFANTRY:
-	case EXHAUSTED_INFANTRY:
-		return used_sps[INFANTRY][who]++
-	case FRESH_CAVALRY:
-	case EXHAUSTED_CAVALRY:
-		return used_sps[CAVALRY][who]++
-	case FRESH_COSSACK:
-	case EXHAUSTED_COSSACK:
-		return used_sps[SPECIAL][RUSSIA]++
-	case FRESH_GUARD:
-	case EXHAUSTED_GUARD:
-		return used_sps[SPECIAL][FRANCE]++
-	case FRESH_PRUSSIAN_INFANTRY:
-	case EXHAUSTED_PRUSSIAN_INFANTRY:
-		return used_sps[INFANTRY][PRUSSIA]++
-	case FRESH_AUSTRIAN_INFANTRY:
-	case EXHAUSTED_AUSTRIAN_INFANTRY:
-		return used_sps[INFANTRY][AUSTRIA]++
-	}
+function incr_used(player, type) {
+	return used_sps[get_sp_bucket(type)][get_sp_nationality(player, type)]++
 }
 
 function reset_used() {
@@ -720,22 +685,9 @@ function define_sp_of_type(type, id, nationality) {
 	return sp
 }
 
-function define_sp_type_list(type, a, b, keywords) {
-	for (let i = a; i <= b; ++i)
-		define_sp_of_type(type, i, keywords)
-}
-
-function define_sps() {
-	define_sp_type_list(FRESH_INFANTRY, first_ru_inf, last_ru_inf, RUSSIA)
-	define_sp_type_list(FRESH_INFANTRY, first_fr_inf, last_fr_inf, FRANCE)
-	define_sp_type_list(FRESH_PRUSSIAN_INFANTRY, first_fr_pr_inf, last_fr_pr_inf, PRUSSIA)
-	define_sp_type_list(FRESH_AUSTRIAN_INFANTRY, first_fr_au_inf, last_fr_au_inf, AUSTRIA)
-
-	define_sp_type_list(FRESH_CAVALRY, first_ru_cav, last_ru_cav, RUSSIA)
-	define_sp_type_list(FRESH_CAVALRY, first_fr_cav, last_fr_cav, FRANCE)
-
-	define_sp_type_list(FRESH_COSSACK, first_ru_cossack, last_ru_cossack, RUSSIA)
-	define_sp_type_list(FRESH_GUARD, first_fr_guard, last_fr_guard, FRANCE)
+function define_sp_type_list(player, type) {
+	for (let i = get_first_counter(player, type); i <= get_last_counter(player, type); ++i)
+		define_sp_of_type(type, i, get_sp_nationality(player, type))
 }
 
 function move_offset_x(area) {
@@ -807,7 +759,17 @@ function on_init() {
 	}
 
 	/* SPs */
-	define_sps()
+	// Uses the fresh version of the SP by default (the counter might become exhausted later in on_update()).
+	define_sp_type_list(RUSSIA, FRESH_INFANTRY)
+	define_sp_type_list(FRANCE, FRESH_INFANTRY)
+	define_sp_type_list(FRANCE, FRESH_PRUSSIAN_INFANTRY)
+	define_sp_type_list(FRANCE, FRESH_AUSTRIAN_INFANTRY)
+
+	define_sp_type_list(RUSSIA, FRESH_CAVALRY)
+	define_sp_type_list(FRANCE, FRESH_CAVALRY)
+
+	define_sp_type_list(RUSSIA, FRESH_COSSACK)
+	define_sp_type_list(FRANCE, FRESH_GUARD)
 
 	/* CARDS */
 	define_card_list("card", 0, 107, "card_")
@@ -858,104 +820,17 @@ function on_update() {
 	update_depots()
 	update_devastation()
 	update_orders()
+	update_sidebar()
+	update_cards()
 
-	if (V.vp > 0) {
-		document.getElementById("vp_display").innerHTML = `<b>VP:</b> France ${V.vp}`
-	} else if (V.vp < 0) {
-		document.getElementById("vp_display").innerHTML = `<b>VP:</b> Russia ${Math.abs(V.vp)}`
-	} else {
-		document.getElementById("vp_display").innerHTML = `<b>VP:</b> ${V.vp}`
-	}
-
-	if (V.initiative > 0) {
-		document.getElementById("vp_display").innerHTML += `<br><b>Initiative:</b> France ${V.initiative}`
-	} else {
-		document.getElementById("vp_display").innerHTML += `<br><b>Initiative:</b> Russia ${Math.abs(V.initiative)}`
-	}
-
-	for (let c of V.current_hand) {
-		populate("hand", 0, "card", c)
-	}
-
-	if (V.played_cards || V.committed_cards || V.num_enemy_committed_cards > 0) {
-		update_panel_show("table", 0, (V.played_cards && V.played_cards[R] && V.played_cards[R].length > 0) || (V.committed_cards && V.committed_cards.length > 0) || (V.num_enemy_committed_cards > 0))
-		if (V.played_cards) {
-			for (let card of V.played_cards.flat(1))
-				populate("table", 0, "card", card)
-		}
-		if (V.num_enemy_committed_cards > 0)
-			populate_generic("table", 0, `card card_back_${get_abbreviation(get_opponent(R))}`, V.num_enemy_committed_cards)
-		if (V.committed_cards && V.committed_cards.length > 0) {
-			for (let card of V.committed_cards)
-				populate("table", 0, "card", card)
-		}
-	}
-
-	for (let leader = 0; leader <= 13; ++leader) {
-		action_button_with_argument(`leader_button`, leader, leaders[leader].log_name)
-		if (V.move && V.move.leaders) {
-			let counter = document.getElementById("leader piece " + get_leader_short_name(leader))
-			if (counter)
-				counter.classList.toggle("selected", set_has(V.move.leaders, leader))
-		}
-	}
-
+	// Attrition checked markers
 	if (V.attrition_checked) {
 		let marker = 0
 		for (let area of V.attrition_checked)
 			populate("area_stack", area, "attrition_checked", marker++)
 	}
 
-	for (let type = 0; type < NUM_SP_TYPES; ++type) {
-		action_button_with_argument("sp_button", type, get_sp_type_name(type))
-		if (is_infantry(type))
-			action_button_with_argument("sp_2x", type, `2x ${get_sp_type_name(type)}`)
-		action_button_with_argument("add_sp", type, `+ ${get_sp_type_name(type)}`)
-		action_button_with_argument("remove_sp", type, `+ ${get_sp_type_name(type)}`)
-	}
-
-	action_button("select_all", "Select All")
-	action_button("shuffle", "Shuffle Deck")
-	action_button("discard_and_redraw", "Discard & Redraw")
-	action_button("combine", "Combine")
-	action_button("add_1_to_attrition_distance", "Add 1 to Attrition Distance")
-
-	// FR #14 Skillfull Maneuvers
-	action_button("remove_defend_order", "Remove Defend Order")
-	action_button("cancel_river_effect", "Cancel River Effect")
-
-	// FR #25 Good Leadership
-	action_button("place_order", "Place Order")
-	action_button("change_order", "Change Order")
-
-	action_button("roll", "Roll")
-	action_button("eliminate", "Eliminate")
-
-	action_button("exhaust", "Exhaust")
-	action_button("eliminate_2", "Eliminate 2")
-
-	action_button("play", "Play")
-	action_button("done", "Done")
-	action_button("move", "Move")
-	action_button("evade", "Evade")
-	action_button("retreat", "Retreat")
-	action_button("next", "Next")
-	action_button("draw", "Draw")
-	action_button("discard", "Discard")
-	action_button("confirm", "Confirm")
-
-	action_button("russia", "Russia")
-	action_button("france", "France")
-	action_button("pass", "Pass")
-
-	for (let player = RUSSIA; player <= FRANCE; ++player) {
-		for (let card of RESOURCE_PHASE_CARD_OPTIONS[player])
-			action_button_with_argument("card_button", card, `#${data.cards[card].id} ${data.cards[card].name}`)
-	}
-
-	confirm_action_button("end_place_orders", "Done", "You have not yet placed all orders. Confirm passing?")
-
-	action_button("undo", "Undo")
+	define_buttons()
 
 	end_update()
 }
@@ -1290,6 +1165,96 @@ function update_orders() {
 		}
 	}
 
+}
+
+/* SIDEBAR */
+function update_sidebar() {
+	const sidebar = document.getElementById("vp_display")
+
+	if (V.vp === 0)
+		sidebar.innerHTML = `<b>VP:</b> ${V.vp}`
+	else
+		sidebar.innerHTML = `<b>VP:</b> ${ROLES[V.vp > 0 ? FRANCE : RUSSIA]} ${Math.abs(V.vp)}`
+
+	sidebar.innerHTML += `<br>`
+	sidebar.innerHTML += `<b>Initiative:</b> ${ROLES[V.initiative > 0 ? FRANCE : RUSSIA]} ${Math.abs(V.initiative)}`
+}
+
+/* CARDS */
+function update_cards() {
+	for (let card of V.current_hand)
+		populate("hand", 0, "card", card)
+
+	if (V.played_cards || V.committed_cards || V.num_enemy_committed_cards > 0) {
+		update_panel_show("table", 0, (V.played_cards && V.played_cards[R] && V.played_cards[R].length > 0) || (V.committed_cards && V.committed_cards.length > 0) || (V.num_enemy_committed_cards > 0))
+		if (V.played_cards) {
+			for (let card of V.played_cards.flat(1))
+				populate("table", 0, "card", card)
+		}
+		if (V.num_enemy_committed_cards > 0)
+			populate_generic("table", 0, `card card_back_${get_abbreviation(get_opponent(R))}`, V.num_enemy_committed_cards)
+		if (V.committed_cards && V.committed_cards.length > 0) {
+			for (let card of V.committed_cards)
+				populate("table", 0, "card", card)
+		}
+	}
+}
+
+/* BUTTONS */
+function define_buttons() {
+	for (let leader = 0; leader <= 13; ++leader)
+		action_button_with_argument(`leader_button`, leader, leaders[leader].log_name)
+
+	for (let type = 0; type < NUM_SP_TYPES; ++type) {
+		action_button_with_argument("sp_button", type, get_sp_type_name(type))
+		if (is_infantry(type))
+			action_button_with_argument("sp_2x", type, `2x ${get_sp_type_name(type)}`)
+		action_button_with_argument("add_sp", type, `+ ${get_sp_type_name(type)}`)
+		action_button_with_argument("remove_sp", type, `+ ${get_sp_type_name(type)}`)
+	}
+
+	action_button("select_all", "Select All")
+	action_button("shuffle", "Shuffle Deck")
+	action_button("discard_and_redraw", "Discard & Redraw")
+	action_button("combine", "Combine")
+	action_button("add_1_to_attrition_distance", "Add 1 to Attrition Distance")
+
+	// FR #14 Skillfull Maneuvers
+	action_button("remove_defend_order", "Remove Defend Order")
+	action_button("cancel_river_effect", "Cancel River Effect")
+
+	// FR #25 Good Leadership
+	action_button("place_order", "Place Order")
+	action_button("change_order", "Change Order")
+
+	action_button("roll", "Roll")
+	action_button("eliminate", "Eliminate")
+
+	action_button("exhaust", "Exhaust")
+	action_button("eliminate_2", "Eliminate 2")
+
+	action_button("play", "Play")
+	action_button("done", "Done")
+	action_button("move", "Move")
+	action_button("evade", "Evade")
+	action_button("retreat", "Retreat")
+	action_button("next", "Next")
+	action_button("draw", "Draw")
+	action_button("discard", "Discard")
+	action_button("confirm", "Confirm")
+
+	action_button("russia", "Russia")
+	action_button("france", "France")
+	action_button("pass", "Pass")
+
+	for (let player = RUSSIA; player <= FRANCE; ++player) {
+		for (let card of RESOURCE_PHASE_CARD_OPTIONS[player])
+			action_button_with_argument("card_button", card, `#${data.cards[card].id} ${data.cards[card].name}`)
+	}
+
+	confirm_action_button("end_place_orders", "Done", "You have not yet placed all orders. Confirm passing?")
+
+	action_button("undo", "Undo")
 }
 
 //=== LOG/PROMPT (WIP) ===
