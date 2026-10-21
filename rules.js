@@ -11923,15 +11923,20 @@ P.overstretched_logistics_choose = {
 
 // RU #22: City Ablaze!
 P.russia_may_play_city_ablaze = {
-	//L.area
+	// L.area
 	prompt() {
 		V.prompt = `Russia may play ${format_card(C_CITY_ABLAZE)} (cannot be undone)`
 		button_confirm()
 	},
 	confirm() {
-		var data = {area: L.area}
-		end()
-		delay_reaction("city_ablaze", [C_CITY_ABLAZE], data)
+		G.active = RUSSIA
+		goto("may_play_city_ablaze", { area: L.area })
+
+		// If we want to add retroactive handling for City Ablaze! in the future, this is a start.
+		// Needs some tedious tweaking in order to handle removal of depots.
+		// var data = {area: L.area}
+		// end()
+		// delay_reaction("city_ablaze", [C_CITY_ABLAZE], data)
 	}
 }
 
