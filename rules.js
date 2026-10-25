@@ -7030,6 +7030,7 @@ P.eliminate_all_sps = {
 		call("shift_vp", { in_favor_of: enemy(G.active), amount: L.count })
 	},
 	resume() {
+		log()
 		if (!L.has_shifted_vp && get_current_phase() !== EVADE)
 			this.call_shift_vp()
 	},
@@ -8810,6 +8811,8 @@ P.assign_losses = {
 				push_local_undo(R, "eliminate_all", { eliminated_by_type, counts, initiative: G.initiative })
 				if (R !== RUSSIA || !(get_player_battle_data(RUSSIA, G.current_battle)?.only_cossack ?? false))
 					shift_initiative(enemy(R))
+				else if (get_player_battle_data(R, G.current_battle)?.only_cossack ?? false)
+					log(`No Initiative Shift: Eliminated force consisted only of Cossack SPs.`)
 				// log(`${ROLES[R]} has no more fresh SPs.`)
 				// log(`${ROLES[R]} eliminated!`)
 			},
@@ -9172,12 +9175,17 @@ P.assign_pursuit_losses = {
 	},
 	eliminate() {
 		push_undo()
-		for (let type of get_all_exhausted_sp_types(R, G.current_battle)) {
-			let count = count_num_sps_of_type(R, type, G.current_battle)
+		for (let type of get_all_exhausted_sp_types(G.active, G.current_battle)) {
+			let count = count_num_sps_of_type(G.active, type, G.current_battle)
 			battle_eliminate_sp_old(G.active, G.current_battle, type, count)
 		}
-		log(`${ROLES[R]} has no more fresh SPs.`)
-		log(`${ROLES[R]} eliminated!`)
+		log(`${ROLES[G.active]} has no more fresh SPs.`)
+		log(`${ROLES[G.active]} eliminated!`)
+
+		if (G.active !== RUSSIA || (get_player_battle_data(G.active, G.current_battle)?.only_cossack ?? false))
+			shift_initiative(enemy(G.active))
+		else if (get_player_battle_data(G.active, G.current_battle)?.only_cossack)
+			log(`No Initiative shift: eliminated force consisted entirely of Cossack SPs.`)
 
 		L.has_finished = true
 	},
