@@ -1381,7 +1381,7 @@ function package_visible_sp_type(player, type, strength, from) {
 // All other entries are filtered out.
 // To keep the counters consistent, the values are stored in G.
 function update_visible_sps(role) {
-	map_for_each(G.sps, (area, entries) => {
+	map_for_each_key(G.sps, (area) => {
 		// Update new visible type, if necessary.
 		for (let player = RUSSIA; player <= FRANCE; ++player) {
 			if (player !== role && has_friendly_sp(player, area)) {
@@ -1514,7 +1514,7 @@ function filter_sps(player) {
 						if (has_battle(area)) {
 							get_player_battle_data(who, area).forces.forEach(force => {
 								if (force.strength === decode_sp_strength(vis) && force.from === decode_sp_from(vis) && force.sps[decode_sp_type(vis)] > 0)
-									set_add(filtered_entries, entries.find(entry => decode_sp_player(entry) == who && decode_sp_type(entry) == decode_sp_type(vis)))
+									set_add(filtered_entries, entries.find(entry => decode_sp_player(entry) === who && decode_sp_type(entry) === decode_sp_type(vis)))
 							})
 						} else {
 							for (let entry of entries) {
@@ -2770,7 +2770,7 @@ P.add_winter_cards = function() {
 			if (get_card_season(card) === SUMMER) summer_cards.push(card)
 		})
 		G.hand[who].forEach(card => {
-			if (get_card_season(card) == SUMMER) summer_cards.push(card)
+			if (get_card_season(card) === SUMMER) summer_cards.push(card)
 		})
 		G.deck[who] = G.deck[who].filter(card => get_card_season(card) !== SUMMER)
 		G.hand[who] = G.hand[who].filter(card => get_card_season(card) !== SUMMER)
@@ -3210,7 +3210,7 @@ P.end_turn = function() {
 	// Check French occupation of Moscow.
 	if (G.scenario !== THE_EAGLES_MARCH_ON_SMOLENSK && has_friendly_sp(FRANCE, S_MOSCOW) && is_area_in_supply(FRANCE, S_MOSCOW)) {
 		log(`France occupies ${format_area(S_MOSCOW)} with an in-supply SP.`)
-		increase_vp(FRANCE, get_current_season() == SUMMER ? 1 : 2)
+		increase_vp(FRANCE, get_current_season() === SUMMER ? 1 : 2)
 	}
 
 	// Clear all persistent events whose effect expires at the end of this turn.
@@ -6903,7 +6903,7 @@ P.evade_pursuit = script(`
 	// Returns who won the pursuit in L.$
 	call pursuit { pursuer: 1 - L.evader, area: L.area }
 
-	if (L.$ == enemy(L.evader)) {
+	if (L.$ === enemy(L.evader)) {
 		eval { log(ROLES[L.evader] + " must exhaust 1 SP.") }
 		log
 		goto evade_pursuit_exhaustion { evader: L.evader, area: L.area }
@@ -7796,6 +7796,7 @@ P.play_battle_events = script(`
 	}
 `)
 
+// See tools/gendata.js
 const BATTLE_CARD = 2
 function is_battle_card(card) {
 	return cards[card].type === BATTLE_CARD
@@ -10074,7 +10075,7 @@ function log_weather_roll() {
 	if (G.weather_roll !== 3) {
 		logi(`${result >= 0 ? "+" : ""}${result} to Modified Size`)
 	} else {
-		if (get_current_season() == SUMMER) {
+		if (get_current_season() === SUMMER) {
 			logi(`Russia: -1 to Modified Size`)
 			logi(`France: +0 to Modified Size`)
 		} else {
@@ -13359,7 +13360,7 @@ P.disorderly_march_remove_orders = {
 	_begin() {
 		// L.area
 		L.orders = get_orders_at_area(FRANCE, L.area).filter(order => {
-			get_order_type(order) === DEFEND || get_order_type(order) == FORAGE || get_order_type(order) === PLACE_DEPOT
+			get_order_type(order) === DEFEND || get_order_type(order) === FORAGE || get_order_type(order) === PLACE_DEPOT
 		})
 		log("Removed")
 	},
@@ -15120,7 +15121,14 @@ function assert_sudden_death() {
 		throw new Error(`${possessive(G.vp > 0 ? FRANCE : RUSSIA)} Sudden Death Victory did not trigger.`)
 }
 
-// === COMMON FRAMEWORK - DO NOT EDIT ===
+// === COMMON FRAMEWORK ===
+
+/* SUMMARY OF MODIFICATIONS */
+// exports.view: Supports inactive being a function.
+// exports.action: Updates visible SPs after each action.
+// push_undo(), clear_undo(): Modified to support retroactive Exhausting March.
+// map_get(): Added a null fallback value for the 'missing' parameter
+
 function log(s) {
 	if (s === undefined) {
 		if (G.log.length > 0 && G.log[G.log.length - 1] !== "")
