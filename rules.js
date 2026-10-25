@@ -5260,7 +5260,7 @@ P.execute_orders = script(`
 	}
 
 	call change_orders { current_type: L.type }
-	if (get_placed_orders_of_type(L.type).length === 0) {
+	if (L.type !== PLACE_DEPOT && get_placed_orders_of_type(L.type).length === 0) {
 		goto log_no_orders_placed { type: L.type }
 	} else {
 		call determine_who_goes_first { type: L.type }
@@ -5838,8 +5838,12 @@ P.select_force = {
 				}
 			}
 
-			if (!G.move.pinned && (L.movable_leaders.length > G.move.leaders.length || L.num_sps_selected < L.max_sps_selectable) && L.max_sps_selectable <= sp_limit)
-				button("select_all")
+			button("select_all",
+				!G.move.pinned
+				&& ((L.movable_leaders.length > G.move.leaders.length && (L.movable_leaders.length !== 1 || !set_has(L.movable_leaders, L_PLATOV)))
+					|| L.num_sps_selected < L.max_sps_selectable)
+				&& L.num_sps_selected < sp_limit
+			)
 
 			button("move",
 				L.num_sps_selected >= 1
@@ -6780,11 +6784,11 @@ P.select_evade_force = {
 			})
 		})
 
-		if ((has_friendly_leader(G.active, L.area) || count_num_sps(G.active, L.area) <= 4)
-				&& (G.move.leaders.length < L.leaders.length || L.num_sps_selected < max_sps_selectable)
-		) {
-			button("select_all")
-		}
+		button("select_all",
+			(has_friendly_leader(G.active, L.area) || count_num_sps(G.active, L.area) <= 4)
+			&& ((L.leaders.length > G.move.leaders.length && (L.leaders.length !== 1 || !set_has(L.leaders, L_PLATOV)))
+				|| L.num_sps_selected < max_sps_selectable)
+		)
 
 		button("evade",
 			L.num_sps_selected > 0
@@ -9475,8 +9479,10 @@ P.select_retreat_force = {
 			})
 		})
 
-		if (L.leaders.length > G.move.leaders.length || L.num_sps_selected < count_num_sps(G.active, G.current_battle))
-			button("select_all")
+		button("select_all",
+			(L.leaders.length > G.move.leaders.length && (L.leaders.length !== 1 || !set_has(L.leaders, L_PLATOV)))
+			|| L.num_sps_selected < count_num_sps(G.active, G.current_battle)
+		)
 
 		if (has_enemy_sp(G.active, L.destination))
 			button("retreat", L.leaders.length === G.move.leaders.length && L.num_sps_selected === count_num_sps(G.active, G.current_battle) && can_alexander_be_babysitted(true))
