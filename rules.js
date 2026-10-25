@@ -3159,6 +3159,14 @@ const TURN_PHASES = [
 	PHASE_LINES_OF_COMMUNICATIONS
 ]
 
+function get_current_phase() {
+	return TURN_PHASES[G.phase]
+}
+
+function is_current_phase(phase) {
+	return get_current_phase() === phase
+}
+
 // Used in P.turn script
 // eslint-disable-next-line no-unused-vars
 function is_order_turn(turn) {
@@ -6889,50 +6897,21 @@ P.select_evade_force = {
 	}
 }
 
-P.evade_pursuit = {
-	_begin() {
-		L.has_confirmed_pursuit = false
-	},
-	prompt() {
-		if (!L.has_confirmed_pursuit) {
-			V.prompt = `You have not left a rearguard at ${format_area(L.area)}. Confirm pursuit? (cannot be undone)`
-			button_confirm()
-		} else {
-			V.prompt = `Reveal pursuit strength (1x Cavalry + 2x Cossack): ${L.pursuit_cavalry[R]}.`
-			button_confirm()
-		}
-	},
-	confirm() {
-		push_undo()
-		if (!L.has_confirmed_pursuit) {
-			L.has_confirmed_pursuit = true
-			G.active = [RUSSIA, FRANCE]
-			L.pursuit_cavalry = [count_pursuit_cavalry(RUSSIA, L.area), count_pursuit_cavalry(FRANCE, L.area)]
-		} else {
-			set_delete(G.active, R)
+P.evade_pursuit = script(`
+	// L.evader, L.area
 
-			if (G.active.length === 0) {
-				log()
-				log_h5("Pursuit")
-				log("Revealed")
-				logi(`${ROLES[L.evader]}`)
-				logii(`${L.pursuit_cavalry[L.evader]} strength`)
-				logi(`${ROLES[enemy(L.evader)]}`)
-				logii(`${L.pursuit_cavalry[enemy(L.evader)]} strength`)
+	// Returns who won the pursuit in L.$
+	call pursuit { pursuer: 1 - L.evader, area: L.area }
 
-				if (L.pursuit_cavalry[L.evader] <= L.pursuit_cavalry[enemy(L.evader)]) {
-					log(`${ROLES[L.evader]} must exhaust 1 SP.`)
-					log()
-					goto("evade_pursuit_exhaustion", { evader: L.evader, area: L.area })
-				} else {
-					log(`Pursuit inconclusive!`)
-					log()
-					end()
-				}
-			}
-		}
+	if (L.$ == enemy(L.evader)) {
+		eval { log(ROLES[L.evader] + " must exhaust 1 SP.") }
+		log
+		goto evade_pursuit_exhaustion { evader: L.evader, area: L.area }
+	} else {
+		log "Pursuit inconclusive!"
+		log
 	}
-}
+`)
 
 function get_evading_sps() {
 	let list = Array(NUM_TROOP_TYPES).fill(0)
@@ -7008,7 +6987,7 @@ P.evade_pursuit_exhaustion = {
 P.eliminate_all_sps = {
 	_begin() {
 		L.has_eliminated_sps = false
-		L.has_shifted_vp = TURN_PHASES[G.phase] === PHASE_BATTLES_PHASE
+		L.has_shifted_vp = get_current_phase() === PHASE_BATTLES_PHASE
 	},
 	prompt() {
 		if (!L.has_eliminated_sps) {
@@ -7025,21 +7004,21 @@ P.eliminate_all_sps = {
 		log(`Eliminated all SPs at ${format_area(L.area)}.`)
 
 		L.count = count_num_sps(G.active, L.area)
-		if (TURN_PHASES[G.phase] === PHASE_BATTLES_PHASE)
+		if (is_current_phase(PHASE_BATTLES_PHASE))
 			increment_eliminated(G.active, G.current_battle, L.count)
 
 		for (let type of get_sp_types_at_area(G.active, L.area))
 			eliminate_sp(G.active, L.area, type, count_num_sps_of_type(G.active, type, L.area))
 		L.has_eliminated_sps = true
 
-		if (TURN_PHASES[G.phase] !== EVADE)
+		if (get_current_phase() !== EVADE)
 			shift_initiative(enemy(G.active))
 		else
 			delete_battle_entry(L.area)
 
 		if (has_friendly_leader(G.active, L.area))
 			call("eliminate_leader", { area: L.area })
-		else if (!L.has_shifted_vp && TURN_PHASES[G.phase] !== EVADE)
+		else if (!L.has_shifted_vp && get_current_phase() !== EVADE)
 			this.call_shift_vp()
 	},
 	call_shift_vp() {
@@ -7047,7 +7026,7 @@ P.eliminate_all_sps = {
 		call("shift_vp", { in_favor_of: enemy(G.active), amount: L.count })
 	},
 	resume() {
-		if (!L.has_shifted_vp && TURN_PHASES[G.phase] !== EVADE)
+		if (!L.has_shifted_vp && get_current_phase() !== EVADE)
 			this.call_shift_vp()
 	},
 	done() {
@@ -7167,7 +7146,7 @@ function find_retreat_destinations(who, area, among = get_all_adjacent_areas(are
 					retreat_destinations = distances[1].slice()
 					best_distance = distances[0]
 				} else {
-					for (let area of distances[1]) { //Areas corresponding to shortest-distance entry
+					for (let area of distances[1]) { // Areas corresponding to shortest-distance entry
 						set_add(retreat_destinations, area)
 					}
 				}
@@ -7176,7 +7155,7 @@ function find_retreat_destinations(who, area, among = get_all_adjacent_areas(are
 	}
 
 	return retreat_destinations.filter(dest => {
-		return ignore_enemy_sps || !has_enemy_sp(who, dest)
+		return (ignore_enemy_sps || !has_enemy_sp(who, dest)) && (!has_battle(area) || !set_has(get_connections_used_in_battle(enemy(who), area), dest))
 	})
 }
 
@@ -8998,7 +8977,7 @@ P.determine_battle_winner = function() {
 			log()
 			set_battle_winner(RUSSIA, G.current_battle)
 			set_battle_loser(FRANCE, G.current_battle)
-			goto("pursuit")
+			goto("battle_pursuit")
 		}
 
 		// Standard tied battle: Defender wins if fortress or all attacking forces crossed bridges
@@ -9049,7 +9028,7 @@ P.determine_battle_winner = function() {
 			G.active = enemy(winner)
 			goto("may_play_stubborn_rearguard")
 		} else {
-			goto("pursuit")
+			goto("battle_pursuit")
 		}
 	}
 }
@@ -9061,6 +9040,25 @@ function has_fresh_sp(who, area) {
 function find_battle_winner(count) {
 	return (count[RUSSIA] > count[FRANCE]) ? FRANCE : RUSSIA
 }
+
+P.battle_pursuit = script(`
+	eval { L.winner = get_battle_winner(G.current_battle) }
+
+	// Returns winner of the pursuit in L.$, margin of pursuit victory in L.difference
+	call pursuit { pursuer: L.winner, area: G.current_battle }
+
+	if (L.$ === L.winner) {
+		eval {
+			log(ROLES[L.winner] + " won the pursuit.")
+			log(ROLES[1 - L.winner] + " must take " + L.difference + " more losses.")
+		}
+		goto assign_pursuit_losses { loser: 1 - L.winner, difference: L.difference }
+	} else {
+		log "Pursuit inconclusive!"
+		log
+		goto end_battle { drawn_battle: false }
+	}
+`)
 
 function count_pursuit_cavalry(who, area) {
 	let count = 0
@@ -9076,47 +9074,71 @@ function count_pursuit_cavalry(who, area) {
 	return count
 }
 
+function log_pursuit() {
+	const log_order = [L.pursuer, enemy(L.pursuer)]
+	log_h5("Pursuit")
+	for (let player of log_order) {
+		log(ROLES[player])
+		logi(`${L.pursuit_cavalry[player]} strength`)
+		if (player === FRANCE && get_leader_location(L_MURAT) === L.area && get_current_phase() === PHASE_BATTLES_PHASE)
+			logii(`+1 ${format_leader(L_MURAT)}`)
+	}
+	log()
+}
+
+// Common state for evade and battle pursuit.
 P.pursuit = {
+	// L:pursuer, L.area
 	_begin() {
-		log_h5("Pursuit")
+		L.has_confirmed_pursuit = true
+		if (get_current_phase() === EVADE)
+			L.has_confirmed_pursuit = false
+		else
+			this._init()
+	},
+	inactive: "resolve pursuit",
+	_init() {
 		G.active = [RUSSIA, FRANCE]
 
-		L.winner = get_battle_winner(G.current_battle)
-		L.pursuit_cavalry = [count_pursuit_cavalry(RUSSIA, G.current_battle), count_pursuit_cavalry(FRANCE, G.current_battle)]
+		if (get_current_phase() === PHASE_BATTLES_PHASE) {
+			L.area = G.current_battle
+			L.pursuer = get_battle_winner(L.area)
+		}
 
-		//Murat's ability: counts as cavalry SP for pursuit purposes
-		if (get_leader_location(L_MURAT) === G.current_battle)
+		L.pursuit_cavalry = []
+		for (let player = RUSSIA; player <= FRANCE; ++player)
+			L.pursuit_cavalry.push(count_pursuit_cavalry(player, L.area))
+
+		if (get_current_phase() === PHASE_BATTLES_PHASE && L.pursuer === FRANCE && get_leader_location(L_MURAT) === L.area)
 			++L.pursuit_cavalry[FRANCE]
-
 	},
 	prompt() {
-		V.prompt = `Pursuit: reveal strength (1x Cavalry + 2x Cossack) - ${L.pursuit_cavalry[R]}.`
+		if (!L.has_confirmed_pursuit)
+			V.prompt = `You have not left a rearguard at ${format_area(L.area)}. Confirm pursuit? (cannot be undone)`
+		else
+			V.prompt = `Reveal pursuit strength (1x Cavalry + 2x Cossack): ${L.pursuit_cavalry[R]}.`
 		button_confirm()
 	},
 	confirm() {
-		set_delete(G.active, R)
-		if (G.active.length === 0) {
-			log(`${ROLES[L.winner]}`)
-			logi(`${L.pursuit_cavalry[L.winner]} strength`)
-			if (get_leader_location(L_MURAT) === G.current_battle && L.winner === FRANCE) { logii("1 Murat") }
+		if (!L.has_confirmed_pursuit) {
+			clear_undo()
+			L.has_confirmed_pursuit = true
+			this._init()
+		} else {
+			set_delete(G.active, R)
+			if (G.active.length === 0) {
+				if (get_current_phase() === EVADE)
+					L.L.$ = L.pursuit_winner = L.pursuit_cavalry[L.pursuer] >= L.pursuit_cavalry[enemy(L.pursuer)] ? L.pursuer : enemy(L.pursuer)
+				else
+					L.L.$ = L.pursuit_winner = L.pursuit_cavalry[L.pursuer] > L.pursuit_cavalry[enemy(L.pursuer)] ? L.pursuer : enemy(L.pursuer)
 
-			log(`${ROLES[enemy(L.winner)]}`)
-			logi(`${L.pursuit_cavalry[enemy(L.winner)]} strength`)
-			if (get_leader_location(L_MURAT) === G.current_battle && L.winner !== FRANCE) { logii("1 Murat") }
-			log()
+				L.L.difference = L.pursuit_cavalry[L.pursuit_winner] - L.pursuit_cavalry[enemy(L.pursuit_winner)]
 
-			if (L.pursuit_cavalry[L.winner] > L.pursuit_cavalry[enemy(L.winner)]) {
-				let difference = L.pursuit_cavalry[L.winner] - L.pursuit_cavalry[enemy(L.winner)]
-				log(`${ROLES[L.winner]} won the pursuit.`)
-				log(`${ROLES[enemy(L.winner)]} must take ${difference} more losses.`)
-				goto("assign_pursuit_losses", { loser: enemy(L.winner), difference })
-			} else {
-				log(`Pursuit inconclusive!`)
-				log()
-				goto("end_battle", { drawn_battle: false })
+				log_pursuit()
+				end()
 			}
 		}
-	}
+	},
 }
 
 P.assign_pursuit_losses = {
@@ -12117,7 +12139,7 @@ P.may_play_stubborn_rearguard = {
 		goto("stubborn_rearguard", { card })
 	},
 	pass() {
-		goto("pursuit", { winner: enemy(G.active) })
+		goto("battle_pursuit", { winner: enemy(G.active) })
 	}
 }
 
