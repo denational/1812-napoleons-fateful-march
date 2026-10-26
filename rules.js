@@ -1162,7 +1162,7 @@ function remove_card_from_hand(who, card) {
 function draw_card(who) {
 	let drawn_card = get_deck(who).pop()
 	add_to_hand(who, drawn_card)
-	log(`${ROLES[who]} drew a card.`)
+	log_masked(who, `Drew ${format_card(drawn_card)}.`, `${ROLES[who]} drew a card.`)
 	return drawn_card
 }
 
@@ -2754,6 +2754,7 @@ P.resources_phase = script(`
 	set G.active [RUSSIA, FRANCE]
 	call draw_card_to_hand { num_cards_to_draw: L.$ }
 
+	// Remove any events that shouldn't affect the following turn.
 	eval {
 		map_for_each(G.persistent_events, (card, info) => {
 			if (info.remove === G.turn) {
@@ -2806,6 +2807,7 @@ P.free_replacements = {
 
 		L.has_gained_free_cossack = false
 	},
+	inactive: "receive free replacements",
 	prompt() {
 		if (L.areas[R].length > 0) {
 			V.prompt = `Receive 1 Infantry SP in ${join_array_with_and(L.areas[R].map(format_area))}.`
@@ -2865,9 +2867,11 @@ P.free_replacements = {
 	}
 }
 
+// A counter limit (based on denomination) is not strictly enforced.
+// The maximum strength points present in the physical game is enforced (see tools/gendata.js for the values).
 function count_total_sp_amount_on_map(who, type) {
 	let count = 0
-	let exhausted_version = type + 1
+	const exhausted_version = type + 1
 
 	map_for_each_value(G.sps, (entries) => {
 		for (let entry of entries) {
@@ -2880,6 +2884,8 @@ function count_total_sp_amount_on_map(who, type) {
 }
 
 function could_receive_sp(who, type) {
+	// A side receives two Infantry SPs, or one of another type during the Resources Phase.
+
 	if (is_infantry(type))
 		return count_total_sp_amount_on_map(who, type) + 2 <= data.max_sp_amounts[who][get_sp_type_name(type)]
 
@@ -2906,6 +2912,7 @@ P.additional_replacements = {
 		L.reinforced = [[], []]
 		L.undo = [[], []]
 	},
+	inactive: "choose to discard a card to receive additional replacements",
 	states: {
 		"discard_card": {
 			on_prompt() {
@@ -3067,15 +3074,21 @@ P.select_new_cards = {
 		log_h2("Select Card")
 
 		G.active = [RUSSIA, FRANCE]
-		L.has_combined_draw_and_discard = false
+		L.has_combined_draw_and_discard = [false, false]
 		L.selected_card = [-1, -1]
 
 		L.card_choices = [get_designated_card_choices(RUSSIA, get_current_month()), get_designated_card_choices(FRANCE, get_current_month())]
 		for (let who = RUSSIA; who <= FRANCE; ++who)
 			L.card_choices[who] = L.card_choices[who].filter(card => get_deck(who).includes(card) || set_has(get_discard(who), card))
 	},
+	inactive() {
+		const player = typeof R === 'string' ? ROLES.indexOf(R) : R
+		if (!Array.isArray(G.active) && L.has_combined_draw_and_discard[player])
+			return "combine draw and discard piles"
+		return "select new cards"
+	},
 	prompt() {
-		if (!L.has_combined_draw_and_discard) {
+		if (!L.has_combined_draw_and_discard[R]) {
 			V.prompt = `Combine draw and discard piles.`
 			button("combine")
 		} else if (L.selected_card[R] === -1) {
@@ -3094,8 +3107,8 @@ P.select_new_cards = {
 	},
 	combine() {
 		G.deck[R] = G.deck[R].concat(G.discard[R])
-		G.discard[R] = []
-		L.has_combined_draw_and_discard = true
+		G.discard[R].length = 0
+		L.has_combined_draw_and_discard[R] = true
 	},
 	card_button(card) {
 		L.selected_card[R] = card
@@ -3106,6 +3119,7 @@ P.select_new_cards = {
 	confirm() {
 		set_delete(G.active, R)
 
+		// Decks and discards have been combined at this point.
 		if (L.selected_card[R] > -1) {
 			add_to_hand(R, L.selected_card[R])
 			array_delete_item(get_deck(R), L.selected_card[R])
@@ -3116,18 +3130,20 @@ P.select_new_cards = {
 		}
 
 		shuffle(get_deck(R))
-		log(`${ROLES[R]} deck reshuffled.`)
+		log(`${possessive(ROLES[R])} deck reshuffled.`)
 
 		if (G.active.length === 0) {
 			let num_cards_to_draw = []
+			// If a player was not able to select a card,
+			// they have to draw an additional card in the next step.
 			for (let who = RUSSIA; who <= FRANCE; ++who)
 				if (L.selected_card === -1)
 					num_cards_to_draw.push(3)
 				else
 					num_cards_to_draw.push(2)
-
+			L.L.$ = num_cards_to_draw
 			log()
-			end(num_cards_to_draw)
+			end()
 		}
 	}
 }
@@ -3957,6 +3973,7 @@ P.play_card_for_orders = {
 		L.played_card = [-1, -1]
 		L.ops_played = [-1, -1]
 	},
+	inactive: "play a card for additional orders",
 	prompt() {
 		if (L.played_card[R] === -1) {
 			V.prompt = `Play a card for additional orders, or play a Dummy.`
@@ -3988,6 +4005,7 @@ P.play_card_for_orders = {
 	},
 	confirm() {
 		set_delete(G.active, R)
+		log(`${format_card(L.played_card[R])}: +${L.ops_played[R]} orders`)
 
 		if (G.active.length === 0) {
 			for (let who = RUSSIA; who <= FRANCE; ++who) {
@@ -3996,7 +4014,6 @@ P.play_card_for_orders = {
 				else
 					discard_card(L.played_card[who])
 				reveal_committed_cards(who)
-				log(`${format_card(L.played_card[who])}: +${L.ops_played[who]} orders`)
 			}
 
 			G.additional_orders = L.ops_played
@@ -4040,6 +4057,7 @@ P.play_events_with_ops_card = {
 		L.events_could_be_played = L.events[G.active].filter(card => can_play_event(card) && hand_has(G.active, card))
 		L.has_played_event = false
 	},
+	inactive: "choose whether to play events",
 	prompt() {
 		if (L.events_could_be_played.length > 0) {
 			V.prompt = `Declare any events to be played with your OPs card, or pass.`
@@ -4208,11 +4226,15 @@ P.select_orders = {
 		// Could optimize memory if necessary by using a trimmed down version of the standard local undo.
 		L.undo = [[], []]
 
+		// Some orders may not be executed during a turn. Flag to show a confirmation prompt/action when such an order is selected.
+		L.confirming_selection = [false, false]
+
 		// Generic properties
 		L.count = [0, 0]
 		L.already_selected_orders = [[], []]
 		L.has_passed_superior_staff_order = false
 	},
+	inactive: "select orders",
 	states: {
 		// Platov gives Russia a free Cossack Raid or Evade order each turn so long as he is on map.
 		"select_free_order_platov": {
@@ -4424,31 +4446,9 @@ P.place_orders = script(`
 	goto end_place_orders_events
 `)
 
-P.begin_place_orders_events = {
-	_begin() {
-		L.events = [C_INFIGHTING_AND_INTRIGUE, C_LETHARGIC_PURSUIT].filter(card => can_play_event(card) && hand_has(G.active, card))
-		if (L.events.length === 0) end()
-	},
-	prompt() {
-		if (L.events.length > 0) {
-			V.prompt = `You may play ${join_array_with_or(L.events.map(card => `${format_card(card)}`))}.`
-			L.events.forEach(action_card)
-			if (L.events.length === 1)
-				button("play")
-			button_pass()
-		} else {
-			V.prompt = `Play Events — All done.`
-			button_confirm()
-		}
-	},
-	play() { this.card(L.events[0]) },
-	pass() { this.confirm() },
-	confirm() { end() },
-	card(card) {
-		push_undo()
-		set_delete(L.events, card)
-		call("event", { card })
-	}
+P.begin_place_orders_events = function() {
+	G.active = FRANCE
+	goto("play_events", { events: [C_INFIGHTING_AND_INTRIGUE, C_LETHARGIC_PURSUIT], no_log: true } )
 }
 
 function do_place_order(player, area, snapshot = true) {
@@ -4496,6 +4496,7 @@ P.do_place_orders = {
 
 		L.has_discarded_card = false
 	},
+	inactive: "place orders",
 	states: {
 		"select_next_order": {
 			on_prompt() {
@@ -4682,31 +4683,9 @@ P.do_place_orders = {
 	}
 }
 
-P.end_place_orders_events = {
-	_begin() {
-		L.events = [C_NEW_POSTING, C_EXHAUSTED_HORSES, C_DISORDERLY_MARCH].filter(card => can_play_event(card) && hand_has(G.active, card))
-		if (L.events.length === 0) end()
-	},
-	prompt() {
-		if (L.events.length > 0) {
-			V.prompt = `You may play ${join_array_with_or(L.events.map(card => `${format_card(card)}`))}.`
-			L.events.forEach(action_card)
-			if (L.events.length === 1)
-				button("play")
-			button_pass()
-		} else {
-			V.prompt = `Play Events — All done.`
-			button_confirm()
-		}
-	},
-	play() { this.card(L.events[0]) },
-	pass() { this.confirm() },
-	confirm() { end() },
-	card(card) {
-		push_undo()
-		set_delete(L.events, card)
-		call("event", { card })
-	}
+P.end_place_orders_events = function() {
+	G.active = RUSSIA
+	goto("play_events", { events: [C_NEW_POSTING, C_EXHAUSTED_HORSES, C_DISORDERLY_MARCH], no_log: true })
 }
 
 // === COMMON ORDER EXECUTION STATES ===
@@ -5260,6 +5239,7 @@ P.execute_orders = script(`
 	}
 
 	call change_orders { current_type: L.type }
+
 	if (L.type !== PLACE_DEPOT && get_placed_orders_of_type(L.type).length === 0) {
 		goto log_no_orders_placed { type: L.type }
 	} else {
@@ -5271,7 +5251,7 @@ P.execute_orders = script(`
 		}
 		if (L.type === EVADE) {
 			set G.active RUSSIA
-			call may_play_evade_events
+			call begin_evade_events
 		}
 
 		// Place Depot orders are slightly different in that both players may choose to remove any on-map depots.
@@ -5290,6 +5270,7 @@ P.execute_orders = script(`
 			call may_play_good_leadership
 		}
 	}
+
 	call commit_delayed_reaction
 `)
 
@@ -5409,13 +5390,6 @@ P.execute_next_order = {
 			goto("execute_next_order", { type: L.type })
 		}
 	},
-}
-
-function could_play_exhausting_march() {
-	return L.type === FORCED_MARCH
-		&& G.active === FRANCE
-		&& G.move.path.length > 1
-		&& (!is_leak_hand() || hand_has(RUSSIA, C_EXHAUSTING_MARCH_1) || hand_has(RUSSIA, C_EXHAUSTING_MARCH_2))
 }
 
 // TODO: Add 'pass turn' feature on Exhausting March for expediency
@@ -6598,32 +6572,9 @@ P.cavalry_patrols_reveal = function() {
 
 */
 
-P.may_play_evade_events = {
-	_begin() {
-		L.events = [C_UNEXPECTED_RETREAT, C_CAVALRY_SCREENING].filter(card => hand_has(RUSSIA, card))
-		L.has_played_event = false
-	},
-	prompt() {
-		if (L.events.length > 0) {
-			V.prompt = `You may play ${join_array_with_or(L.events.map(card => format_card(card)))}.`
-			L.events.forEach(card => action_card(card))
-			button_pass()
-		} else if (L.has_played_event) {
-			V.prompt = `Play Events: All done.`
-			button_done()
-		} else {
-			V.prompt = `You do not have ${format_card(C_UNEXPECTED_RETREAT)} or ${format_card(C_CAVALRY_SCREENING)} in hand.`
-			button_pass()
-		}
-	},
-	card(card) {
-		push_undo()
-		L.has_played_event = true
-		set_delete(L.events, card)
-		call("event", { card })
-	},
-	pass() { end() },
-	done() { end() }
+P.begin_evade_events = function() {
+	G.active = RUSSIA
+	goto("play_events", { events: [C_UNEXPECTED_RETREAT, C_CAVALRY_SCREENING], no_log: true })
 }
 
 P.execute_evade = script(`
@@ -7622,7 +7573,7 @@ function count_num_guard(who, area) {
 }
 
 P.battles_phase = script(`
-	log "@Battles"
+	eval { log_h2("Battles") }
 	call change_orders { current_type: DEFEND }
 
 	eval { log_h3("Resolve Battles") }
@@ -10047,32 +9998,8 @@ function get_attrition_events(player) {
 	return ATTRITION_EVENTS[player]
 }
 
-P.attrition_events = {
-	_begin() {
-		L.events = get_attrition_events(G.active).filter(card => hand_has(G.active, card) && can_play_event(card))
-		if (L.events.length === 0) {
-			log(`${ROLES[G.active]} did not play events.`)
-			end()
-		}
-	},
-	prompt() {
-		if (L.events.length > 0) {
-			V.prompt = `You may play events. (${join_array_with_or(L.events.map(card => format_card(card)))})`
-			L.events.forEach(action_card)
-		} else {
-			V.prompt = `Play Events: All done.`
-		}
-		button_pass()
-	},
-	card(card) {
-		push_undo()
-		set_delete(L.events, card)
-		call("event", { card })
-	},
-	pass() 	{
-		log(`${ROLES[G.active]} did not play events.`)
-		end()
-	},
+P.attrition_events = function() {
+	goto("play_events", { events: get_attrition_events(G.active) })
 }
 
 /* ROLL WEATHER DIE */
@@ -10940,6 +10867,42 @@ function log_must_play_event(card, info) {
 }
 
 /* COMMON EVENT STATES */
+
+P.play_events = {
+	// L.events, L.no_log
+	_begin() {
+		L.events = L.events.filter(card => can_play_event(card) && hand_has(G.active, card))
+		if (L.events.length === 0)
+			end()
+		else
+			L.played = 0
+	},
+	prompt() {
+		if (L.events.length > 0) {
+			V.prompt = `You may play ${join_array_with_or(L.events.map(format_card))}.`
+			L.events.forEach(action_card)
+			if (L.events.length === 1)
+				button("play")
+			button_pass()
+		} else {
+			V.prompt = `Play Events — All done.`
+			button_confirm()
+		}
+	},
+	play() { this.card(L.events[0]) },
+	card(card) {
+		push_undo()
+		set_delete(L.events, card)
+		++L.played
+		call("event", { card })
+	},
+	pass() { end() },
+	confirm() { end() },
+	_end() {
+		if (L.played === 0 && !L.no_log)
+			log(`${ROLES[G.active]} did not play events.`)
+	}
+}
 
 P.event = script(`
 	eval {

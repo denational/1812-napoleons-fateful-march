@@ -829,6 +829,11 @@ function on_update() {
 	if (!is_observer(R))
 		roles[R].stat.addEventListener("click", scroll_to_hand)
 
+	if (R === FRANCE)
+		update_favicon("icons/favicon-fr.jpg")
+	if (R === RUSSIA)
+		update_favicon("icons/favicon-ru.jpg")
+
 	reset_sp_trackers()
 
 	update_tracks()
