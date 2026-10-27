@@ -5,6 +5,10 @@
 body.hide-markers .marker { display: none }
 body.hide-pieces .piece { display: none }
 
+.panel-body {
+	position: relative;
+}
+
 .panel-body > * {
 	position: relative;
 }
@@ -33,6 +37,25 @@ body.hide-pieces .piece { display: none }
 .stack > * {
 	position: absolute;
 	pointer-events: auto;
+}
+
+.stack.shadow {
+	--shadow-x: 0px;
+	--shadow-y: 0px;
+	--shadow-w: 0px;
+	--shadow-h: 0px;
+}
+
+.stack.shadow:before {
+	content: "";
+	position: absolute;
+	pointer-events: none;
+	background-color: #0006;
+	top: var(--shadow-y);
+	left: var(--shadow-x);
+	width: var(--shadow-w);
+	height: var(--shadow-h);
+	z-index: 1;
 }
 
 /* TIP (ENGLARGED COMPONENT VIEW) */
@@ -71,6 +94,7 @@ body.hide-pieces .piece { display: none }
 .panel-body {
 	display: flex;
 	flex-wrap: wrap;
+	align-content: start;
 	gap: 12px;
 	padding: 12px;
 }
@@ -188,6 +212,7 @@ body.hide-pieces .piece { display: none }
 /* LAYOUT */
 
 .layout {
+	box-sizing: border-box;
 	display: flex;
 	flex-wrap: wrap;
 	justify-content: center;

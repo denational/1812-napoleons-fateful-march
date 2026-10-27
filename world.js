@@ -87,6 +87,7 @@ const world = {
 	favicon: $("link[rel='icon']"),
 	header: $("header"),
 	status: $("#status"),
+	status_nest: [],
 	mapwrap: $("#mapwrap"),
 	panzoom: $("#pan_zoom_main"),
 	tip: $("#tip"),
@@ -96,6 +97,7 @@ const world = {
 	action_list: [],
 	button_list: [],
 	animate_list: [],
+	rotate_list: [],
 	keyword_list: [],
 	text_list: [],
 	log_boxes: [],
@@ -208,6 +210,7 @@ class Thing {
 			this.is_rotate = true
 			this.my_old_angle = 0
 			this.my_new_angle = 0
+			world.rotate_list.push(this)
 		}
 		return this
 	}
@@ -216,14 +219,12 @@ class Thing {
 		var id = this.my_id
 		this.element.addEventListener("mouseenter", function () {
 			try {
-				world.status.innerHTML = (typeof tip === "function") ? tip(id) : tip
+				_push_status((typeof tip === "function") ? tip(id) : tip)
 			} catch (err) {
-				world.status.textContent = err.toString()
+				_push_status(err.toString())
 			}
 		})
-		this.element.addEventListener("mouseleave", function () {
-			world.status.innerHTML = ""
-		})
+		this.element.addEventListener("mouseleave", _pop_status)
 		return this
 	}
 
@@ -264,7 +265,8 @@ class Thing {
 		return this
 	}
 
-	stack(rect, dx, dy, major_dx, major_dy, minor_dx, minor_dy, threshold, wrap, gravity_x, gravity_y) {
+	// options: { dx, dy, major_dx, major_dy, minor_dx, minor_dy, threshold, wrap, gravity_x, gravity_y, shadow }
+	stack(rect, options) {
 		world.parent.appendChild(this.element)
 
 		if (Array.isArray(rect))
@@ -277,15 +279,20 @@ class Thing {
 		this.element.style.height = Math.round(h) + "px"
 
 		this.is_stack = true
-		this.my_stack = {
-			w, h,
-			dx, dy, // normal
-			major_dx, major_dy, // expanded major-axis
-			minor_dx, minor_dy, // expanded minor-axis
-			threshold,
-			wrap,
-			gravity_x, gravity_y,
-		}
+		this.my_stack = { w, h, ...options }
+
+		// default options if missing
+		this.my_stack.dx ??= -12
+		this.my_stack.dy ??= -12
+		this.my_stack.major_dx ??= 0
+		this.my_stack.major_dy ??= -h - 6
+		this.my_stack.minor_dx ??= 0
+		this.my_stack.minor_dy ??= w + 6
+		this.my_stack.threshold ??= 1
+		this.my_stack.wrap ??= 1000
+		this.my_stack.gravity_x ??= 0.5
+		this.my_stack.gravity_y ??= 0.5
+		this.my_stack.shadow ??= 0
 
 		world.stack_list.push(this)
 
@@ -367,6 +374,20 @@ function _on_focus_stackable(evt) {
 	}
 }
 
+function _push_status(text) {
+	world.status_nest.push(text)
+	world.status.innerHTML = world.status_nest[world.status_nest.length-1]
+}
+
+function _pop_status() {
+	if (world.status_nest.length > 0)
+		world.status_nest.pop()
+	if (world.status_nest.length > 0)
+		world.status.innerHTML = world.status_nest[world.status_nest.length-1]
+	else
+		world.status.innerHTML = ""
+}
+
 /* DEFINE THINGS */
 
 function define_thing(action, id) {
@@ -414,10 +435,10 @@ function sort_board(x_weight = 1, y_weight = 2) {
 		parent.appendChild(e)
 }
 
-function define_stack(action, id, rect, dx=-12, dy=-12, major_dx=dx, major_dy=dy, minor_dx=0, minor_dy=0, threshold=1, wrap=1000, gravity_x=0.5, gravity_y=0.5) {
+function define_stack(action, id, rect, options) {
 	return define_thing(action, id)
 		.keyword("stack")
-		.stack(rect, dx, dy, major_dx, major_dy, minor_dx, minor_dy, threshold, wrap, gravity_x, gravity_y)
+		.stack(rect, options)
 }
 
 function define_layout(action, id, rect, keywords, styles) {
@@ -489,41 +510,48 @@ function define_card_list(action, a, b, keywords_with_prefix) {
 
 /* TRACKS & GRIDS */
 
-function _define_track_h(callback, action, a, b, layout, gap=0, keywords, styles) {
+function _define_track_auto(callback, action, a, b, layout, gap=0, args) {
+	if (layout[2] > layout[3])
+		_define_track_h(callback, action, a, b, layout, gap, args)
+	else
+		_define_track_v(callback, action, a, b, layout, gap, args)
+}
+
+function _define_track_h(callback, action, a, b, layout, gap=0, args) {
 	var [ x, y, w, h ] = layout
 	var n = 1 + Math.abs(b - a)
 	var cell_w = (w - gap * (n-1)) / n
 	if (a < b) {
 		for (var id = a; id <= b; ++id) {
-			callback(action, id, [ x, y, cell_w, h ], keywords, styles)
+			callback(action, id, [ x, y, cell_w, h ], ...args)
 			x += cell_w + gap
 		}
 	} else {
 		for (var id = a; id >= b; --id) {
-			callback(action, id, [ x, y, cell_w, h ], keywords, styles)
+			callback(action, id, [ x, y, cell_w, h ], ...args)
 			x += cell_w + gap
 		}
 	}
 }
 
-function _define_track_v(callback, action, a, b, layout, gap=0, keywords, styles) {
+function _define_track_v(callback, action, a, b, layout, gap=0, args) {
 	var [ x, y, w, h ] = layout
 	var n = 1 + Math.abs(b - a)
 	var cell_h = (h - gap * (n-1)) / n
 	if (a < b) {
 		for (var id = a; id <= b; ++id) {
-			callback(action, id, [ x, y, w, cell_h ], keywords, styles)
+			callback(action, id, [ x, y, w, cell_h ], ...args)
 			y += cell_h + gap
 		}
 	} else {
 		for (var id = a; id >= b; --id) {
-			callback(action, id, [ x, y, w, cell_h ], keywords, styles)
+			callback(action, id, [ x, y, w, cell_h ], ...args)
 			y += cell_h + gap
 		}
 	}
 }
 
-function _define_grid(callback, action, order, cols, rows, layout, gapx, gapy, keywords, styles) {
+function _define_grid(callback, action, order, cols, rows, layout, gapx, gapy, args) {
 	var [ x, y, w, h ] = layout
 	var cell_w = (w - gapx * (cols-1)) / cols
 	var cell_h = (h - gapy * (rows-1)) / rows
@@ -532,35 +560,59 @@ function _define_grid(callback, action, order, cols, rows, layout, gapx, gapy, k
 	for (r = 0; r < rows; ++r) {
 		x = layout[0]
 		for (c = 0; c < cols; ++c) {
-			callback(action, order[i++], [ x, y, cell_w, cell_h ], keywords, styles)
+			callback(action, order[i++], [ x, y, cell_w, cell_h ], ...args)
 			x += cell_w + gapx
 		}
 		y += cell_h + gapy
 	}
 }
 
-function define_layout_track_h(action, a, b, layout, gap=0, keywords, styles) {
-	_define_track_h(define_layout, action, a, b, layout, gap, keywords, styles)
+function define_layout_track_auto(action, a, b, layout, gap=0, keywords, styles) {
+	_define_track_auto(define_layout, action, a, b, layout, gap, [ keywords, styles ])
 }
 
-function define_layout_track_v(action, a, b, layout, gap=0, keywords, styles) {
-	_define_track_v(define_layout, action, a, b, layout, gap, keywords, styles)
+function define_layout_track_h(action, a, b, layout, gap = 0, keywords, styles) {
+	_define_track_h(define_layout, action, a, b, layout, gap, [ keywords, styles ])
+}
+
+function define_layout_track_v(action, a, b, layout, gap = 0, keywords, styles) {
+	_define_track_v(define_layout, action, a, b, layout, gap, [ keywords, styles ])
 }
 
 function define_layout_grid(action, order, cols, rows, layout, gapx, gapy, keywords, styles) {
-	_define_grid(define_layout, action, order, cols, rows, layout, gapx, gapy, keywords, styles)
+	_define_grid(define_layout, action, order, cols, rows, layout, gapx, gapy, [ keywords, styles ])
 }
 
-function define_space_track_h(action, a, b, layout, gap=0, keywords) {
-	_define_track_h(define_space, action, a, b, layout, gap, keywords, null)
+function define_space_track_auto(action, a, b, layout, gap=0, keywords) {
+	_define_track_auto(define_space, action, a, b, layout, gap, [ keywords ])
 }
 
-function define_space_track_v(action, a, b, layout, gap=0, keywords) {
-	_define_track_v(define_space, action, a, b, layout, gap, keywords, null)
+function define_space_track_h(action, a, b, layout, gap = 0, keywords) {
+	_define_track_h(define_space, action, a, b, layout, gap, [ keywords ])
+}
+
+function define_space_track_v(action, a, b, layout, gap = 0, keywords) {
+	_define_track_v(define_space, action, a, b, layout, gap, [ keywords ])
 }
 
 function define_space_grid(action, order, cols, rows, layout, gapx, gapy, keywords) {
-	_define_grid(define_space, action, order, cols, rows, layout, gapx, gapy, keywords, null)
+	_define_grid(define_space, action, order, cols, rows, layout, gapx, gapy, [ keywords ])
+}
+
+function define_stack_track_auto(action, a, b, layout, gap=0, options) {
+	_define_track_auto(define_stack, action, a, b, layout, gap, [ options ])
+}
+
+function define_stack_track_h(action, a, b, layout, gap = 0, options) {
+	_define_track_h(define_stack, action, a, b, layout, gap, [ options ])
+}
+
+function define_stack_track_v(action, a, b, layout, gap = 0, options) {
+	_define_track_v(define_stack, action, a, b, layout, gap, [ options ])
+}
+
+function define_stack_grid(action, order, cols, rows, layout, gapx, gapy, options) {
+	_define_grid(define_stack, action, order, cols, rows, layout, gapx, gapy, [ options ])
 }
 
 /* UPDATE THINGS */
@@ -707,14 +759,12 @@ function _focus_stack(stack) {
 			return true
 
 		world.focus = stack
-		if (world.focus.element.children.length <= world.focus.my_stack.threshold)
-			return true
-
 		_animate_begin()
 		_layout_stacks()
 		_animate_end(200)
 
-		return false
+		// click through if expanded without having focus
+		return (stack.element.children.length <= stack.my_stack.threshold)
 	}
 	return true
 }
@@ -738,14 +788,20 @@ function focus_stack_with_thing(action, id) {
 
 function _layout_stacks() {
 	function _(x) { return (typeof x === "function") ? x(n, stack) : x }
+
 	for (var stack of world.stack_list) {
 		var padding = stack.element.parentElement.my_padding
+		var shadow = stack.my_stack.shadow
 
 		var n = stack.element.children.length
-		if (n === 0)
+		if (n === 0) {
+			if (shadow)
+				stack.element.classList.remove("shadow")
 			continue
+		}
 
-		var expand = (world.focus === stack || n <= _(stack.my_stack.threshold))
+		var always_expand = n <= _(stack.my_stack.threshold)
+		var expand = world.focus === stack || always_expand
 		var z = (world.focus === stack ? 1 : null)
 		var major_dx = expand ? _(stack.my_stack.major_dx) : _(stack.my_stack.dx)
 		var major_dy = expand ? _(stack.my_stack.major_dy) : _(stack.my_stack.dy)
@@ -781,17 +837,35 @@ function _layout_stacks() {
 		start_y -= stack.element.offsetTop
 
 		var i = 0, k = 0
+		var bounds = [ Infinity, Infinity, -Infinity, -Infinity ]
 		for (var child of stack.element.children) {
-			var w = child.offsetWidth
-			var h = child.offsetHeight
-			var x = start_x + major_dx * i + minor_dx * k + (stack_w - w) * grav_x
-			var y = start_y + major_dy * i + minor_dy * k + (stack_h - h) * grav_y
-			child.style.left = x + "px"
-			child.style.top = y + "px"
-			child.style.zIndex = z
+			var w = child.thing.stack_w ??= child.offsetWidth
+			var h = child.thing.stack_h ??= child.offsetHeight
+			var x = child.thing.stack_x = start_x + major_dx * i + minor_dx * k + (stack_w - w) * grav_x
+			var y = child.thing.stack_y = start_y + major_dy * i + minor_dy * k + (stack_h - h) * grav_y
+			bounds[0] = Math.min(bounds[0], x)
+			bounds[1] = Math.min(bounds[1], y)
+			bounds[2] = Math.max(bounds[2], x + w)
+			bounds[3] = Math.max(bounds[3], y + h)
 			if (++i === wrap) {
 				i = 0
 				++k
+			}
+		}
+
+		for (var child of stack.element.children) {
+			child.style.left = child.thing.stack_x + "px"
+			child.style.top = child.thing.stack_y + "px"
+			child.style.zIndex = z
+		}
+
+		if (shadow) {
+			stack.element.classList.toggle("shadow", world.focus === stack && !always_expand)
+			if (world.focus === stack) {
+				stack.element.style.setProperty("--shadow-x", (bounds[0]-shadow) + "px")
+				stack.element.style.setProperty("--shadow-y", (bounds[1]-shadow) + "px")
+				stack.element.style.setProperty("--shadow-w", (2*shadow+(bounds[2]-bounds[0])) + "px")
+				stack.element.style.setProperty("--shadow-h", (2*shadow+(bounds[3]-bounds[1])) + "px")
 			}
 		}
 	}
@@ -897,6 +971,10 @@ function begin_update() {
 	G = V = view
 	R = roles[player]?.index ?? -1
 
+	// reset status text nesting tracker
+	world.status_nest.length = 0
+	world.status.textContent = ""
+
 	// reset unused element cache
 	for (var key in world.generic_used) {
 		var unused = world.generic_unused[key]
@@ -913,6 +991,10 @@ function begin_update() {
 		thing.element.replaceChildren()
 	for (var thing of world.keyword_list)
 		thing.my_dynamic_keywords = []
+	for (var thing of world.rotate_list) {
+		thing.my_new_angle = 0
+		thing.element.style.transform = "rotate(0deg)"
+	}
 	for (var thing of world.text_list)
 		thing.my_text = thing.my_text_html = null
 
@@ -928,8 +1010,6 @@ function end_update() {
 	/* FIXME: workaround WebKit bug with :has(:empty) selectors */
 	for (e of document.querySelectorAll(".panel.autohide"))
 		e.hidden = (e.querySelector(".panel-body").children.length === 0)
-
-	_layout_stacks()
 
 	for (thing of world.keyword_list)
 		thing.element.setAttribute("class", [ ...thing.my_keywords, ...thing.my_dynamic_keywords ].join(" "))
@@ -973,6 +1053,8 @@ function end_update() {
 				thing.body.innerHTML = text
 		}
 	}
+
+	_layout_stacks()
 
 	_animate_end()
 }
