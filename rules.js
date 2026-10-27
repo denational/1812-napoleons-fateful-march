@@ -756,6 +756,10 @@ function has_non_dummy_order_at_area(who, area) {
 	return get_orders_at_area(who, area).some(order => get_order_type(order) !== DUMMY_ORDER)
 }
 
+function has_order(area) {
+	return G.orders.includes(area)
+}
+
 function has_friendly_order(who, area) {
 	return get_orders_at_area(who, area).length > 0
 }
@@ -918,6 +922,10 @@ function has_sp_of_type(who, type, area) {
 		return decode_sp_player(entry) === who
 		&& decode_sp_type(entry) === type
 	})
+}
+
+function has_sp_on_map(player) {
+	return map_keys(G.sps).some(area => has_friendly_sp(player, area))
 }
 
 function get_move_strength(move_type) {
@@ -4488,8 +4496,13 @@ P.do_place_orders = {
 		L.state = ["select_next_order", "select_next_order"]
 		L.undo = [[], []]
 
-		L.has_placed_platov_order = is_leader_on_map(L_PLATOV) ? false : true
+		// For fuzzer
+		for (let player = RUSSIA; player <= FRANCE; ++player) {
+			if (!has_sp_on_map(player))
+				L.state[player] = "all_done"
+		}
 
+		L.has_placed_platov_order = is_leader_on_map(L_PLATOV) ? false : true
 		L.has_placed_superior_staff_officers_order = true
 		if (is_leader_on_map(L_NAPOLEON) && is_superior_staff_officers() && G.superior_staff_officers_order > -1)
 			L.has_placed_superior_staff_officers_order = false
@@ -10879,7 +10892,7 @@ P.play_events = {
 	},
 	prompt() {
 		if (L.events.length > 0) {
-			V.prompt = `You may play ${join_array_with_or(L.events.map(format_card))}.`
+			V.prompt = `You may play ${join_array_with_or(L.events.map(card => format_card(card)))}.`
 			L.events.forEach(action_card)
 			if (L.events.length === 1)
 				button("play")
@@ -11966,17 +11979,22 @@ P.commit_delayed_reaction = function () {
 
 P.apply_delayed_reaction = {
 	_begin() {
-		G.active = 1 - G.delayed[0].state.active
+		G.active = enemy(G.delayed[0].state.active)
 	},
 	prompt() {
 		var state = G.delayed[0]
-		if (!L.card) {
-			V.prompt = `You may play ${format_card(state.cards[0])}.`
-			state.cards.forEach(c => action_card(c))
-			button_pass()
+		if (G.delayed[0].cards.some(card => hand_has(G.active, card))) {
+			if (!L.card) {
+				V.prompt = `You may play ${format_card(state.cards[0])}.`
+				state.cards.forEach(c => action_card(c))
+				button_pass()
+			} else {
+				V.prompt = `Confirm play ${format_card(L.card)} (cannot be undone).`
+				button_confirm()
+			}
 		} else {
-			V.prompt = `Confirm play ${format_card(L.card)} (cannot be undone).`
-			button_confirm()
+			V.prompt = `You do not have ${format_card(state.cards[0])} in hand.`
+			button_pass()
 		}
 	},
 	pass() {
@@ -15096,6 +15114,16 @@ function assert_lone_leaders() {
 function assert_sudden_death() {
 	if (Math.abs(G.vp) >= 20)
 		throw new Error(`${possessive(G.vp > 0 ? FRANCE : RUSSIA)} Sudden Death Victory did not trigger.`)
+}
+
+// Weird edge cases with SPS and orders being placed off-map
+function assert_off_map_pieces() {
+	function throw_err(piece, where) { throw new Error(`Illegal ${piece} location: ${get_area_name(where)}.`) }
+
+	if (has_sp(POOL)) throw_err("SP", POOL)
+	if (has_sp(OUT_OF_PLAY)) throw_err("SP", OUT_OF_PLAY)
+	if (has_order(OUT_OF_PLAY)) throw_err("order", OUT_OF_PLAY)
+	if (has_order(FRENCH_CASUALTIES)) throw_err("order", FRENCH_CASUALTIES)
 }
 
 // === COMMON FRAMEWORK ===
