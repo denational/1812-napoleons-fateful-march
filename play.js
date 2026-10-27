@@ -738,11 +738,24 @@ function on_init() {
 	for (let area = FIRST_AREA; area <= LAST_AREA; ++area) {
 		define_space("area", area, layout[get_area_name(area)], get_area_type(area))
 			.tooltip(`${process_area_name(get_area_name(area))} (${get_area_zone(area)})`)
-		define_stack("area_stack", area, layout[get_area_name(area)], -8, -8, 0, -58, 0, 36, 1, 60)
-		define_stack("orders_stack", area, translate_right(layout[get_area_name(area)], 60), 0, -85, 0, -125)
+		define_stack("area_stack", area, layout[get_area_name(area)], {
+			dx: -8, dy: -8,
+			major_dx: 0, major_dy: -58,
+			minor_dx: 0, minor_dy: 36,
+			threshold: 1, wrap: 60,
+		})
+		define_stack("orders_stack", area, translate_right(layout[get_area_name(area)], 60), {
+			dx: 0, dy: -85,
+			major_dx: 0, major_dy: -125
+		})
 	}
 
-	define_stack("move", 0, [0, 0, 25, 25], -15, -15, 0, -58, 0, 36, 1, 10)
+	define_stack("move", 0, [0, 0, 25, 25], {
+		dx: -15, dy: -15,
+		major_dx: 0, major_dy: -58,
+		minor_dx: 0, minor_dy: 36,
+		threshold: 1, wrap: 10
+	})
 
 	define_layout("ru_pool_depots", 0, layout["Russia Pool Depots"])
 	define_layout("fr_pool_depots", 0, layout["France Pool Depots"])
@@ -753,7 +766,12 @@ function on_init() {
 	/* CONNECTIONS */
 	for (let connection = FIRST_CONNECTION; connection <= LAST_CONNECTION; ++connection) {
 		define_space("connection", connection, layout[`Connection${connection}`])//.tooltip(connection)
-		define_stack("connection_stack", connection, layout[`Connection${connection}`], -8, -8, 0, -58, 0, 36, 1, 60)
+		define_stack("connection_stack", connection, layout[`Connection${connection}`], {
+			dx: -8, dy: -8,
+			major_dx: 0, major_dy: -58,
+			minor_dx: 0, minor_dy: 36,
+			threshold: 1, wrap: 60,
+		})
 	}
 
 	/* ORDERS */
