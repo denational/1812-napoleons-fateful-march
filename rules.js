@@ -849,6 +849,7 @@ function is_fresh_cavalry(sp_type) {
 	return sp_type === FRESH_CAVALRY
 }
 
+// Used for checks that must exclude Allied Infantry
 function has_french_sp(area) {
 	return get_area_sp_set(area)?.some(entry => (decode_sp_player(entry) === FRANCE) && (decode_sp_type(entry) < FRESH_PRUSSIAN_INFANTRY)) ?? false
 }
@@ -3322,6 +3323,15 @@ function get_event_step(card) {
 	return get_event_data(card).step
 }
 
+function count_num_exhausted_sps_on_map(player, areas = map_keys(G.sps)) {
+	let count = 0
+	for (let area of areas) {
+		if (has_exhausted_sp(player, area))
+			count += count_num_exhausted_sps(player, area)
+	}
+	return count
+}
+
 // TODO: Cleanup repeated discard/log
 P.draw_card_to_hand = {
 	_begin() {
@@ -3553,130 +3563,113 @@ P.draw_card_to_hand = {
 		// NOTE: contains duplicated code from the Attrition section (working around not being able to be in multiple states at once)
 		"chaos_in_the_rear_areas": {
 			on_begin() {
-				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining 	= Math.min(get_devastated_areas_with_french_sps().length, 2)
-				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice 		= null
-				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count 		= 0
-				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo 			= []
-				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_assigned 	= []
+				const evt = get_event_data(C_CHAOS_IN_THE_REAR_AREAS)
+				evt.losses_remaining = Math.min(2, get_devastated_areas_with_french_sps().length)
+				evt.count = 0
+
+				// Constants to avoid typos
+				evt.EXHAUST = "exhaust"
+				evt.ELIMINATE_2 = "eliminate_2"
+
+				// Undo stack (WIP)
+				evt.undo = []
 			},
 			on_prompt() {
-				if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining > 0) {
-					if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === null) {
-						prompt_card(C_CHAOS_IN_THE_REAR_AREAS, `Assign attrition losses. (${get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining} remaining)`)
-						let any_action = false
+				const evt = get_event_data(C_CHAOS_IN_THE_REAR_AREAS)
 
-						if (get_devastated_areas_with_french_sps().some(area => has_fresh_sp(FRANCE, area))) {
-							button("exhaust")
-							any_action = true
-						}
+				// button_undo(evt.undo.length > 0)
 
-						let num_exhausted = 0
-						for (let area of get_devastated_areas_with_french_sps()) {
-							if (has_exhausted_sp(FRANCE, area))
-								num_exhausted += count_num_exhausted_sps(FRANCE, area)
-							if (num_exhausted >= 2) {
-								button("eliminate_2")
-								any_action = true
-								break
-							}
-						}
+				if (evt.losses_remaining > 0) {
+					const total_exhausted = count_num_exhausted_sps_on_map(FRANCE, get_devastated_areas_with_french_sps())
 
-						if (!any_action)
-							button_done()
-					} else if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count > 0) {
-						V.prompt = `Select an SP to ${get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice} (CANNOT BE UNDONE).`
-
-						let areas
-						if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "exhaust")
-							areas = get_devastated_areas_with_french_sps().filter(area => has_fresh_sp(FRANCE, area))
-						else
-							areas = get_devastated_areas_with_french_sps().filter(area => has_exhausted_sp(FRANCE, area))
-
-						for (let area of areas) {
-							if (have_sps_moved_in_area(area)) {
-								for (let type of get_sp_types_at_area(R, area)) {
-									if (
-										(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "exhaust" && is_sp_type_fresh(type))
-										|| (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "eliminate" && is_sp_type_exhausted(type))
-									) {
-										let count = count_num_sps_of_type(R, type, area)
-										for (let entry of get_moved_sps_in_area(area)) {
-											if (decode_sp_player(entry) === R && decode_sp_type(entry) === type) {
-												count -= decode_sp_num(entry)
-												action_sp_alt(type, area, decode_sp_strength(entry), decode_sp_from(entry))
-											}
-										}
-										if (count > 0)
-											action_sp_alt(type, area)
-									}
-								}
-							} else {
-								if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "exhaust") {
-									for (let type of get_all_fresh_sp_types(FRANCE, area))
-										action_sp_alt(type, area)
-								} else {
-									for (let type of get_all_exhausted_sp_types(FRANCE, area))
-										action_sp_alt(type, area)
-								}
-							}
-						}
+					// If an additional SP needs to be eliminated.
+					if (evt.count > 0 && total_exhausted > 0) {
+						prompt_card(C_CHAOS_IN_THE_REAR_AREAS, `Eliminate another exhausted SP.`)
+						this.gen_eliminate_actions()
+						return
 					}
+
+					prompt_card(C_CHAOS_IN_THE_REAR_AREAS, `Assign attrition losses (${evt.losses_remaining} remaining).`)
+
+					if (get_devastated_areas_with_french_sps().some(area => has_fresh_sp(FRANCE, area)))
+						this.gen_exhaust_actions()
+
+					if (total_exhausted > 2 || (total_exhausted === 1 && get_devastated_areas_with_french_sps().every(area => !has_fresh_sp(FRANCE, area))))
+						this.gen_eliminate_actions()
 				} else {
-					prompt_card(C_CHAOS_IN_THE_REAR_AREAS, "All done.")
+					prompt_card(C_CHAOS_IN_THE_REAR_AREAS, `All done.`)
 					button_done()
 				}
-				button_undo(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.length > 0)
 			},
-			on_exhaust() {
-				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.push({action: "select_choice", type: "exhaust"})
-				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = "exhaust"
-				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count = 1
+			gen_exhaust_actions() {
+				this._gen_actions(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).EXHAUST)
 			},
-			on_eliminate_2() {
-				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.push({action: "select_choice", type: "eliminate"})
-				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = "eliminate"
-				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count = 2
+			gen_eliminate_actions() {
+				this._gen_actions(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).ELIMINATE_2)
+			},
+			_gen_actions(choice) {
+				const evt = get_event_data(C_CHAOS_IN_THE_REAR_AREAS)
+				const get_valid_types = (choice === evt.EXHAUST) ? get_all_fresh_sp_types : get_all_exhausted_sp_types
+
+				for (let area of get_devastated_areas_with_french_sps()) {
+					if (has_battle(area)) {
+						get_player_battle_data(FRANCE, area).forces.forEach(force => {
+							for (let type of get_valid_types(FRANCE, area))
+								if (force.sps[type] > 0)
+									action_sp_alt(type, area, force.strength, force.from)
+						})
+					} else if (have_sps_moved_in_area(area)) {
+						for (let type of get_valid_types(FRANCE, area)) {
+							let remaining = 0
+							for (let entry of get_moved_sps_in_area(area)) {
+								if (decode_sp_player(entry) === FRANCE && decode_sp_type(entry) === type) {
+									remaining += decode_sp_num
+									action_sp_alt(type, area, decode_sp_strength(entry), decode_sp_from(entry))
+								}
+							}
+							if (remaining < count_num_sps_of_type(FRANCE, type, area))
+								action_sp_alt(type, area)
+						}
+					} else {
+						get_valid_types(FRANCE, area).forEach(t => action_sp_alt(t, area))
+					}
+				}
 			},
 			on_sp(entry) {
-				let type = decode_sp_type(entry)
-				let area = decode_sp_area(entry)
-				let strength = decode_sp_strength(entry)
-				let from = decode_sp_from(entry)
+				const evt = get_event_data(C_CHAOS_IN_THE_REAR_AREAS)
+				const type = decode_sp_type(entry)
+				const area = decode_sp_area(entry)
+				const strength = decode_sp_strength(entry)
+				const from = decode_sp_from(entry)
 
-				// Offering an undo here would be very bug-prone as restoring the previous state would require modifying a lot of the game state.
-				get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.length = 0
+				// evt.undo.push( { type, area, strength, from } )
 
-				if (get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice === "exhaust")
-					exhaust_sp(FRANCE, area, type, 1, false, true, strength, from, has_battle(area))
-				else
+				if (is_sp_type_fresh(type)) {
+					exhaust_sp(FRANCE, area, type, 1, false, false, strength, from, has_battle(area))
+					--evt.losses_remaining
+				} else {
 					eliminate_sp_new(FRANCE, area, type, 1, false, true, strength, from, has_battle(area))
+					if (evt.count === 1)
+						--evt.losses_remaining
+					if (evt.count === 0 && count_num_exhausted_sps_on_map(FRANCE, get_devastated_areas_with_french_sps()) === 0)
+						return
+					evt.count = 1 - evt.count
+				}
+			},
+			on_undo() {
+				const evt = get_event_data(C_CHAOS_IN_THE_REAR_AREAS)
+				let undo = evt.undo.pop()
 
-				if (!map_has(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_assigned, area))
-					map_set(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_assigned, area, [])
-
-				if (!map_has(map_get(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_assigned, area, []), type))
-					map_set(map_get(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_assigned, area, []), type, 1)
-				else
-					map_increment(map_get(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_assigned, area, []), type, 1)
-
-				if (--get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count === 0) {
-					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = null
-					--get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_remaining
+				if (is_sp_type_fresh(undo.type)) {
+					// rally_sp()
+				} else {
+					// add_sp()
 				}
 			},
 			on_done() {
 				discard_or_remove_card(C_CHAOS_IN_THE_REAR_AREAS)
-				log_must_play_event(C_CHAOS_IN_THE_REAR_AREAS, get_event_data(C_CHAOS_IN_THE_REAR_AREAS).losses_assigned)
+				// log_must_play_event(C_CHAOS_IN_THE_REAR_AREAS)
 				end_local_state(R)
-			},
-			on_undo() {
-				let action = get_event_data(C_CHAOS_IN_THE_REAR_AREAS).undo.pop()
-				switch(action.action) {
-				case "select_choice":
-					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).choice = null
-					get_event_data(C_CHAOS_IN_THE_REAR_AREAS).count = 0
-					return
-				}
 			}
 		},
 		"vulnerable_supply_lines": {
@@ -5278,7 +5271,7 @@ P.execute_orders = script(`
 			call execute_place_depot
 		}
 
-		if (L.type === CAVALRY_PATROLS && (!is_leak_hand() || hand_has(FRANCE, C_GOOD_LEADERSHIP))) {
+		if (L.type === CAVALRY_PATROLS && (!is_leak_hand() || hand_has(FRANCE, C_GOOD_LEADERSHIP)) && can_play_event(C_GOOD_LEADERSHIP)) {
 			set G.active FRANCE
 			call may_play_good_leadership
 		}
@@ -7124,7 +7117,8 @@ function find_retreat_destinations(who, area, among = get_all_adjacent_areas(are
 	}
 
 	return retreat_destinations.filter(dest => {
-		return (ignore_enemy_sps || !has_enemy_sp(who, dest)) && (!has_battle(area) || !set_has(get_connections_used_in_battle(enemy(who), area), dest))
+		return (ignore_enemy_sps || !has_enemy_sp(who, dest))
+		&& (get_current_phase() === PHASE_BATTLES_PHASE || !has_battle(area) || !set_has(get_connections_used_in_battle(enemy(who), area), dest))
 	})
 }
 
@@ -14067,6 +14061,8 @@ P.poor_coordination_fr = function() {
 // FR #24: Jérôme Goes Home -- see draw_card_to_hand (must-play event)
 
 // FR #25: Good Leadership
+E.good_leadership = function() { return map_keys(G.sps).some(area => area !== FRENCH_CASUALTIES && has_french_sp(area)) }
+
 P.may_play_good_leadership = function() {
 	goto("may_play_event", { event: C_GOOD_LEADERSHIP })
 }
@@ -14737,8 +14733,12 @@ P.apply_tough_rearguard = {
 	prompt() {
 		if (has_fresh_sp(G.active, L.area)) {
 			prompt_card(C_TOUGH_REARGUARD, `Exhaust an SP at ${format_area(L.area)}.`)
-			for (let type of get_all_fresh_sp_types(G.active, L.area))
-				action_sp_alt(type, L.area)
+			get_player_battle_data(G.active, L.area).forces.forEach(force => {
+				for (let type = 0; type < NUM_TROOP_TYPES; ++type) {
+					if (force.sps[type] > 0)
+						action_sp_alt(type, L.area, force.strength, force.from)
+				}
+			})
 		} else {
 			prompt_card(C_TOUGH_REARGUARD, `No fresh SPs to exhaust.`)
 			button_confirm()
@@ -14747,10 +14747,9 @@ P.apply_tough_rearguard = {
 	sp(entry) {
 		push_undo()
 		let type = decode_sp_type(entry)
-		exhaust_sp(G.active, L.area, type)
+		exhaust_sp(G.active, L.area, type, 1, false, true, decode_sp_strength(entry), decode_sp_from(entry), true)
 		logi("Exhausted")
-		log_only(RUSSIA, format_ii(`1 Russian ${get_sp_type_name(type)}`))
-		log_only(FRANCE, format_ii(`1 Russian SP`))
+		log_masked(RUSSIA, format_ii(`1 ${get_sp_type_name(type)}`, format_ii(`1 Russian SP`)))
 		goto("event_done", { card: C_TOUGH_REARGUARD })
 	},
 	confirm() {
