@@ -15310,6 +15310,7 @@ exports.action = function (state, role, action, argument) {
 	if (this_state && typeof this_state[action] === "function") {
 		this_state[action](argument)
 		_run()
+		update_visible_sps(R)
 		update_visible_sps(enemy(R))
 	} else if (action === "undo" && G.undo.length > 0) {
 		pop_undo()
