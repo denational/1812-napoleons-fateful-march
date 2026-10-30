@@ -336,6 +336,12 @@ const EXHAUSTED_PRUSSIAN_INFANTRY = 9
 const FRESH_AUSTRIAN_INFANTRY = 10
 const EXHAUSTED_AUSTRIAN_INFANTRY = 11
 
+const ALL_SP_TYPES = []
+for (let type = FRESH_INFANTRY; type <= EXHAUSTED_AUSTRIAN_INFANTRY; ++type) ALL_SP_TYPES.push(type)
+
+// const FRESH_SP_TYPES = ALL_SP_TYPES.filter(is_sp_type_fresh)
+const EXHAUSTED_SP_TYPES = ALL_SP_TYPES.filter(is_sp_type_exhausted)
+
 const NUM_TROOP_TYPES = 12
 
 /* DEPOTS */
@@ -814,6 +820,14 @@ function is_sp_type_fresh(type) {
 	return !is_sp_type_exhausted(type)
 }
 
+function get_fresh_version(type) {
+	return type - 1
+}
+
+function get_exhausted_version(type) {
+	return type + 1
+}
+
 function has_sp_in_area(who, area) {
 	return get_area_sp_set(area)?.some(entry => decode_sp_player(entry) === who) ?? false
 }
@@ -1244,11 +1258,6 @@ function remove_sp(who, area, type, num) {
 function move_sp(who, from, to, type, num) {
 	remove_sp(who, from, type, num)
 	add_sp(who, to, type, num)
-}
-
-function rally_sp(who, area, type, num = 1) {
-	remove_sp(who, area, type, num)
-	add_sp(who, area, type - 1, num)
 }
 
 function get_areas_with_sps(who) {
@@ -1763,13 +1772,100 @@ function button_sp(type) {
 */
 
 function action_sp_alt(type, area = 0, strength = FULL_STRENGTH, from = POOL, move = 0) {
-	let player
-	if (Array.isArray(G.active))
-		player = R
-	else
-		player = G.active
+	const player = Array.isArray(G.active) ? R : G.active
+	if (typeof move === 'boolean') move = !!move
 
 	action("sp", package_sp_action(player, type, strength, area, from, move))
+}
+
+// === UPDATE SP STATE ===
+/* RALLY */
+function _rally_sp(who, area, type, num) {
+	if (!is_sp_type_exhausted(type))
+		throw new Error(`Attempting to Rally ${num} ${possessive(who)} ${get_sp_type_name(type)} at ${get_area_name(area)}`)
+
+	remove_sp(who, area, type, num)
+	add_sp(who, area, get_fresh_version(type), num)
+}
+
+function update_rally_move(type, num) {
+	// G.move's structure varies between phases
+	if (get_current_phase() !== FORCED_MARCH && get_current_phase() !== MARCH)
+		throw new Error(`Attempting to update G.move outside Forced March or March.`)
+
+	G.move.sps[type] -= num
+	G.move.sps[get_fresh_version(type)] += num
+}
+
+function update_rally_moved(player, area, type, num, strength, from) {
+	remove_sp_moved(area, player, from, strength, type, num)
+	add_sp_moved(area, player, from, strength, get_fresh_version(type), num)
+}
+
+function update_rally_battles(player, area, type, num, strength, from) {
+	const force = get_player_battle_data(player, area).forces.find(f => {
+		return f.sps[type] >= num && f.from === from && f.strength === strength
+	})
+
+	if (force === undefined)
+		throw new Error(`Force not found to update batttle at ${get_area_name(area)}.`)
+
+	force.sps[type] -= num
+	force.sps[get_fresh_version(type)] += num
+}
+
+function rally_sp(who, area, type, num = 1, strength = FULL_STRENGTH, from = POOL, moving = false) {
+	const update_moved = find_moved_entry(area, who, from, strength, type) > -1
+	const update_battles = has_battle(area)
+
+	_rally_sp(who, area, type, num)
+
+	if (moving) update_rally_move(type, num)
+	if (update_moved) update_rally_moved(who, area, type, num, strength, from)
+	if (update_battles) update_rally_battles(who, area, type, num, strength, from)
+}
+
+function rally_sp_entry(entry, num = 1) {
+	rally_sp(
+		decode_sp_player(entry), decode_sp_area(entry), decode_sp_type(entry), num,
+		decode_sp_strength(entry), decode_sp_from(entry), decode_sp_moving(entry)
+	)
+}
+
+function for_each_sp_type(types = ALL_SP_TYPES, f) {
+	types.forEach(type => f(type))
+}
+
+function generate_rally_actions(player, area, types = EXHAUSTED_SP_TYPES, moving = false) {
+	if (typeof types === 'function')
+		types = ALL_SP_TYPES.filter(types)
+
+	if (has_battle(area)) {
+		get_player_battle_data(player, area).forces.forEach(force => {
+			if (moving && (force.strength !== FULL_STRENGTH || force.from !== area))
+				return
+			for_each_sp_type(types, type => {
+				if (force.sps[type] > 0 && (!moving || G.move.sps[type] > 0))
+					action_sp_alt(type, area, force.strength, force.from, moving)
+			})
+		})
+	} else if (have_sps_moved_in_area(area) && !moving) {
+		for_each_sp_type(types, (type) => {
+			let remaining = count_num_sps_of_type(player, type, area)
+			for (let entry of get_moved_sps_in_area(area)) {
+				if (decode_sp_player(entry) === player && decode_sp_type(entry) === type) {
+					action_sp_alt(type, area, decode_sp_strength(entry), decode_sp_from(entry), moving)
+					remaining -= decode_sp_num(entry)
+				}
+			}
+			if (remaining > 0) action_sp_alt(type, area, FULL_STRENGTH, POOL, moving)
+		})
+	} else {
+		for_each_sp_type(types, (type) =>  {
+			if (has_sp_of_type(player, type, area) && (!moving || G.move.sps[type] > 0))
+				action_sp_alt(type, area, FULL_STRENGTH, POOL, moving)
+		})
+	}
 }
 
 // === FRAMEWORK EXTENSIONS ===
@@ -3836,8 +3932,7 @@ P.draw_card_to_hand = {
 					case 0:
 						if (has_exhausted_sp(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)) {
 							prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, `Rally an exhausted SP at ${format_area(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)}.`)
-							for (let type of get_all_exhausted_sp_types(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area))
-								action_sp_alt(type, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)
+							generate_rally_actions(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)
 						} else {
 							prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, `No exhausted SPs at ${format_area(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)} to rally.`)
 							button_next()
@@ -3862,9 +3957,8 @@ P.draw_card_to_hand = {
 				increment_event_tracker(C_CHAOTIC_FOOD_DISTRIBUTION)
 			},
 			on_sp(entry) {
-				let type = decode_sp_type(entry)
-				rally_sp(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area, type)
-				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type = type
+				rally_sp_entry(entry)
+				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type = decode_sp_type(entry)
 				increment_event_tracker(C_CHAOTIC_FOOD_DISTRIBUTION)
 			},
 			on_next() {
@@ -8453,15 +8547,6 @@ function count_num_sps_of_type(who, type, area) {
 	return count
 }
 
-function battle_rally_sp(who, area, type, strength, from, num = 1) {
-	rally_sp(who, area, type, num)
-
-	let battle_data = get_player_battle_data(who, area)
-	let force = battle_data.forces.find(f => f.strength === strength && f.from === from)
-	force.sps[type] -= num
-	force.sps[type - 1] += num
-}
-
 function battle_exhaust_sp(who, area, type, strength, from, num = 1) {
 	exhaust_sp(who, area, type, num, false, false, strength, from, true)
 }
@@ -8580,25 +8665,15 @@ P.assign_losses = {
 			on_prompt() {
 				if (has_exhausted_sp(FRANCE, G.current_battle)) {
 					prompt_card(C_NAPOLEONS_MARSHALS, `Rally an exhausted SP at ${format_area(G.current_battle)}.`)
-					get_player_battle_data(FRANCE, G.current_battle).forces.forEach(force => {
-						for (let type = 0; type < force.sps.length; ++type) {
-							if (force.sps[type] > 0)
-								action_sp_alt(type, G.current_battle, force.strength, force.from)
-						}
-					})
+					generate_rally_actions(FRANCE, G.current_battle)
 				} else {
 					prompt_card(C_NAPOLEONS_MARSHALS, `No exhausted SPs at ${format_area(G.current_battle)} to Rally.`)
 					button_next()
 				}
 			},
 			on_sp(entry) {
-				let type = decode_sp_type(entry)
-				let strength = decode_sp_strength(entry)
-				let from = decode_sp_from(entry)
-
-				battle_rally_sp(R, G.current_battle, type, strength, from)
-				push_local_undo(FRANCE, "rally", { type, strength, from })
-
+				push_local_undo(FRANCE, "rally", { type: decode_sp_type(entry), strength: decode_sp_strength(entry), from: decode_sp_from(entry) })
+				rally_sp_entry(entry)
 				advance_local_state(FRANCE)
 			},
 			on_next() {
@@ -8825,7 +8900,7 @@ P.assign_losses = {
 			battle_exhaust_sp(R, G.current_battle, undo.info.type - 1, undo.info.strength, undo.info.from)
 			return
 		case "exhaust":
-			battle_rally_sp(R, G.current_battle, undo.info.type + 1, undo.info.strength, undo.info.from)
+			rally_sp(R, G.current_battle, get_exhausted_version(undo.info.type), 1, undo.info.strength, undo.info.from)
 			--L.count[R]
 			return
 		case "eliminate":
@@ -9655,10 +9730,11 @@ P.rally = {
 			if (could_rally_two_infantry(G.active, L.area) && count_num_exhausted_infantry(G.active, L.area) >= 2)
 				V.prompt += ` (2 if Infantry)`
 
-			for (let type of get_all_exhausted_sp_types(G.active, L.area)) {
-				if (L.count === 0 || is_infantry(type))
-					action_sp_alt(type, L.area)
-			}
+
+			if (L.count === 0)
+				generate_rally_actions(G.active, L.area)
+			else
+				generate_rally_actions(G.active, L.area, is_exhausted_infantry)
 		}
 
 		if (L.kutuzov)
@@ -9666,11 +9742,9 @@ P.rally = {
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
-
-		rally_sp(G.active, L.area, type)
+		const type = decode_sp_type(entry)
+		rally_sp_entry(entry)
 		log_masked(G.active, format_i(`1 ${get_sp_type_name(type)}`), format_i(`1 Exh. SP`))
-
 		if (L.count === 0 && could_rally_two_infantry(G.active, L.area) && is_infantry(type))
 			++L.count
 		else
@@ -12586,8 +12660,6 @@ P.stoic_infantry = {
 
 P.stoic_infantry_rally = {
 	_begin() {
-		log_card(C_STOIC_INFANTRY)
-		logi("Rallied")
 		L.count = Math.min(
 			2,
 			count_num_sps_of_type(RUSSIA, EXHAUSTED_INFANTRY, G.current_battle),
@@ -12597,28 +12669,22 @@ P.stoic_infantry_rally = {
 			logii("Nothing")
 			goto("event_done", { card: C_STOIC_INFANTRY })
 		}
+
+		log_card(C_STOIC_INFANTRY)
+		logi("Rallied")
 	},
 	prompt() {
 		prompt_card(C_STOIC_INFANTRY, `Rally up to ${L.count} exhausted Infantry SPs at ${format_area(G.current_battle)}.`)
-		get_player_battle_data(G.active, G.current_battle).forces.forEach(force => {
-			if (force.sps[EXHAUSTED_INFANTRY] > 0)
-				action_sp_alt(EXHAUSTED_INFANTRY, G.current_battle, force.strength, force.from)
-		})
+		generate_rally_actions(G.active, G.current_battle, is_exhausted_infantry)
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
-		let strength = decode_sp_strength(entry)
-		let from = decode_sp_from(entry)
-
-		battle_rally_sp(R, G.current_battle, type, strength, from)
+		rally_sp_entry(entry)
 		logii(`1 Exh. Infantry`)
-
-		if (--L.count === 0) {
-			map_delete(G.persistent_events, C_STOIC_INFANTRY)
+		if (--L.count === 0)
 			goto("event_done", { card: C_STOIC_INFANTRY })
-		}
-	}
+	},
+	_end() { map_delete(G.persistent_events, C_STOIC_INFANTRY) }
 }
 
 // RU #32: The Artillery Corps
@@ -14436,21 +14502,12 @@ P.neys_iii_corps_rally = {
 	},
 	prompt() {
 		prompt_card(C_NEYS_III_CORPS, `Rally an exhausted SP at ${format_area(G.current_battle)}.`)
-		get_player_battle_data(G.active, G.current_battle).forces.forEach(force => {
-			for (let type = 0; type < force.sps.length; ++type) {
-				if (is_sp_type_exhausted(type) && force.sps[type] > 0)
-					action_sp_alt(type, G.current_battle, force.strength, force.from)
-			}
-		})
+		generate_rally_actions(G.active, G.current_battle)
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
-		let strength = decode_sp_strength(entry)
-		let from = decode_sp_from(entry)
-
-		battle_rally_sp(R, G.current_battle, type, strength, from)
-		log_masked(G.active, format_ii(`1 ${get_sp_type_name(type)}`), format_ii(`1 Exh. SP`))
+		rally_sp_entry(entry)
+		log_masked(G.active, format_ii(`1 ${get_sp_type_name(decode_sp_type(entry))}`), format_ii(`1 Exh. SP`))
 		goto("event_done", { card: C_NEYS_III_CORPS })
 	}
 }
@@ -14511,22 +14568,13 @@ P.poniatowskis_v_corps = {
 			button_pass()
 		} else if (L.count > 0) {
 			prompt_card(C_PONIATOWSKIS_V_CORPS, `Rally exhausted Infantry in the moving force: ${L.count} remaining.`)
-			for (let type = 0; type < G.move.sps.length; ++type) {
-				if (is_exhausted_infantry(type) && G.move.sps[type] > 0)
-					action_sp_alt(type, G.move.path[G.move.path.length - 1], FULL_STRENGTH, POOL, 1)
-			}
+			generate_rally_actions(G.active, G.move.path[G.move.path.length - 1], is_exhausted_infantry, true)
 		}
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
-		let area = decode_sp_area(entry)
-
-		rally_sp(G.active, area, type)
-		G.move.sps[type]--
-		G.move.sps[type - 1]++
-
-		logii(`1 ${get_sp_type_name(type)}`)
+		rally_sp_entry(entry)
+		logii(`1 ${get_sp_type_name(decode_sp_type(entry))}`)
 		if (--L.count === 0)
 			goto("event_done", { card: C_PONIATOWSKIS_V_CORPS })
 	},
@@ -14611,8 +14659,7 @@ P.much_needed_victuals = {
 			}
 		} else if (L.num_sps_rallied < 2 && count_num_exhausted_infantry(FRANCE, L.selected_area) > 0) {
 			V.prompt = `Rally ${2 - L.num_sps_rallied} exhausted Infantry at ${format_area(L.selected_area)}.`
-			for (let type of get_all_exhausted_sp_types(FRANCE, L.selected_area))
-				action_sp_alt(type, L.selected_area)
+			generate_rally_actions(G.active, L.selected_area)
 		} else {
 			prompt_card(C_MUCH_NEEDED_VICTUALS, `Attrition will not be checked at ${format_area(L.selected_area)}`)
 			button_confirm()
@@ -14632,9 +14679,8 @@ P.much_needed_victuals = {
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
-		rally_sp(FRANCE, L.selected_area, type)
-		logi(`1 ${get_sp_type_name(type)}`)
+		rally_sp_entry(entry)
+		logi(`1 ${get_sp_type_name(decode_sp_type(entry))}`)
 		++L.num_sps_rallied
 	},
 	confirm() {
@@ -14776,25 +14822,16 @@ P.courage_of_desperation_rally = {
 	prompt() {
 		if (has_exhausted_sp(G.active, G.current_battle)) {
 			prompt_card(C_COURAGE_OF_DESPERATION, `Immediately Rally 1 exhausted SP.`)
-			get_player_battle_data(G.active, G.current_battle).forces.forEach(force => {
-				for (let type = 0; type < force.sps.length; ++type) {
-					if (force.sps[type] > 0 && is_sp_type_exhausted(type))
-						action_sp_alt(type, G.current_battle, force.strength, force.from)
-				}
-			})
+			generate_rally_actions(G.active, G.current_battle)
 		} else {
 			prompt_card(C_COURAGE_OF_DESPERATION, `No exhausted SPs to rally.`)
 			button_next()
 		}
-
 	},
 	sp(entry) {
-		let type = decode_sp_type(entry)
-		let strength = decode_sp_strength(entry)
-		let from = decode_sp_from(entry)
-
-		battle_rally_sp(G.active, G.current_battle, type, strength, from)
-		log_masked(FRANCE, `1 ${get_sp_type_name(type)}`, `1 Exh. SP`)
+		push_undo()
+		rally_sp_entry(entry)
+		log_masked(FRANCE, format_i(`1 ${get_sp_type_name(decode_sp_type(entry))}`, `1 Exh. SP`))
 		end()
 	},
 	next() {
