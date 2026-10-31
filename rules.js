@@ -339,7 +339,7 @@ const EXHAUSTED_AUSTRIAN_INFANTRY = 11
 const ALL_SP_TYPES = []
 for (let type = FRESH_INFANTRY; type <= EXHAUSTED_AUSTRIAN_INFANTRY; ++type) ALL_SP_TYPES.push(type)
 
-// const FRESH_SP_TYPES = ALL_SP_TYPES.filter(is_sp_type_fresh)
+const FRESH_SP_TYPES = ALL_SP_TYPES.filter(is_sp_type_fresh)
 const EXHAUSTED_SP_TYPES = ALL_SP_TYPES.filter(is_sp_type_exhausted)
 
 const NUM_TROOP_TYPES = 12
@@ -828,6 +828,10 @@ function get_exhausted_version(type) {
 	return type + 1
 }
 
+function for_each_sp_type(types = ALL_SP_TYPES, f) {
+	types.forEach(type => f(type))
+}
+
 function has_sp_in_area(who, area) {
 	return get_area_sp_set(area)?.some(entry => decode_sp_player(entry) === who) ?? false
 }
@@ -943,10 +947,10 @@ function has_sp_on_map(player) {
 	return map_keys(G.sps).some(area => has_friendly_sp(player, area))
 }
 
-function get_move_strength(move_type) {
-	if (move_type === FORCED_MARCH)
+function get_move_strength(player, move_type) {
+	if (player === FRANCE && is_event_active(C_FREEZING_WEATHER))
 		return HALF_STRENGTH
-	return FULL_STRENGTH
+	return move_type === FORCED_MARCH ? HALF_STRENGTH : FULL_STRENGTH
 }
 
 /* TIME */
@@ -1832,11 +1836,70 @@ function rally_sp_entry(entry, num = 1) {
 	)
 }
 
-function for_each_sp_type(types = ALL_SP_TYPES, f) {
-	types.forEach(type => f(type))
+/* EXHAUST */
+function _exhaust_sp(who, area, type, num = 1) {
+	if (!is_sp_type_fresh(type))
+		throw new Error(`Attempting to Exhaust ${num} ${possessive(who)} ${get_sp_type_name(type)} at ${get_area_name(area)}`)
+
+	remove_sp(who, area, type, num)
+	add_sp(who, area, get_exhausted_version(type), num)
 }
 
-function generate_rally_actions(player, area, types = EXHAUSTED_SP_TYPES, moving = false) {
+function update_exhaust_move(type, num, strength, from) {
+	if (get_current_phase() === FORCED_MARCH || get_current_phase() === MARCH) {
+		G.move.sps[type] -= num
+		G.move.sps[get_exhausted_version(type)] += num
+	}
+	if (get_current_phase() === EVADE) {
+		map_get(map_get(G.move.sps, from), strength)[type] -= num
+		map_get(map_get(G.move.sps, from), strength)[type + 1] += num
+	}
+}
+
+function update_exhaust_moved(player, area, type, num, strength, from) {
+	remove_sp_moved(area, player, from, strength, type, num)
+	add_sp_moved(area, player, from, strength, get_exhausted_version(type), num)
+}
+
+function update_exhaust_battles(player, area, type, num, strength, from) {
+	const force = get_player_battle_data(player, area).forces.find(f => {
+		return f.sps[type] >= num && f.from === from && f.strength === strength
+	})
+
+	if (force === undefined)
+		throw new Error(`Force not found to update battle at ${get_area_name(area)}.`)
+
+	force.sps[type] -= num
+	force.sps[get_exhausted_version(type)] += num
+}
+
+function exhaust_sp(who, area, type, num = 1, strength = FULL_STRENGTH, from = POOL, moving = false) {
+	const update_moved = find_moved_entry(area, who, from, strength, type) > -1
+	const update_battles = has_battle(area)
+
+	_exhaust_sp(who, area, type, num)
+
+	if (moving) update_exhaust_move(type, num, strength, from)
+	if (update_moved) update_exhaust_moved(who, area, type, num, strength, from)
+	if (update_battles) update_exhaust_battles(who, area, type, num, strength, from)
+}
+
+// We need moving_override sometimes so that we can sequence post-move event resolution
+function exhaust_sp_entry(entry, num = 1, moving_override = false) {
+	exhaust_sp(
+		decode_sp_player(entry), decode_sp_area(entry), decode_sp_type(entry), num,
+		decode_sp_strength(entry), decode_sp_from(entry), moving_override || decode_sp_moving(entry)
+	)
+}
+
+// === COMMON ACTION GENERATORS ===
+// TODO: Combine all into one function.
+
+function filter_types(types) {
+	return typeof types === 'function' ? ALL_SP_TYPES.filter(types) : types
+}
+
+function generate_sp_actions_imp(player, area, types = ALL_SP_TYPES, moving = false) {
 	if (typeof types === 'function')
 		types = ALL_SP_TYPES.filter(types)
 
@@ -1866,6 +1929,19 @@ function generate_rally_actions(player, area, types = EXHAUSTED_SP_TYPES, moving
 				action_sp_alt(type, area, FULL_STRENGTH, POOL, moving)
 		})
 	}
+}
+
+function generate_rally_actions(player, area, types = EXHAUSTED_SP_TYPES, moving = false) {
+	types = filter_types(types).filter(is_sp_type_exhausted)
+	generate_sp_actions_imp(player, area, types, moving)
+}
+
+function generate_exhaust_actions(player, areas, types = FRESH_SP_TYPES, moving = false) {
+	types = filter_types(types).filter(is_sp_type_fresh)
+	if (Array.isArray(areas))
+		areas.forEach(a => generate_sp_actions_imp(player, a, types, moving))
+	else
+		generate_sp_actions_imp(player, areas, types, moving)
 }
 
 // === FRAMEWORK EXTENSIONS ===
@@ -3460,6 +3536,10 @@ P.draw_card_to_hand = {
 			on_draw() {
 				draw_a_card(R)
 			},
+			on_undo() {
+				if (!Array.isArray(G.active) && L.drawn_card[R] === -1)
+					pop_undo()
+			}
 		},
 		"review_drawn_card": {
 			on_prompt() {
@@ -3697,6 +3777,7 @@ P.draw_card_to_hand = {
 					button_done()
 				}
 			},
+			// TO REPLACE LATER
 			gen_exhaust_actions() {
 				this._gen_actions(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).EXHAUST)
 			},
@@ -3741,7 +3822,7 @@ P.draw_card_to_hand = {
 				// evt.undo.push( { type, area, strength, from } )
 
 				if (is_sp_type_fresh(type)) {
-					exhaust_sp(FRANCE, area, type, 1, false, false, strength, from, has_battle(area))
+					exhaust_sp_entry(entry)
 					--evt.losses_remaining
 				} else {
 					eliminate_sp_new(FRANCE, area, type, 1, false, true, strength, from, has_battle(area))
@@ -3914,6 +3995,7 @@ P.draw_card_to_hand = {
 				end_local_state(R)
 			}
 		},
+		// TO FIX
 		"chaotic_food_distribution": {
 			on_begin() {
 				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type = -1
@@ -3982,7 +4064,7 @@ P.draw_card_to_hand = {
 					get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).removed_depot = -1
 				} else {
 					if (get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type > -1) {
-						exhaust_sp(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type - 1)
+						exhaust_sp(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area, get_fresh_version(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type), 1)
 						get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type = -1
 					}
 				}
@@ -5670,15 +5752,10 @@ function remove_sp_moved(area, player, from, strength, type, num) {
 	}
 }
 
-function update_moved_exhaust(area, player, from, strength, type, num) {
-	remove_sp_moved(area, player, from, strength, type, num)
-	add_sp_moved(area, player, from, strength, type + 1, num)
-}
-
 function mark_force_moved() {
 	let area = G.move.path[G.move.path.length - 1]
 	let from = G.move.path[G.move.path.length - 2]
-	let strength = get_move_strength(G.move.type)
+	let strength = get_move_strength(G.active, G.move.type)
 
 	for (let leader of G.move.leaders)
 		mark_leader_moved(leader, from, strength)
@@ -6523,13 +6600,13 @@ P.post_move_exhaustion = {
 				prompt_card(L.current_event, `Exhaust an SP in the moving force.`)
 
 				if (L.current_event === C_EXTREME_WEATHER_RU && G.move.sps[FRESH_CAVALRY] > 0) {
-					action_sp_alt(FRESH_CAVALRY, G.move.path[G.move.path.length - 1], get_move_strength(G.move.type), G.move.path[G.move.path.length - 2])
+					action_sp_alt(FRESH_CAVALRY, G.move.path[G.move.path.length - 1], get_move_strength(G.active, G.move.type), G.move.path[G.move.path.length - 2])
 					return
 				}
 
 				for (let type = 0; type < G.move.sps.length; ++type)
 					if (is_sp_type_fresh(type) && G.move.sps[type] > 0)
-						action_sp_alt(type, G.move.path[G.move.path.length - 1], get_move_strength(G.move.type), G.move.path[G.move.path.length - 2])
+						action_sp_alt(type, G.move.path[G.move.path.length - 1], get_move_strength(G.active, G.move.type), G.move.path[G.move.path.length - 2])
 			} else {
 				prompt_card(L.current_event, `No fresh SPs in the moving force.`)
 				button_confirm()
@@ -6542,11 +6619,9 @@ P.post_move_exhaustion = {
 	sp(entry) {
 		push_undo()
 		let type = decode_sp_type(entry)
-		let strength = decode_sp_strength(entry)
-		let from = decode_sp_from(entry)
-		let destination = G.move.path[G.move.path.length - 1]
 
-		exhaust_sp(G.active, destination, type, 1, true, true, strength, from, has_battle(destination))
+		exhaust_sp_entry(entry, 1, true)
+
 
 		log()
 		log(`${format_card(L.current_event)}`)
@@ -7013,15 +7088,8 @@ P.evade_pursuit_exhaustion = {
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
-		let strength = decode_sp_strength(entry)
-		let from = decode_sp_from(entry)
-
-		battle_exhaust_sp(L.evader, L.area, type, strength, from)
+		exhaust_sp_entry(entry)
 		L.has_assigned_exhaustion = true
-
-		map_get(map_get(G.move.sps, from), strength)[type]--
-		map_get(map_get(G.move.sps, from), strength)[type + 1]++
 	},
 	next() {
 		push_undo()
@@ -7430,7 +7498,7 @@ function add_attacker_to_battle(who, from, area, move_type, leaders, sps) {
 	if (!has_battle(area)) init_battle_entry(area)
 
 	let battle = get_battle_entry(area, null)
-	let strength = get_move_strength(move_type)
+	let strength = get_move_strength(who, move_type)
 
 	if (battle.defender?.who && battle.defender.who === who)
 		throw new Error(`Same side cannot be attacker and defender in battle!`)
@@ -7482,7 +7550,7 @@ function add_defender_to_battle(who, from, area, move_type, leaders, sps) {
 	if (!has_battle(area)) init_battle_entry(area)
 
 	let battle = get_battle_entry(area, null)
-	let strength = get_move_strength(move_type)
+	let strength = get_move_strength(who, move_type)
 
 	if (battle.attacker?.who && battle.attacker.who === who)
 		throw new Error(`Same side cannot be attacker and defender in battle!`)
@@ -8477,30 +8545,6 @@ function get_all_exhausted_sp_types(who, area) {
 	return get_sp_types_at_area(who, area).filter(type => is_sp_type_exhausted(type))
 }
 
-function exhaust_sp(who, area, type, num = 1, update_move = false, update_moved = false, strength = FULL_STRENGTH, from = POOL, update_battles = false) {
-	if (!is_sp_type_fresh(type))
-		return
-
-	remove_sp(who, area, type, num)
-	add_sp(who, area, type + 1, num)
-
-	if (update_move) {
-		G.move.sps[type]--
-		G.move.sps[type + 1]++
-	}
-
-	if (update_moved)
-		update_moved_exhaust(area, who, from, strength, type, num)
-
-	if (update_battles) {
-		let bforce = get_player_battle_data(who, area).forces.find((f) => {
-			return f.sps[type] > 0 && f.from === from && f.strength === strength
-		})
-		bforce.sps[type]--
-		bforce.sps[type + 1]++
-	}
-}
-
 function eliminate_sp_new(who, area, type, num = 1, update_move = false, update_moved = false, strength = FULL_STRENGTH, from = POOL, update_battles = false) {
 	let was_friendly_controlled = is_friendly_controlled(who, area)
 
@@ -8545,10 +8589,6 @@ function count_num_sps_of_type(who, type, area) {
 			count += decode_sp_num(entry)
 	}
 	return count
-}
-
-function battle_exhaust_sp(who, area, type, strength, from, num = 1) {
-	exhaust_sp(who, area, type, num, false, false, strength, from, true)
 }
 
 function battle_eliminate_sp(who, area, type, strength, from, num = 1) {
@@ -8733,26 +8773,17 @@ P.assign_losses = {
 
 				if (count_num_cavalry(R, G.current_battle) > 0) {
 					prompt_card(card, `Assign a loss to a Cavalry SP.`)
-					get_player_battle_data(R, G.current_battle).forces.forEach(force => {
-						if (force.sps[FRESH_CAVALRY] > 0)
-							action_sp_alt(FRESH_CAVALRY, G.current_battle, force.strength, force.from)
-					})
+					// First battle loss is always an exhaustion
+					generate_exhaust_actions(R, G.current_battle, is_cavalry)
 				} else {
 					prompt_card(card, `No Cavalry SPs at ${format_area(G.current_battle)}.`)
 					button_next()
 				}
 			},
 			on_sp(entry) {
-				push_undo()
-				let type = decode_sp_type(entry)
-				let strength = decode_sp_strength(entry)
-				let from = decode_sp_from(entry)
-
-				// First battle loss is always an exhaustion
-				battle_exhaust_sp(R, G.current_battle, type, strength, from)
+				push_local_undo(R, "exhaust", { type: decode_sp_type(entry), strength: decode_sp_strength(entry), from: decode_sp_from(entry) })
+				exhaust_sp_entry(entry)
 				++L.count[R]
-
-				push_local_undo(R, "exhaust", { type, strength, from })
 				advance_local_state(R)
 			},
 			on_next() {
@@ -8780,16 +8811,18 @@ P.assign_losses = {
 					}
 					// Players must alternate between exhausting and eliminating a fresh SP, starting with exhausting
 					else {
-						if (L.count[R] % 2 === 0)
+						if (L.count[R] % 2 === 0) {
 							V.prompt = `Select a fresh SP to exhaust.`
-						else
+							generate_exhaust_actions(R, G.current_battle)
+						} else {
 							V.prompt = `Select a fresh SP to eliminate.`
-						get_player_battle_data(R, G.current_battle).forces.forEach(force => {
-							for (let type = 0; type < force.sps.length; ++type) {
-								if (is_sp_type_fresh(type) && force.sps[type] > 0)
-									action_sp_alt(type, G.current_battle, force.strength, force.from)
-							}
-						})
+							get_player_battle_data(R, G.current_battle).forces.forEach(force => {
+								for (let type = 0; type < force.sps.length; ++type) {
+									if (is_sp_type_fresh(type) && force.sps[type] > 0)
+										action_sp_alt(type, G.current_battle, force.strength, force.from)
+								}
+							})
+						}
 					}
 				} else {
 					// A stack consisting solely of exhausted SPs is eliminated if in an area with fresh enemy SPs.
@@ -8820,7 +8853,7 @@ P.assign_losses = {
 					L.has_assigned_cavalry_loss[R] = false
 
 				if (L.count[R] % 2 === 0) {
-					battle_exhaust_sp(R, G.current_battle, type, strength, from)
+					exhaust_sp_entry(entry)
 					push_local_undo(R, "exhaust", { type, strength, from })
 					// Stoic Infantry: Track how many Russian infantry were eliminated
 					if (is_battle_event_currently_active(C_STOIC_INFANTRY) && R === RUSSIA && is_infantry(type))
@@ -8897,7 +8930,7 @@ P.assign_losses = {
 			G.vp -= get_leader_vp(undo.info.leader)
 			return
 		case "rally":
-			battle_exhaust_sp(R, G.current_battle, undo.info.type - 1, undo.info.strength, undo.info.from)
+			exhaust_sp(R, G.current_battle, get_fresh_version(undo.info.type), undo.info.strength, undo.info.from)
 			return
 		case "exhaust":
 			rally_sp(R, G.current_battle, get_exhausted_version(undo.info.type), 1, undo.info.strength, undo.info.from)
@@ -9435,18 +9468,14 @@ P.exhaust_half_sps = {
 			button_next()
 		} else {
 			V.prompt = `No valid retreat destination: exhaust half of the fresh SPs at ${format_area(G.current_battle)}.`
-			get_player_battle_data(G.active, G.current_battle).forces.forEach(force => {
-				for (let type of get_all_fresh_sp_types(G.active, G.current_battle))
-					action_sp_alt(type, G.current_battle, force.strength, force.from)
-			})
+			generate_exhaust_actions(G.active, G.current_battle)
 		}
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
-		let strength = decode_sp_strength(entry)
-		let from = decode_sp_from(entry)
-		battle_exhaust_sp(G.active, G.current_battle, type, strength, from)
+		const type = decode_sp_type(entry)
+		exhaust_sp_entry(entry)
+
 		if (!map_has(L.exhausted, type))
 			map_set(L.exhausted, type, 1)
 		else
@@ -10418,10 +10447,7 @@ function could_eliminate_2_sp(player, area, cavalry_loss = false) {
 }
 
 function generate_attrition_exhaustion_actions(player, area, cavalry_loss = false) {
-	get_all_fresh_sp_types(player, area).forEach(type => {
-		if (!cavalry_loss || (is_cavalry(type) || is_cossack(type)))
-			action_sp_alt(type, area)
-	})
+	generate_exhaust_actions(player, area, cavalry_loss ? t => is_cavalry(t) || is_cossack(t) : FRESH_SP_TYPES)
 }
 
 function generate_attrition_elimination_actions(player, area, cavalry_loss = false) {
@@ -10454,7 +10480,7 @@ P.assign_attrition_losses = {
 
 		// i.e. is an exhaustion
 		if (is_sp_type_fresh(type)) {
-			exhaust_sp(G.active, L.area, type)
+			exhaust_sp_entry(entry)
 			--G.attrition_data.num_losses_remaining
 
 			if (!map_has(G.attrition_data.previously_exhausted, type))
@@ -11854,6 +11880,7 @@ P.the_finland_corps = {
 		log("Placed")
 		L.areas = get_finland_corps_destinations()
 		L.sps_to_place = 3
+		L.placed = []
 	},
 	inactive: "deploy Steinheil's Finland Corps",
 	prompt() {
@@ -11864,10 +11891,17 @@ P.the_finland_corps = {
 	area(area) {
 		push_undo()
 		add_sp(RUSSIA, area, FRESH_INFANTRY, 1)
-		logi(`${format_area(area)}`)
-		logii(`1 Infantry`)
+
+		if (map_has(L.placed, area)) map_increment(L.placed, area)
+		else map_set(L.placed, area, 1)
 		if (--L.sps_to_place === 0)
 			end()
+	},
+	_end() {
+		map_for_each(L.placed, (area, num) => {
+			logi(format_area(area))
+			logii(`${num} Infantry`)
+		})
 	}
 }
 
@@ -12444,16 +12478,9 @@ P.exhausting_march_exhaust = {
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
-		let area = decode_sp_area(entry)
-		let strength = decode_sp_strength(entry)
-		let from = decode_sp_from(entry)
-
-		exhaust_sp(G.active, area, type, 1, true, true, strength, from, has_battle(area))
-
+		exhaust_sp_entry(entry, 1, true)
 		log("Exhausted")
-		logi(`1 ${get_sp_type_name(type)}`)
-
+		logi(`1 ${get_sp_type_name(decode_sp_type(entry))}`)
 		end()
 	}
 }
@@ -13123,15 +13150,13 @@ P.exhausted_horses_exhaust = {
 		V.prompt = `Exhaust a fresh Cavalry SP.`
 		if (L.areas.length <= 5)
 			V.prompt += ` (${join_array_with_or(L.areas.map(format_area))})`
-		L.areas.forEach(area => action_sp_alt(FRESH_CAVALRY, area))
+		generate_exhaust_actions(G.active, L.areas, is_cavalry)
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
-		let area = decode_sp_area(entry)
-		exhaust_sp(FRANCE, area, type)
-		logi(`${format_area(area)}`)
-		log_masked(FRANCE, format_ii(`1 ${get_sp_type_name(type)}`), format_ii(`1 fresh SP`))
+		exhaust_sp_entry(entry)
+		logi(`${format_area(decode_sp_area(entry))}`)
+		log_masked(FRANCE, format_ii(`1 ${get_sp_type_name(decode_sp_type(entry))}`), format_ii(`1 fresh SP`))
 		end()
 	}
 }
@@ -13869,18 +13894,11 @@ P.murats_cavalry_exhaust = {
 	},
 	prompt() {
 		prompt_card(C_MURATS_CAVALRY, `Exhaust a fresh Cavalry SP at ${format_area(G.current_battle)}.`)
-		get_player_battle_data(G.active, G.current_battle).forces.forEach(force => {
-			if (force.sps[FRESH_CAVALRY] > 0)
-				action_sp_alt(FRESH_CAVALRY, G.current_battle, force.strength, force.from)
-		})
+		generate_exhaust_actions(G.active, G.current_battle, is_cavalry)
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
-		let strength = decode_sp_strength(entry)
-		let from = decode_sp_from(entry)
-
-		battle_exhaust_sp(R, G.current_battle, type, strength, from)
+		exhaust_sp_entry(entry)
 		logii(`1 Cavalry`)
 		goto("event_done", { card: C_MURATS_CAVALRY })
 	}
@@ -14659,7 +14677,7 @@ P.much_needed_victuals = {
 			}
 		} else if (L.num_sps_rallied < 2 && count_num_exhausted_infantry(FRANCE, L.selected_area) > 0) {
 			V.prompt = `Rally ${2 - L.num_sps_rallied} exhausted Infantry at ${format_area(L.selected_area)}.`
-			generate_rally_actions(G.active, L.selected_area)
+			generate_rally_actions(G.active, L.selected_area, is_exhausted_infantry)
 		} else {
 			prompt_card(C_MUCH_NEEDED_VICTUALS, `Attrition will not be checked at ${format_area(L.selected_area)}`)
 			button_confirm()
@@ -14778,13 +14796,8 @@ P.apply_tough_rearguard = {
 	inactive() { return `assign exhaustion from ${format_card(C_TOUGH_REARGUARD)}` },
 	prompt() {
 		if (has_fresh_sp(G.active, L.area)) {
-			prompt_card(C_TOUGH_REARGUARD, `Exhaust an SP at ${format_area(L.area)}.`)
-			get_player_battle_data(G.active, L.area).forces.forEach(force => {
-				for (let type = 0; type < NUM_TROOP_TYPES; ++type) {
-					if (force.sps[type] > 0)
-						action_sp_alt(type, L.area, force.strength, force.from)
-				}
-			})
+			prompt_card(C_TOUGH_REARGUARD, `Exhaust a fresh SP at ${format_area(L.area)}.`)
+			generate_exhaust_actions(G.active, L.area)
 		} else {
 			prompt_card(C_TOUGH_REARGUARD, `No fresh SPs to exhaust.`)
 			button_confirm()
@@ -14792,10 +14805,9 @@ P.apply_tough_rearguard = {
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
-		exhaust_sp(G.active, L.area, type, 1, false, true, decode_sp_strength(entry), decode_sp_from(entry), true)
+		exhaust_sp_entry(entry)
 		logi("Exhausted")
-		log_masked(RUSSIA, format_ii(`1 ${get_sp_type_name(type)}`, format_ii(`1 Russian SP`)))
+		log_masked(RUSSIA, format_ii(`1 ${get_sp_type_name(decode_sp_type(entry))}`, format_ii(`1 Russian SP`)))
 		goto("event_done", { card: C_TOUGH_REARGUARD })
 	},
 	confirm() {
