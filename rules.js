@@ -2974,6 +2974,7 @@ P.winter_shift_initiative = function() {
 	end()
 }
 
+
 P.free_replacements = {
 	_begin() {
 		log_h2("Free Replacements")
@@ -15182,6 +15183,34 @@ function assert_off_map_pieces() {
 // push_undo(), clear_undo(): Modified to support retroactive Exhausting March.
 // map_get(): Added a null fallback value for the 'missing' parameter
 
+function is_multithreaded() {
+	return Array.isArray(L) && L.length > 0
+}
+
+function current_state_name(R) {
+	return is_multithreaded() ? L[R].P : L.P
+}
+
+function fork() {
+	if (is_multithreaded())
+		throw new Error(`Already forked: cannot fork again!`)
+	G.L = L = Array.from( { length: ROLES.length }, () => object_copy(L))
+}
+
+function can_join() {
+	return Array.isArray(G.active) && G.active.length === 0
+	&& Array.isArray(L) && L.length > 0
+	&& L.every(frame => (frame.P === L[0].P) && !object_diff(frame.L, L[0].L))
+}
+
+function join(result) {
+	if (can_join()) {
+		G.L = L = { P: L[0].P, I: 0, L: L[0].L }
+	}
+	if (result !== undefined)
+		end(result)
+}
+
 function log(s) {
 	if (s === undefined) {
 		if (G.log.length > 0 && G.log[G.log.length - 1] !== "")
@@ -15221,26 +15250,40 @@ function call_or_goto(pred, name, env) {
 }
 
 function call(name, env) {
-	G.L = L = { ...env, P: name, I: 0, L: L }
+	if (is_multithreaded()) {
+		G.L[R] = L[R] = { ...env, P: name, I: 0, L: L }
+	} else {
+		G.L = L = { ...env, P: name, I: 0, L: L }
+	}
 	P[name]?._begin?.()
 }
 
 function goto(name, env) {
-	P[L.P]?._end?.()
-	G.L = L = { ...env, P: name, I: 0, L: L.L }
+	P[current_state_name(R)]?._end?.()
+	if (is_multithreaded()) {
+		G.L[R] = L[R] = { ...env, P: name, I: 0, L: L[R].L }
+	} else {
+		G.L = L = { ...env, P: name, I: 0, L: L.L }
+	}
 	P[name]?._begin?.()
 }
 
 function end(result) {
-	P[L.P]?._end?.()
-	G.L = L = L.L
-	if (result !== undefined)
-		L.$ = result
-	P[L.P]?._resume?.()
+	P[current_state_name(R)]?._end?.()
+	if (is_multithreaded()) {
+		G.L[R] = L[R] = L[R].L
+		if (result !== undefined)
+			L[R].$ = result
+	} else {
+		G.L = L = L.L
+		if (result !== undefined)
+			L.$ = result
+	}
+	P[current_state_name(R)]?._resume?.()
 }
 
 function resume() {
-	P[L.P]?._resume?.()
+	P[current_state_name(R)]?._resume?.()
 }
 
 exports.roles ??= ROLES
@@ -15295,10 +15338,10 @@ exports.view = function (state, role) {
 		V.actions = {}
 
 		try {
-			if (P[L.P])
-				P[L.P].prompt()
+			if (P[current_state_name(R)])
+				P[current_state_name(R)].prompt()
 			else
-				V.prompt = "TODO: " + L.P
+				V.prompt = "TODO: " + current_state_name(R)
 		} catch (x) {
 			console.error(x)
 			V.prompt = x.toString()
@@ -15316,7 +15359,7 @@ exports.view = function (state, role) {
 		if (G.active === "None") {
 			V.prompt = L.message
 		} else {
-			var inactive = P[L.P]?.inactive
+			var inactive = P[current_state_name(R)]?.inactive
 			if (inactive) {
 				// NOTE: Modified to support functions since some multi-active states can involve players playing events.
 				if (typeof inactive === "function") {
@@ -15332,7 +15375,6 @@ exports.view = function (state, role) {
 					else
 						V.prompt = `Waiting for ${G.active} to ${inactive}.`
 				}
-
 			} else {
 				if (Array.isArray(G.active))
 					V.prompt = `Waiting for ${G.active.join(" and ")}.`
@@ -15355,7 +15397,7 @@ exports.action = function (state, role, action, argument) {
 
 	_load()
 
-	var this_state = P[L.P]
+	var this_state = P[current_state_name(R)]
 	if (this_state && typeof this_state[action] === "function") {
 		this_state[action](argument)
 		_run()
@@ -15430,7 +15472,7 @@ function _save() {
 
 function _run() {
 	for (var i = 0; i < 1000 && L; ++i) {
-		var prog = P[L.P]
+		var prog = P[current_state_name(R)]
 		if (typeof prog === "function") {
 			prog()
 		} else if (Array.isArray(prog)) {
@@ -15438,7 +15480,7 @@ function _run() {
 				try {
 					prog[L.I++]()
 				} catch (err) {
-					err.message += "\n\tat P." + L.P + ":" + L.I
+					err.message += "\n\tat P." + current_state_name(R) + ":" + L.I
 					throw err
 				}
 			} else {
@@ -15655,6 +15697,14 @@ function _parse(text) {
 				throw new Error("invalid if - " + line.join(" "))
 			}
 			break
+
+		case "fork":
+			emit("fork()")
+			return
+
+		case "join":
+			emit("join(" + line[1] + ")")
+			return
 
 		default:
 			throw new Error("unknown command - " + line.join(" "))
