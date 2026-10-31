@@ -2766,7 +2766,6 @@ P.setup_hand = {
 			// Scenario 5 special rule: Holy Mother Russia is placed on top of the Russian deck
 			if (L.scenario === BATTLE_OF_SMOLENSK_CAMPAIGN_START)
 				place_card_at_the_top_of_the_deck(C_HOLY_MOTHER_RUSSIA_RU)
-			place_card_at_the_top_of_the_deck(C_COMMAND_FRICTION)
 			goto("main")
 		}
 	}
@@ -3498,7 +3497,6 @@ function count_num_exhausted_sps_on_map(player, areas = map_keys(G.sps)) {
 
 P.draw_card_to_hand = {
 	_begin() {
-		// NOTE: Set G.active to whoever needs to draw a card before calling (since we don't want to define must-play events in different places)
 		log_h2("Draw a Card")
 
 		// So that the forking works as intended.
@@ -3543,7 +3541,6 @@ P.draw_card_to_hand = {
 		}
 	},
 	_resume() {
-		add_persistent_event(L[R].drawn_card)
 		this._finish()
 	},
 	_finish() {
@@ -4055,7 +4052,7 @@ P.place_orders = script(`
 
 	set G.active RUSSIA
 	if (is_event_active(C_POOR_COMMUNICATIONS)) {
-		call poor_communications
+		call poor_communications_remove
 	}
 	goto end_place_orders_events
 `)
@@ -12459,6 +12456,15 @@ P.fierce_fighting_ru = function() {
 }
 
 // RU #42: Command Friction
+function get_areas_with_multiple_russian_leaders() {
+	for (let area of G.leaders.slice(first_russia_leader, last_russia_leader + 1)) {
+		if (area !== OUT_OF_PLAY && area !== POOL) {
+			if (array_count(G.leaders.slice(first_russia_leader, last_russia_leader + 1), loc => loc === area) >= 2)
+				set_add(L.areas_with_multiple_russian_leaders, area)
+		}
+	}
+}
+
 P.command_friction = function() {
 	goto("confirm_event", {
 		card: C_COMMAND_FRICTION,
@@ -12472,7 +12478,8 @@ P.command_friction = function() {
 				prompt: `Russia must discard a card to place orders there.`,
 				log_text: `Russia must discard a card to place orders there.`
 			}
-		]
+		],
+		persistent: true
 	})
 }
 
@@ -12480,13 +12487,7 @@ P.command_friction_designate = {
 	_begin() {
 		log_card(C_COMMAND_FRICTION)
 		L.selected_area = -1
-
-		L.areas_with_multiple_russian_leaders = []
-		for (let area of G.leaders.slice(first_russia_leader, last_russia_leader + 1)) {
-			if (area !== OUT_OF_PLAY && area !== POOL)
-				if (array_count(G.leaders.slice(first_russia_leader, last_russia_leader + 1), loc => loc === area) >= 2)
-					set_add(L.areas_with_multiple_russian_leaders, area)
-		}
+		L.areas_with_multiple_russian_leaders = get_areas_with_multiple_russian_leaders()
 	},
 	inactive: "start a fight",
 	prompt() {
@@ -12512,7 +12513,7 @@ P.command_friction_designate = {
 		end()
 	},
 	confirm() {
-		log(`France selected ${format_area(L.selected_area)}.`)
+		logi(`France designated ${format_area(L.selected_area)}.`)
 		add_persistent_event(C_COMMAND_FRICTION, { area: L.selected_area })
 		end()
 	},
@@ -12740,9 +12741,31 @@ P.disease_and_starvation_select_losses = {
 	}
 }
 
-// RU #45 Poor Logistics (must-play event) -- see draw_card_to_hand
+// RU #45 Poor Logistics
+P.poor_logistics = function() {
+	goto("confirm_event", {
+		card: C_POOR_LOGISTICS,
+		inactive: `deal with their tenous supply lines`,
+		sequence: [{
+			prompt: "This turn, Russia may not use Place Depot orders.",
+			log_text: "Russia cannot use Place Depot orders this turn."
+		}],
+		persistent: true
+	})
+}
 
-// RU #46 Devastated Countryside (must-play event) -- see draw_card_to_hand
+// RU #46 Devastated Countryside
+P.devastated_countryside = function() {
+	goto("confirm_event", {
+		card: C_DEVASTATED_LANDSCAPE,
+		inactive: `scorch the land`,
+		sequence: [{
+			prompt: "The effect of Devastation markers is doubled for both sides this turn.",
+			log_text: "This turn, the effect of Devastation markers is doubled."
+		}],
+		persistent: true
+	})
+}
 
 // RU #47: Treacherous Allies
 // Used in treacherous_allies script
@@ -13060,7 +13083,34 @@ P.unreliable_germans = function() {
 	})
 }
 
-// RU #52 Barclay de Tolly Resigns (must-play event) -- see draw_card_to_hand
+// RU #52 Barclay de Tolly Resigns
+P.barclay_de_tolly_resigns = {
+	_begin() {
+		B.does_he_resign = is_leader_on_map(L_KUTUZOV) && is_leader_on_map(L_DE_TOLLY)
+	},
+	inactive() { return B.does_he_resign ? "accept de Tolly's resignation" : `resolve ${format_card(C_BARCLAY_DE_TOLLY_RESIGNS)}` },
+	prompt() {
+		if (B.does_he_resign) {
+			prompt_card(C_BARCLAY_DE_TOLLY_RESIGNS, `Remove ${format_leader(L_DE_TOLLY)} from ${format_area(get_leader_location(L_DE_TOLLY))}.`)
+			action_leader(L_DE_TOLLY)
+			button_confirm()
+		} else {
+			prompt_card(C_BARCLAY_DE_TOLLY_RESIGNS, `${format_leader(!is_leader_on_map(L_KUTUZOV) ? L_KUTUZOV : L_DE_TOLLY)} is not on map – no effect.`)
+			button_pass()
+		}
+	},
+	confirm() { this.leader() },
+	leader(_) {
+		log(`Removed from ${format_area(get_leader_location(L_DE_TOLLY))}`)
+		logi(`${format_leader(L_DE_TOLLY)}`)
+		move_leader(L_DE_TOLLY, POOL)
+		end()
+	},
+	pass() {
+		log("No effect.")
+		end()
+	}
+}
 
 // RU #53: Aggressive Cossacks
 E.aggressive_cossacks = function() { return get_who_has_initiative() === RUSSIA }
@@ -13532,12 +13582,24 @@ function get_areas_with_french_orders() {
 	return areas
 }
 
-P.poor_communications = {
+P.poor_communications = function() {
+	goto("confirm_event", {
+		card: C_POOR_COMMUNICATIONS,
+		inactive: `lose their messages to the wind`,
+		sequence: [{
+			prompt: "At the end of the Place Orders phase, Russia may designate a placed French order to remove.",
+			log_text: "Russia may remove a French order after placing orders."
+		}],
+		persistent: true
+	})
+}
+
+P.poor_communications_remove = {
 	_begin() {
 		L.selected_area = -1
-		card_box_begin(C_POOR_COMMUNICATIONS)
+		log_card(C_POOR_COMMUNICATIONS)
 	},
-	inactive: `resolve CN76`,
+	inactive: `remove a placed French order`,
 	prompt() {
 		if (L.selected_area === -1) {
 			let areas = get_areas_with_french_orders()
@@ -13565,8 +13627,8 @@ P.poor_communications = {
 		let orders_at_area = get_orders_at_area(FRANCE, L.selected_area)
 		let order_to_remove = random(orders_at_area.length)
 		remove_order(orders_at_area[order_to_remove])
-		log(`Removed from ${format_area(L.selected_area)}`)
-		log_masked(FRANCE, format_i(`1 ${get_order_name(orders_at_area[order_to_remove])}`), format_i(`1 random order`))
+		logi(`Removed from ${format_area(L.selected_area)}`)
+		log_masked(FRANCE, format_ii(`1 ${get_order_name(orders_at_area[order_to_remove])}`), format_ii(`1 random order`))
 		goto("event_done", { card: C_POOR_COMMUNICATIONS })
 	},
 	done() {
@@ -13596,7 +13658,31 @@ P.poor_coordination_fr = function() {
 	})
 }
 
-// FR #24: Jérôme Goes Home -- see draw_card_to_hand (must-play event)
+// FR #24: Jérôme Goes Home
+P.jerome_goes_home = {
+	inactive: `send Jérôme back to Germany`,
+	prompt() {
+		if (is_leader_on_map(L_JEROME)) {
+			prompt_card(C_JEROME_GOES_HOME, `Remove ${format_leader(L_JEROME)} from ${format_area(get_leader_location(L_JEROME))}`)
+			action_leader(L_JEROME)
+			button_confirm()
+		} else {
+			prompt_card(C_JEROME_GOES_HOME, `${format_leader(L_JEROME)} is not on map – no effect.`)
+			button_pass()
+		}
+	},
+	confirm() { this.leader() },
+	leader() {
+		log(`Removed from ${format_area(get_leader_location(L_JEROME))}`)
+		logi(format_leader(L_JEROME))
+		move_leader(L_JEROME, POOL)
+		end()
+	},
+	pass() {
+		log("No effect")
+		end()
+	}
+}
 
 // FR #25: Good Leadership
 E.good_leadership = function() { return map_keys(G.sps).some(area => area !== FRENCH_CASUALTIES && has_french_sp(area)) }
@@ -14075,20 +14161,70 @@ P.inferior_gunpowder = function() {
 
 // FR #40 Vulnerable Supply Lines (must-play event) -- see draw_card_to_hand
 
-// FR #41 Freezing Weather (must-play event) -- see draw_card_to_hand
+// FR #41 Freezing Weather
+P.freezing_weather = function() {
+	goto("confirm_event", {
+		card: C_FREEZING_WEATHER,
+		inactive: `freeze in the Russian winter`,
+		sequence: [
+			{
+				prompt: `France may not use Place Depot or Forage orders this turn.`,
+				log_text: `France may not use Place Depot or Forage orders.`
+			},
+			{
+				prompt: `All French forces have a maximum move of 1 this turn, and fight as if under Forced March orders.`,
+				log_text: `All French forces have move 1, and fight as if under Forced March orders.`
+			}
+
+		],
+		persistent: true
+	})
+}
+
 P.log_freezing_weather = function() {
 	log_card(C_FREEZING_WEATHER)
 	logi("France may not execute Forage orders.")
 	end()
 }
 
-// FR #42 Extreme Weather (must-play event) -- see draw_card_to_hand
+// FR #42 Extreme Weather
+P.extreme_weather_fr = function() {
+	goto("confirm_event", {
+		card: C_EXTREME_WEATHER_FR,
+		inactive: `face the Russian winter`,
+		sequence: [
+			{
+				prompt: "This turn, both sides have -2 orders.",
+				log_text: "Both sides -2 orders."
+			},
+			{
+				prompt: "This, AND the next, turn neither side may place Forced March orders.",
+				log_text: "Neither side may place Forced March orders for this AND the next turn."
+			},
+			{
+				prompt: "1 SP in each force that uses March orders is exhausted.",
+				log_text: "1 SP in each Marching force is exhausted."
+			}
+		],
+		persistent: true
+	})
+}
 
-// FR #43 Logistics Collapse -- see draw_card_to_hand
+// FR #43 Logistics Collapse
+P.logistics_collapse = function() {
+	goto("confirm_event", {
+		card: C_LOGISTICS_COLLAPSE,
+		inactive: `face total collapse of their supply lines`,
+		sequence: [{
+			prompt: `For the rest of the game, France must discard a card to execute a Place Depot order.`,
+			log_text: `For the rest of the game, France must discard a card to execute a Place Depot order.`
+		}],
+		persistent: true
+	})
+}
+
 P.logistics_collapse_discard_card = {
-	_begin() {
-		log_card(C_LOGISTICS_COLLAPSE)
-	},
+	_begin() { log_card(C_LOGISTICS_COLLAPSE) },
 	prompt() {
 		prompt_card(C_LOGISTICS_COLLAPSE, `Discard a card from your hand to execute next Place Depot order.`)
 		get_non_dummy_cards_in_hand(G.active).forEach(action_card)
