@@ -1079,20 +1079,6 @@ function get_areas_with_depots(who) {
 	return areas
 }
 
-function count_num_french_depots_on_map() {
-	return array_count(get_depots(FRANCE), area => !((area === POOL) || (area === OUT_OF_PLAY)))
-}
-
-function get_all_unoccupied_depots(who) {
-	let unoccupied_depots = []
-	for (let area of get_areas_with_depots(who)) {
-		if (!has_sp_in_area(FRANCE, area)) {
-			set_add(unoccupied_depots, area)
-		}
-	}
-	return unoccupied_depots
-}
-
 function has_enemy_depot(who, area) {
 	return get_depots(enemy(who)).some(a => (a === area))
 }
@@ -3581,10 +3567,15 @@ P.draw_card_to_hand = {
 		if (get_deck(R).length === 0)
 			reshuffle_deck(R)
 		L.drawn_card = draw_card(R)
+		if (L.drawn_card === C_HOLY_MOTHER_RUSSIA_RU)
+			L.holy_mother_russia_ru = true
 	},
 	confirm() {
 		if (is_must_play_event(L.drawn_card)) {
-			call("event", { card: L.drawn_card })
+			if (L.drawn_card !== C_HOLY_MOTHER_RUSSIA_RU)
+				call("event", { card: L.drawn_card })
+			else
+				call("holy_mother_russia_ru")
 		} else {
 			this._finish()
 		}
@@ -3595,13 +3586,17 @@ P.draw_card_to_hand = {
 	_finish() {
 		if (--L.num_cards_to_draw > 0) {
 			L.drawn_card = -1
-		} else if (L.phase) {
-			set_delete(G.active, R)
-			if (G.active.length === 0) {
-				join()
-			}
 		} else {
-			end()
+			if (L.phase)
+				set_delete(G.active, R)
+			if (!L.phase || G.active.length === 0) {
+				const holy_mother_russia_ru = G.L[RUSSIA].holy_mother_russia_ru
+				join()
+				if (holy_mother_russia_ru)
+					goto("holy_mother_russia_ru_designate")
+				else
+					end()
+			}
 		}
 	}
 }
@@ -10856,7 +10851,62 @@ P.scorched_earth_increase_devastation = {
 	}
 }
 
-// RU #11 Holy Mother Russia (must-play event): See draw_card_to_hand
+// RU #11 Holy Mother Russia
+P.holy_mother_russia_ru = script(`
+	call holy_mother_russia_ru_confirm_orders
+	goto holy_mother_russia_ru_confirm_designation
+`)
+
+P.holy_mother_russia_ru_confirm_orders = {
+	prompt() {
+		prompt_card(C_HOLY_MOTHER_RUSSIA_RU, "This turn, Russia receives 2 additional orders.")
+		button_confirm()
+	},
+	confirm() {
+		end()
+	}
+}
+
+P.holy_mother_russia_ru_confirm_designation = {
+	prompt() {
+		prompt_card(C_HOLY_MOTHER_RUSSIA_RU, `France will designate a Russian-controlled Key City.`)
+		button_confirm()
+	},
+	confirm() {
+		discard_or_remove_card(C_HOLY_MOTHER_RUSSIA_RU)
+		end()
+	}
+}
+
+P.holy_mother_russia_ru_designate = {
+	_begin() {
+		card_box_begin(C_HOLY_MOTHER_RUSSIA_RU)
+		log(`Russia +2 orders this turn.`)
+		L.selected_area = -1
+		G.active = FRANCE
+	},
+	inactive() { return `designate a key for ${format_card(C_HOLY_MOTHER_RUSSIA_RU)}` },
+	prompt() {
+		if (L.selected_area === -1) {
+			prompt_card(C_HOLY_MOTHER_RUSSIA_RU, `Designate a Russian-controlled Key City. The side controlling it at the end of the turn gains +1 VP.`)
+			filter_areas(area => is_key_city(area) && is_ru_controlled(area))
+				.forEach(action_area)
+		} else {
+			prompt_card(C_HOLY_MOTHER_RUSSIA_RU, `You designated ${format_area(L.selected_area)}`)
+			button_confirm()
+		}
+	},
+	area(area) {
+		push_undo()
+		L.selected_area = area
+		log(`The side controlling ${format_area(L.selected_area)} at the end of the turn gains +1 VP.`)
+	},
+	confirm() {
+		add_persistent_event(C_HOLY_MOTHER_RUSSIA_RU, { key: L.selected_area })
+		card_box_end()
+		end()
+	}
+}
 
 // RU #12: Outflanking
 // FR #6: Outflanking
@@ -13969,7 +14019,83 @@ P.inferior_gunpowder = function() {
 
 // FR #39 Chaos in the Rear Areas (must-play event) -- see draw_card_to_hand
 
-// FR #40 Vulnerable Supply Lines (must-play event) -- see draw_card_to_hand
+// FR #40 Vulnerable Supply Lines
+// Called in P.vulnerable_supply_lines script
+// eslint-disable-next-line no-unused-vars
+function count_num_depots_on_map(who) {
+	let count = 0
+	for (let depot = get_first_depot(who); depot <= get_last_depot(who); ++depot)
+		if (get_depot_location(depot) !== POOL && get_depot_location !== OUT_OF_PLAY)
+			++count
+	return count
+}
+
+function get_all_unoccupied_depots(who) {
+	let unoccupied_depots = []
+	for (let area of get_areas_with_depots(who)) {
+		if (!has_sp_in_area(FRANCE, area)) {
+			set_add(unoccupied_depots, area)
+		}
+	}
+	return unoccupied_depots
+}
+
+P.vulnerable_supply_lines = script(`
+	if (count_num_depots_on_map(FRANCE) >= 4) {
+		call vulnerable_supply_lines_discard_card
+		call vulnerable_supply_lines_remove_unoccupied_depots
+	}
+	goto event_done { card: C_VULNERABLE_SUPPLY_LINES }
+`)
+
+P.vulnerable_supply_lines_discard_card = {
+	_begin() { log("Discarded") },
+	prompt() {
+		if (has_card_in_hand(FRANCE)) {
+			prompt_card(C_VULNERABLE_SUPPLY_LINES, `Discard a card from your hand.`)
+			get_non_dummy_cards_in_hand(FRANCE).forEach(action_card)
+		} else {
+			prompt_card(C_VULNERABLE_SUPPLY_LINES, `No cards in hand to discard.`)
+			button_confirm()
+		}
+	},
+	card(card) {
+		discard_card(card)
+		logi(format_card(card))
+		end()
+	},
+	confirm() {
+		logi("Nothing")
+		end()
+	}
+}
+
+P.vulnerable_supply_lines_remove_unoccupied_depots = {
+	_begin() {
+		L.depots_to_remove = get_all_unoccupied_depots(FRANCE)
+	},
+	prompt() {
+		if (L.depots_to_remove.length > 0) {
+			prompt_card(C_VULNERABLE_SUPPLY_LINES, `Remove depots at ${join_array_with_and(L.depots_to_remove.map(format_area))}`)
+			L.depots_to_remove.forEach(area => action_depot(find_depot_at_location(FRANCE, area)))
+		} else {
+			prompt_card(C_VULNERABLE_SUPPLY_LINES, `No unoccupied depots on map.`)
+			button_confirm()
+		}
+	},
+	depot(depot) {
+		const area = get_depot_location(depot)
+		remove_depot(depot, area)
+		logi(format_area(area))
+		set_delete(L.depots_to_remove, area)
+		if (L.depots_to_remove.length === 0)
+			end()
+	},
+	confirm() {
+		logi("Nothing")
+		end()
+	}
+}
 
 // FR #41 Freezing Weather
 P.freezing_weather = function() {
@@ -14055,7 +14181,66 @@ P.logistics_collapse_discard_card = {
 	}
 }
 
-// FR #44 Chaotic Food Distribution -- see draw_card_to_hand
+// FR #44 Chaotic Food Distribution
+P.chaotic_food_distribution = script(`
+	call chaotic_food_distribution_remove_depot
+	if (L.$ > -1) {
+		call chaotic_food_distribution_rally { area: L.$ }
+		call draw_card_to_hand
+	}
+	goto event_done { card: C_CHAOTIC_FOOD_DISTRIBUTION }
+`)
+
+P.chaotic_food_distribution_remove_depot = {
+	_begin() {
+		log("Removed depot")
+		L.area = -1
+	},
+	prompt() {
+		if (has_depot_on_map(FRANCE)) {
+			const areas_with_depots = get_areas_with_depots(FRANCE)
+			prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, `Remove a Depot marker from ${join_array_with_or(areas_with_depots.map(format_area))}`)
+			areas_with_depots.forEach(area => action_depot(find_depot_at_location(FRANCE, area)))
+		} else {
+			prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, `No friendly Depot markers on map to remove.`)
+			button_confirm()
+		}
+	},
+	depot(depot) {
+		L.area = get_depot_location(depot)
+		remove_depot(depot, L.area)
+		logi(format_area(L.area))
+		end()
+	},
+	confirm() {
+		logi("Nothing")
+		end()
+	},
+	_end() { L.L.$ = L.area },
+}
+
+P.chaotic_food_distribution_rally = {
+	// L.area
+	_begin() { log("Rallied") },
+	prompt() {
+		if (has_exhausted_sp(FRANCE, L.area)) {
+			prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, `Rally an exhausted SP at ${format_area(L.area)}.`)
+			generate_rally_actions(FRANCE, L.area, EXHAUSTED_SP_TYPES)
+		} else {
+			prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, `No exhausted SPs at ${format_area(L.area)} to Rally.`)
+			button_pass()
+		}
+	},
+	sp(entry) {
+		rally_sp_entry(entry)
+		log_masked(FRANCE, format_i(`1 ${get_sp_type_name(decode_sp_type(entry))}`, format_i(`1 Exh. SP`)))
+		end()
+	},
+	pass() {
+		log("Nothing")
+		end()
+	}
+}
 
 // FR #45: Much Needed Victuals
 P.much_needed_victuals = {
@@ -14067,7 +14252,7 @@ P.much_needed_victuals = {
 		if (L.selected_area === -1) {
 			if (has_depot_on_map(FRANCE)) {
 				prompt_card(C_MUCH_NEEDED_VICTUALS, `Remove a depot from map.`)
-				if (count_num_french_depots_on_map() <= 5)
+				if (count_num_depots_on_map(FRANCE) <= 5)
 					V.prompt += ` ${join_array_with_or(get_areas_with_depots(FRANCE).map(format_area))}`
 
 				for (let depot = get_first_depot(FRANCE); depot <= get_last_depot(FRANCE); ++depot)
@@ -14663,11 +14848,10 @@ function can_join() {
 	&& G.L.every(frame => (frame.P === G.L[0].P) && !object_diff(frame.L, G.L[0].L))
 }
 
-function join(result) {
+function join() {
 	if (!can_join())
 		throw new Error("Illegal join!")
 	G.L = L = { P: G.L[0].P, I: 0, L: G.L[0].L }
-	end(result)
 }
 
 exports.roles ??= ROLES
@@ -15091,10 +15275,6 @@ function _parse(text) {
 		case "join":
 			if (line.length === 1)
 				emit("join()")
-			else if (line.length === 2)
-				emit("join(" + line[1] + ")")
-			else
-				throw new Error("invalid join - " + line.join(" "))
 			break
 
 		default:
