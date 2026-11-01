@@ -341,6 +341,7 @@ for (let type = FRESH_INFANTRY; type <= EXHAUSTED_AUSTRIAN_INFANTRY; ++type) ALL
 
 const FRESH_SP_TYPES = ALL_SP_TYPES.filter(is_sp_type_fresh)
 const EXHAUSTED_SP_TYPES = ALL_SP_TYPES.filter(is_sp_type_exhausted)
+const ALLIED_SP_TYPES = [FRESH_PRUSSIAN_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, FRESH_AUSTRIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY]
 
 const NUM_TROOP_TYPES = 12
 
@@ -1783,6 +1784,17 @@ function action_sp_alt(type, area = 0, strength = FULL_STRENGTH, from = POOL, mo
 }
 
 // === UPDATE SP STATE ===
+function find_battle_force(player, area, type, num, strength, from) {
+	const force = get_player_battle_data(player, area).forces.find(f => {
+		return f.sps[type] >= num && f.from === from && f.strength === strength
+	})
+
+	if (force === undefined)
+		throw new Error(`Force not found to update battle at ${get_area_name(area)}.`)
+
+	return force
+}
+
 /* RALLY */
 function _rally_sp(who, area, type, num) {
 	if (!is_sp_type_exhausted(type))
@@ -1807,13 +1819,7 @@ function update_rally_moved(player, area, type, num, strength, from) {
 }
 
 function update_rally_battles(player, area, type, num, strength, from) {
-	const force = get_player_battle_data(player, area).forces.find(f => {
-		return f.sps[type] >= num && f.from === from && f.strength === strength
-	})
-
-	if (force === undefined)
-		throw new Error(`Force not found to update batttle at ${get_area_name(area)}.`)
-
+	const force = find_battle_force(player, area, type, num, strength, from)
 	force.sps[type] -= num
 	force.sps[get_fresh_version(type)] += num
 }
@@ -1862,13 +1868,7 @@ function update_exhaust_moved(player, area, type, num, strength, from) {
 }
 
 function update_exhaust_battles(player, area, type, num, strength, from) {
-	const force = get_player_battle_data(player, area).forces.find(f => {
-		return f.sps[type] >= num && f.from === from && f.strength === strength
-	})
-
-	if (force === undefined)
-		throw new Error(`Force not found to update battle at ${get_area_name(area)}.`)
-
+	const force = find_battle_force(player, area, type, num, strength, from)
 	force.sps[type] -= num
 	force.sps[get_exhausted_version(type)] += num
 }
@@ -1890,6 +1890,68 @@ function exhaust_sp_entry(entry, num = 1, moving_override = false) {
 		decode_sp_player(entry), decode_sp_area(entry), decode_sp_type(entry), num,
 		decode_sp_strength(entry), decode_sp_from(entry), moving_override || decode_sp_moving(entry)
 	)
+}
+
+/* ELIMINATE */
+function add_french_casualties(type, num) {
+	add_sp(FRANCE, FRENCH_CASUALTIES, type, num)
+}
+
+function _eliminate_sp(who, area, type, num) {
+	remove_sp(who, area, type, num)
+	if (who === FRANCE)
+		add_french_casualties(type, num)
+}
+
+function update_eliminate_move(type, num) {
+	if (get_current_phase() === FORCED_MARCH || get_current_phase() === MARCH)
+		G.move.sps[type] -= num
+}
+
+function update_eliminate_moved(player, area, type, num, strength, from) {
+	remove_sp_moved(area, player, from, strength, type, num)
+}
+
+function update_eliminate_battles(player, area, type, num, strength, from) {
+	const force = find_battle_force(player, area, type, num, strength, from)
+	force.sps[type] -= num
+	if (get_current_phase() === PHASE_BATTLES_PHASE)
+		increment_eliminated(player, area, num)
+}
+
+function eliminate_sp(who, area, type, num = 1, strength = FULL_STRENGTH, from = POOL, moving = false) {
+	const update_moved = find_moved_entry(area, who, from, strength, type) > -1
+	const update_battles = has_battle(area)
+
+	_eliminate_sp(who, area, type, num)
+	if (moving) update_eliminate_move(type, num)
+	if (update_moved) update_eliminate_moved(who, area, type, num, strength, from)
+	if (update_battles) update_eliminate_battles(who, area, type, num, strength, from)
+}
+
+function eliminate_sp_entry(entry, num = 1, moving_override = false) {
+	eliminate_sp(
+		decode_sp_player(entry), decode_sp_area(entry), decode_sp_type(entry), num,
+		decode_sp_strength(entry), decode_sp_from(entry), moving_override || decode_sp_moving(entry)
+	)
+}
+
+function eliminate_all_sps(who, area, types = ALL_SP_TYPES) {
+	log("Eliminated")
+	types = types.filter(type => has_sp_of_type(who, type, area))
+	for_each_sp_type(types, (type) => {
+		let remaining = count_num_sps_of_type(who, type, area)
+		for (const entry of get_moved_sps_in_area(area).slice()) {
+			if (decode_sp_player(entry) === who && decode_sp_type(entry) === type) {
+				const count = decode_sp_num(entry)
+				eliminate_sp(who, area, type, count, decode_sp_strength(entry), decode_sp_from(entry))
+				remaining -= count
+				logi(`${count} ${get_sp_type_name(type)}`)
+			}
+		}
+		if (remaining > 0)
+			eliminate_sp(who, area, type, remaining, FULL_STRENGTH, has_battle(area) ? area : POOL)
+	})
 }
 
 // === COMMON ACTION GENERATORS ===
@@ -1938,6 +2000,14 @@ function generate_rally_actions(player, area, types = EXHAUSTED_SP_TYPES, moving
 
 function generate_exhaust_actions(player, areas, types = FRESH_SP_TYPES, moving = false) {
 	types = filter_types(types).filter(is_sp_type_fresh)
+	if (Array.isArray(areas))
+		areas.forEach(a => generate_sp_actions_imp(player, a, types, moving))
+	else
+		generate_sp_actions_imp(player, areas, types, moving)
+}
+
+function generate_eliminate_actions(player, areas, types, moving = false) {
+	types = filter_types(types)
 	if (Array.isArray(areas))
 		areas.forEach(a => generate_sp_actions_imp(player, a, types, moving))
 	else
@@ -3815,9 +3885,6 @@ P.draw_card_to_hand = {
 			on_sp(entry) {
 				const evt = get_event_data(C_CHAOS_IN_THE_REAR_AREAS)
 				const type = decode_sp_type(entry)
-				const area = decode_sp_area(entry)
-				const strength = decode_sp_strength(entry)
-				const from = decode_sp_from(entry)
 
 				// evt.undo.push( { type, area, strength, from } )
 
@@ -3825,7 +3892,7 @@ P.draw_card_to_hand = {
 					exhaust_sp_entry(entry)
 					--evt.losses_remaining
 				} else {
-					eliminate_sp_new(FRANCE, area, type, 1, false, true, strength, from, has_battle(area))
+					eliminate_sp_entry(entry)
 					if (evt.count === 1)
 						--evt.losses_remaining
 					if (evt.count === 0 && count_num_exhausted_sps_on_map(FRANCE, get_devastated_areas_with_french_sps()) === 0)
@@ -7123,15 +7190,10 @@ P.eliminate_all_sps = {
 	},
 	eliminate() {
 		push_undo()
+		eliminate_all_sps(G.active, L.area)
 		log(`${ROLES[G.active]} has no more fresh SPs.`)
 		log(`Eliminated all SPs at ${format_area(L.area)}.`)
-
 		L.count = count_num_sps(G.active, L.area)
-		if (is_current_phase(PHASE_BATTLES_PHASE))
-			increment_eliminated(G.active, G.current_battle, L.count)
-
-		for (let type of get_sp_types_at_area(G.active, L.area))
-			eliminate_sp(G.active, L.area, type, count_num_sps_of_type(G.active, type, L.area))
 		L.has_eliminated_sps = true
 
 		if (get_current_phase() !== EVADE)
@@ -8545,42 +8607,6 @@ function get_all_exhausted_sp_types(who, area) {
 	return get_sp_types_at_area(who, area).filter(type => is_sp_type_exhausted(type))
 }
 
-function eliminate_sp_new(who, area, type, num = 1, update_move = false, update_moved = false, strength = FULL_STRENGTH, from = POOL, update_battles = false) {
-	let was_friendly_controlled = is_friendly_controlled(who, area)
-
-	remove_sp(who, area, type, num)
-	if (who === FRANCE)
-		add_sp(who, FRENCH_CASUALTIES, is_sp_type_fresh(type) ? type : type - 1, num)
-
-	if (update_move)
-		G.move.sps[type] -= num
-
-	if (update_moved)
-		remove_sp_moved(area, who, from, strength, type, num)
-
-	if (update_battles) {
-		let bforce = get_player_battle_data(who, area).forces.find((f) => {
-			return f.sps[type] > 0 && f.from === from && f.strength === strength
-		})
-		bforce.sps[type]--
-	}
-
-	if (!has_battle(area) && is_vp_area(area) && was_friendly_controlled && !is_friendly_controlled(who, area)) {
-		log(`${ROLES[who]} lost control of ${format_area(area)}.`)
-		decrease_vp(who, get_area_vp(area))
-	}
-}
-
-// TODO: Change everything to eliminate_sp_new
-function eliminate_sp(who, area, type, num = 1) {
-	remove_sp(who, area, type, num)
-	if (who === FRANCE)
-		add_sp(FRANCE, FRENCH_CASUALTIES, is_sp_type_fresh(type) ? type : type - 1, num)
-
-	if (who === FRANCE && !has_friendly_sp(who, area) && is_vp_area(area))
-		decrease_vp(who, get_area_vp(area))
-}
-
 function count_num_sps_of_type(who, type, area) {
 	if (!has_sp(area)) return 0
 	let count = 0
@@ -8589,15 +8615,6 @@ function count_num_sps_of_type(who, type, area) {
 			count += decode_sp_num(entry)
 	}
 	return count
-}
-
-function battle_eliminate_sp(who, area, type, strength, from, num = 1) {
-	eliminate_sp(who, area, type, num)
-	increment_eliminated(who, area, num)
-
-	let battle_data = get_player_battle_data(who, area)
-	let force = battle_data.forces.find(f => f.strength === strength && f.from === from)
-	force.sps[type] -= num
 }
 
 function battle_add_sp(who, area, type, strength, from, num = 1) {
@@ -8610,30 +8627,6 @@ function battle_add_sp(who, area, type, strength, from, num = 1) {
 	let battle_data = get_player_battle_data(who, area)
 	let force = battle_data.forces.find(f => f.strength === strength && f.from === from)
 	force.sps[type] += num
-}
-
-function battle_eliminate_sp_old(who, area, type, num = 1) {
-	eliminate_sp(who, area, type, num)
-	increment_eliminated(who, area, num)
-
-	let battle_data = get_player_battle_data(who, area)
-	let connections_rallied = [] //To undo onto same connections, just for the heck of it
-
-	let count = 0
-	for (let i = 0; i < battle_data.forces.length; ++i) {
-		let entry = battle_data.forces[i]
-
-		let num_available = Math.min(num - count, entry.sps[type])
-		entry.sps[type] -= Math.min(num, num_available)
-
-		if (!map_has(connections_rallied, i) && num_available > 0)
-			map_set(connections_rallied, i, 0)
-		map_increment(connections_rallied, i, num_available)
-
-		if ((count += num_available) >= num) break
-	}
-
-	return connections_rallied
 }
 
 function would_be_eliminated_after_battle(player, area, losses) {
@@ -8816,12 +8809,7 @@ P.assign_losses = {
 							generate_exhaust_actions(R, G.current_battle)
 						} else {
 							V.prompt = `Select a fresh SP to eliminate.`
-							get_player_battle_data(R, G.current_battle).forces.forEach(force => {
-								for (let type = 0; type < force.sps.length; ++type) {
-									if (is_sp_type_fresh(type) && force.sps[type] > 0)
-										action_sp_alt(type, G.current_battle, force.strength, force.from)
-								}
-							})
+							generate_eliminate_actions(R, G.current_battle, FRESH_SP_TYPES)
 						}
 					}
 				} else {
@@ -8830,7 +8818,7 @@ P.assign_losses = {
 					if (
 						has_friendly_sp(R, G.current_battle)
 						&& !has_fresh_sp(R, G.current_battle)
-						&& !would_be_eliminated_after_battle(enemy(R), G.current_battle, L.losses[enemy[R]] - L.count[enemy[R]])
+						&& !would_be_eliminated_after_battle(enemy(R), G.current_battle, L.losses[enemy(R)] - L.count[enemy(R)])
 					) {
 						V.prompt = `No more fresh SPs: Eliminate all SPs at ${format_area(G.current_battle)}.`
 						button("eliminate")
@@ -8859,28 +8847,24 @@ P.assign_losses = {
 					if (is_battle_event_currently_active(C_STOIC_INFANTRY) && R === RUSSIA && is_infantry(type))
 						map_get(G.persistent_events, C_STOIC_INFANTRY).num_exhausted_infantry++
 				} else {
-					battle_eliminate_sp(R, G.current_battle, type, strength, from)
+					eliminate_sp_entry(entry)
 					push_local_undo(R, "eliminate", { type, strength, from})
 				}
 
 				++L.count[R]
 			},
 			on_eliminate() {
-				let eliminated_by_type = []
-				let counts = []
-				for (let type of get_all_exhausted_sp_types(R, G.current_battle)) {
-					let count = count_num_sps_of_type(R, type, G.current_battle)
-					let connections = battle_eliminate_sp_old(R, G.current_battle, type, count)
-					map_set(eliminated_by_type, type, connections)
-					map_set(counts, type, count)
-				}
-				push_local_undo(R, "eliminate_all", { eliminated_by_type, counts, initiative: G.initiative })
+				push_local_undo(R, "eliminate_all", {
+					sps: map_get(G.sps, G.current_battle).slice(),
+					moved: map_get(G.moved.sps, G.current_battle).slice(),
+					battle_data: object_copy(get_player_battle_data(R, G.current_battle))
+				})
+				eliminate_all_sps(R, G.current_battle, EXHAUSTED_SP_TYPES)
+
 				if (R !== RUSSIA || !(get_player_battle_data(RUSSIA, G.current_battle)?.only_cossack ?? false))
 					shift_initiative(enemy(R))
 				else if (get_player_battle_data(R, G.current_battle)?.only_cossack ?? false)
 					log(`No Initiative Shift: Eliminated force consisted only of Cossack SPs.`)
-				// log(`${ROLES[R]} has no more fresh SPs.`)
-				// log(`${ROLES[R]} eliminated!`)
 			},
 			on_confirm() {
 				set_delete(G.active, R)
@@ -8941,19 +8925,13 @@ P.assign_losses = {
 			--L.count[R]
 			return
 		case "eliminate_all":
-			map_for_each(undo.info.eliminated_by_type, (type, connections) => {
-				let count =  map_get(undo.info.counts, type)
+			map_set(G.sps, G.current_battle, undo.info.sps)
+			map_set(G.moved.sps, G.current_battle, undo.info.moved)
+			if (is_battle_attacker(R, G.current_battle))
+				get_battle_entry(G.current_battle).attacker = undo.info.battle_data
+			else
+				get_battle_entry(G.current_battle).defender = undo.info.battle_data
 
-				if (R === RUSSIA)
-					add_sp(R, G.current_battle, type, count)
-				else
-					move_sp(R, FRENCH_CASUALTIES, G.current_battle, type, count)
-
-				decrement_eliminated(R, G.current_battle, count)
-				map_for_each(connections, (ix, amount) => {
-					battle_data.forces[ix].sps[type] += amount
-				})
-			})
 			if (R !== RUSSIA || !(get_player_battle_data(RUSSIA, G.current_battle)?.only_cossack ?? false)) {
 				G.initiatve = undo.info.initiative
 				G.log.pop()
@@ -9230,21 +9208,12 @@ P.assign_pursuit_losses = {
 			button("eliminate")
 		} else {
 			V.prompt = `Pursuit: Eliminate ${L.difference} SPs at ${format_area(G.current_battle)}.`
-			get_player_battle_data(R, G.current_battle).forces.forEach(force => {
-				for (let type = 0; type < force.sps.length; ++type) {
-					if (force.sps[type] > 0)
-						action_sp_alt(type, G.current_battle, force.strength, force.from)
-				}
-
-			})
+			generate_eliminate_actions(R, G.current_battle, EXHAUSTED_SP_TYPES)
 		}
 	},
 	eliminate() {
 		push_undo()
-		for (let type of get_all_exhausted_sp_types(G.active, G.current_battle)) {
-			let count = count_num_sps_of_type(G.active, type, G.current_battle)
-			battle_eliminate_sp_old(G.active, G.current_battle, type, count)
-		}
+		eliminate_all_sps(G.active, G.current_battle, EXHAUSTED_SP_TYPES)
 		log(`${ROLES[G.active]} has no more fresh SPs.`)
 		log(`${ROLES[G.active]} eliminated!`)
 
@@ -9257,12 +9226,7 @@ P.assign_pursuit_losses = {
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
-		let strength = decode_sp_strength(entry)
-		let from = decode_sp_from(entry)
-
-		battle_eliminate_sp(G.active, G.current_battle, type, strength, from)
-
+		eliminate_sp_entry(entry)
 		if (--L.difference === 0)
 			L.has_finished = true
 	},
@@ -9475,11 +9439,7 @@ P.exhaust_half_sps = {
 		push_undo()
 		const type = decode_sp_type(entry)
 		exhaust_sp_entry(entry)
-
-		if (!map_has(L.exhausted, type))
-			map_set(L.exhausted, type, 1)
-		else
-			map_increment(L.exhausted, type)
+		map_increment(L.exhausted, type, 1)
 		--L.num_sps_to_exhaust
 	},
 	confirm() {
@@ -9864,8 +9824,7 @@ P.eliminate_1_exhausted = {
 	prompt() {
 		if (has_exhausted_sp(G.active, L.area)) {
 			V.prompt = `Eliminate 1 exhausted SP at ${format_area(L.area)}.`
-			for (let type of get_all_exhausted_sp_types(G.active, L.area))
-				action_sp_alt(type, L.area)
+			generate_eliminate_actions(G.active, L.area, EXHAUSTED_SP_TYPES)
 		} else {
 			V.prompt = `No exhausted SPs at ${format_area(L.area)}.`
 			button_next()
@@ -9873,10 +9832,8 @@ P.eliminate_1_exhausted = {
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
-		eliminate_sp(G.active, L.area, type)
-		log_only(G.active, format_ii(`1 ${get_sp_type_name(type)}`))
-		log_only(enemy(G.active), format_ii(`1 Exh. SP`))
+		eliminate_sp_entry(entry)
+		log_masked(G.active, format_ii(`1 ${get_sp_type_name(decode_sp_type(entry))}`, format_ii("1 Exh. SP")))
 		end()
 	},
 	next() {
@@ -10476,25 +10433,18 @@ P.assign_attrition_losses = {
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
+		const type = decode_sp_type(entry)
 
 		// i.e. is an exhaustion
 		if (is_sp_type_fresh(type)) {
 			exhaust_sp_entry(entry)
 			--G.attrition_data.num_losses_remaining
-
-			if (!map_has(G.attrition_data.previously_exhausted, type))
-				map_set(G.attrition_data.previously_exhausted, type, 1)
-			else
-				map_increment(G.attrition_data.previously_exhausted, type)
+			map_increment(G.attrition_data.previously_exhausted, type, 1)
 
 		} else {
-			eliminate_sp(G.active, L.area, type)
+			eliminate_sp_entry(entry)
 
-			if (!map_has(G.attrition_data.previously_eliminated, type))
-				map_set(G.attrition_data.previously_eliminated, type, 1)
-			else
-				map_increment(G.attrition_data.previously_eliminated, type)
+			map_increment(G.attrition_data.previously_eliminated, type, 1)
 
 			if (++L.count === 2 || !has_exhausted_sp(G.active, L.area)) {
 				L.count = 0
@@ -11891,9 +11841,7 @@ P.the_finland_corps = {
 	area(area) {
 		push_undo()
 		add_sp(RUSSIA, area, FRESH_INFANTRY, 1)
-
-		if (map_has(L.placed, area)) map_increment(L.placed, area)
-		else map_set(L.placed, area, 1)
+		map_increment(L.placed, area, 1)
 		if (--L.sps_to_place === 0)
 			end()
 	},
@@ -11934,10 +11882,7 @@ P.treaty_of_bucharest = {
 			logii(format_leader(L_CHICHAGOV))
 		} else {
 			add_sp(RUSSIA, area, FRESH_INFANTRY, 1)
-			if (!map_has(L.sp_log, area))
-				map_set(L.sp_log, area, 1)
-			else
-				map_increment(L.sp_log, area)
+			map_increment(L.sp_log, area, 1)
 			if (--L.sps_to_place === 0) {
 				map_for_each(L.sp_log, (loc, num) => {
 					logi(format_area(loc))
@@ -12133,8 +12078,8 @@ P.may_play_city_ablaze = {
 			action_card(C_CITY_ABLAZE)
 		} else {
 			V.prompt = `You do not have ${format_card(C_CITY_ABLAZE)}.`
-			button_pass()
 		}
+		button_pass()
 	},
 	card(card) {
 		push_undo()
@@ -12498,16 +12443,9 @@ P.exhausting_march_eliminate = {
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
-		let area = decode_sp_area(entry)
-		let strength = decode_sp_strength(entry)
-		let from = decode_sp_from(entry)
-
+		eliminate_sp_entry(entry, 1, true)
 		log("Eliminated")
-		logi(`1 ${get_sp_type_name(type)}`)
-
-		eliminate_sp_new(G.active, area, type, 1, true, true, strength, from, has_battle(area))
-
+		logi(`1 ${get_sp_type_name(decode_sp_type(entry))}`)
 		if (--L.losses_remaining === 0)
 			end()
 	}
@@ -13171,15 +13109,14 @@ P.exhausted_horses_eliminate = {
 		V.prompt = `Eliminate exhausted Cavalry SPs — ${L.num_sps_to_eliminate} remaining.`
 		if (L.areas.length <= 5)
 			V.prompt += ` (${join_array_with_or(L.areas.map(format_area))})`
-		L.areas.forEach(area => action_sp_alt(EXHAUSTED_CAVALRY, area))
+		generate_eliminate_actions(G.active, L.areas, [ EXHAUSTED_CAVALRY ])
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
-		let area = decode_sp_area(entry)
-		eliminate_sp(FRANCE, area, type)
+		const area = decode_sp_area(entry)
+		eliminate_sp_entry(entry)
 		logi(`${format_area(area)}`)
-		log_masked(FRANCE, format_ii(`1 ${get_sp_type_name(type)}`), format_ii(`1 Exh. SP`))
+		log_masked(FRANCE, format_ii(`1 ${get_sp_type_name(decode_sp_type(entry))}`), format_ii(`1 Exh. SP`))
 
 		if (--L.num_sps_to_eliminate === 0) {
 			end()
@@ -13239,12 +13176,8 @@ P.disease_and_starvation_eliminate = {
 		} else {
 			logi(`${format_area(area)}`)
 			log_only(RUSSIA, format_ii(`${count_num_exhausted_sps(FRANCE, area)} Exh. SPs`))
-			// get_area_sp_set(area).forEach(entry => console.log([decode_sp_player(entry), decode_sp_type(entry), decode_sp_num(entry)]))
-			get_all_exhausted_sp_types(FRANCE, area).forEach((type) => {
-				log_only(FRANCE, format_ii(`${count_num_sps_of_type(FRANCE, type, area)} ${get_sp_type_name(type)}`))
-				L.num_sps_to_eliminate -= count_num_sps_of_type(FRANCE, type, area)
-				eliminate_sp(FRANCE, area, type, count_num_sps_of_type(FRANCE, type, area))
-			})
+			L.num_sps_to_eliminate -= count_num_exhausted_sps(FRANCE, area)
+			eliminate_all_sps(FRANCE, area, EXHAUSTED_SP_TYPES)
 		}
 		if (L.num_sps_to_eliminate === 0)
 			end()
@@ -13264,18 +13197,12 @@ P.disease_and_starvation_select_losses = {
 	},
 	prompt() {
 		prompt_card(C_DISEASE_AND_STARVATION, `Eliminate ${L.count} exhausted SPs at ${format_area(L.area)}.`)
-		for (let type of get_all_exhausted_sp_types(G.active, L.area))
-			action_sp_alt(type, L.area)
+		generate_eliminate_actions(G.active, L.area, EXHAUSTED_SP_TYPES)
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
-		eliminate_sp(G.active, L.area, type)
-		if (!map_has(L.eliminated, type))
-			map_set(L.eliminated, type, 1)
-		else
-			map_increment(L.eliminated, type)
-
+		eliminate_sp_entry(entry)
+		map_increment(L.eliminated, decode_sp_type(entry), 1)
 		if (--L.count === 0) {
 			logi(`${format_area(L.area)}`)
 			map_for_each(L.eliminated, (sp_type, num) => {
@@ -13336,44 +13263,20 @@ P.treacherous_allies_acknowledge = function() {
 
 P.treacherous_allies_betray = {
 	prompt() {
-		let allied_nationalities_at_area = []
-		if (has_prussian_sp(G.current_battle))
-			set_add(allied_nationalities_at_area, "Prussian")
-		if (has_austrian_sp(G.current_battle))
-			set_add(allied_nationalities_at_area, "Austrian")
-		let allies_string = allied_nationalities_at_area.length > 0 ? join_array_with_and(allied_nationalities_at_area) : "0 SPs."
-
 		if (get_leader_location(L_SCHWARZENBERG) === G.current_battle)
-			prompt_card(C_TREACHEROUS_ALLIES, `Eliminate ${format_leader(L_SCHWARZENBERG)} and all ${allies_string} SPs.`)
+			prompt_card(C_TREACHEROUS_ALLIES, `Eliminate ${format_leader(L_SCHWARZENBERG)} and all Prussian and Austrian SPs at ${format_area(G.current_battle)}.`)
+		else
+			prompt_card(C_TREACHEROUS_ALLIES, `Eliminate all Prussian and Austrian SPS at ${format_area(G.current_battle)}.`)
 		button("eliminate")
 	},
 	eliminate() {
 		push_undo()
 		log("Eliminated")
 		if (get_leader_location(L_SCHWARZENBERG) === G.current_battle) {
-			logi(format_leader(L_SCHWARZENBERG))
 			eliminate_leader(L_SCHWARZENBERG)
+			logi(format_leader(L_SCHWARZENBERG))
 		}
-
-		for (let type of get_sp_types_at_area(FRANCE, G.current_battle)) {
-			if (type >= FRESH_PRUSSIAN_INFANTRY) {
-				let count = count_num_sps_of_type(FRANCE, type, G.current_battle)
-				logi(`${count} ${get_sp_type_name(type)}`)
-				eliminate_sp(FRANCE, G.current_battle, type, count)
-			}
-		}
-
-		// Remove these guys from the battle
-		let battle_data = get_player_battle_data(FRANCE, G.current_battle)
-		battle_data.forces.forEach(force => {
-			if (set_has(force.leaders, L_SCHWARZENBERG))
-				set_delete(force.leaders, L_SCHWARZENBERG)
-			for (let type = FRESH_PRUSSIAN_INFANTRY; type <= EXHAUSTED_AUSTRIAN_INFANTRY; ++type) {
-				if (force[type] > 0)
-					force[type] = 0
-			}
-		})
-
+		eliminate_all_sps(FRANCE, G.current_battle, ALLIED_SP_TYPES)
 		if (!sudden_death())
 			end()
 	}
@@ -13522,8 +13425,7 @@ P.do_cossack_patrols = {
 				L.areas.forEach(action_area)
 			} else if (!L.has_eliminated_sp && has_exhausted_sp(G.active, L.selected_area)) {
 				prompt_card(C_COSSACK_PATROLS, `Eliminate 1 Exhausted SP at ${format_area(L.selected_area)}.`)
-				for (let type of get_all_exhausted_sp_types(G.active, L.selected_area))
-					action_sp_alt(type, L.selected_area)
+				generate_eliminate_actions(G.active, L.selected_area, EXHAUSTED_SP_TYPES)
 			} else {
 				prompt_card(C_COSSACK_PATROLS, `Remove Forage orders from ${format_area(L.selected_area)}.`)
 				get_orders_at_area(G.active, L.selected_area).filter(order => get_order_type(order) === FORAGE).forEach(action_order)
@@ -13540,10 +13442,9 @@ P.do_cossack_patrols = {
 	},
 	sp(entry) {
 		push_undo()
-		let type = decode_sp_type(entry)
-		eliminate_sp(G.active, L.selected_area, type)
-		log_only(RUSSIA, format_ii(`1 Exh. SP`))
-		log_only(FRANCE, format_ii(`1 ${get_sp_type_name(type)}`))
+		eliminate_sp_entry(entry)
+		log_masked(FRANCE, format_ii(`1 ${get_sp_type_name(decode_sp_type(entry))}`), format_ii(`1 Exh. SP`))
+
 		if (!has_order_of_type(G.active, FORAGE, L.selected_area)) {
 			set_delete(L.areas, L.selected_area)
 			L.selected_area = -1
@@ -14942,9 +14843,10 @@ function array_count(array, callback) {
 }
 
 function map_increment(map, key, amount = 1) {
-	let current = map_get(map, key, null)
-	if (current !== null)
-		map_set(map, key, current + amount)
+	if (map_has(map, key))
+		map_set(map, key, map_get(map, key) + amount)
+	else
+		map_set(map, key, amount)
 }
 
 // Like Object.keys but for plain array maps
