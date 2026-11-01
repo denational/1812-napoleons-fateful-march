@@ -2843,7 +2843,7 @@ function place_card_at_the_top_of_the_deck(card) {
 	else if (get_deck(who).includes(cards))
 		array_delete_item(get_deck(who), card)
 	get_deck(who).push(card)
-	log(`${format_card(card)} placed on top of the ${ROLES[who]} deck.`)
+	log(`${format_card(card)} placed on top of the ${possessive(who)} deck.`)
 }
 
 // === MAIN ===
@@ -3538,10 +3538,6 @@ function reshuffle_deck(player) {
 	log(`${possessive(player)} deck reshuffled.`)
 }
 
-function get_event_data(card, fallback = null) {
-	return map_get(L.event_tracker, card, fallback)
-}
-
 function count_num_exhausted_sps_on_map(player, areas = map_keys(G.sps)) {
 	let count = 0
 	for (let area of areas) {
@@ -3553,13 +3549,16 @@ function count_num_exhausted_sps_on_map(player, areas = map_keys(G.sps)) {
 
 P.draw_card_to_hand = {
 	_begin() {
-		log_h2("Draw A Card")
+		// L.phase? (whether this is the draw card to hand phase, or a simple draw card)
+		L.phase = L.L.P === "turn"
+		if (L.phase) {
+			log_h2("Draw A Card")
+			G.active = [ RUSSIA, FRANCE ]
+		}
 
 		// So that the forking works as intended.
 		if (typeof G.active === 'number')
 			G.active = [ G.active ]
-		if (!is_resource_turn(G.turn) && get_current_phase() === PHASE_DRAW_CARD_TO_HAND)
-			G.active = [ RUSSIA, FRANCE ]
 
 		L.drawn_card = -1
 		L.num_cards_to_draw = L.num_cards_to_draw?.[R] ?? 1
@@ -3596,11 +3595,13 @@ P.draw_card_to_hand = {
 	_finish() {
 		if (--L.num_cards_to_draw > 0) {
 			L.drawn_card = -1
-		} else {
+		} else if (L.phase) {
 			set_delete(G.active, R)
 			if (G.active.length === 0) {
 				join()
 			}
+		} else {
+			end()
 		}
 	}
 }
@@ -10245,105 +10246,6 @@ function get_event_keyword(evt, keyword, fallback = null) {
 	return map_get(G.persistent_events, evt)?.[keyword] ?? fallback
 }
 
-// Log all the stuff for must-play events in one go to prevent confusing nesting between opposing sides' events.
-function log_must_play_event(card, info) {
-	card_box_begin(card)
-	switch(card) {
-	case C_HOLY_MOTHER_RUSSIA_RU:
-		log("Russia +2 orders.")
-		log(`The side controlling ${format_area(get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key)} at the end of the turn gain +1 VP.`)
-		break
-	case C_EXTREME_WEATHER_RU:
-		log("France has -2 orders this turn.")
-		log("1 fresh SP in each force that uses 'March' or 'Forced March' becomes exhausted.")
-		break
-	case C_COMMAND_FRICTION:
-		log("France may designate an area with more than 1 RU leader at the beginning of the 'Place Orders' phase.")
-		break
-	case C_POOR_LOGISTICS:
-		log("Russia may not use 'Place Depot' orders this turn.")
-		break
-	case C_DEVASTATED_COUNTRYSIDE:
-		log("The effect of Devastation markers is doubled for both sides this turn.")
-		break
-	case C_BARCLAY_DE_TOLLY_RESIGNS:
-		if (info)
-			log("de Tolly removed from play.")
-		else
-			if (!is_leader_on_map(L_DE_TOLLY))
-				log(`No effect – ${format_leader(L_DE_TOLLY)} is not on map.`)
-			else
-				log(`No effect – ${format_leader(L_KUTUZOV)} is not on map.`)
-		break
-	case C_POOR_COMMUNICATIONS:
-		log("At the end of the 'Place Orders' phase, RU may designate 1 placed FR order to remove.")
-		break
-	case C_JEROME_GOES_HOME:
-		if (info)
-			log(`${format_leader(L_JEROME)} removed from play.`)
-		else
-			log(`No effect – ${format_leader(L_JEROME)} is not on map.`)
-		break
-	case C_CHAOS_IN_THE_REAR_AREAS:
-		log(`Assigned attrition losses.`)
-		map_for_each(info, (area, entries) => {
-			log(format_area(area))
-			let count = 0
-			let any = false
-
-			any = map_keys(entries).some(type => is_sp_type_fresh(type))
-			if (any)
-				logi("Exhausted")
-			map_for_each(entries, (type, num) => {
-				if (is_sp_type_fresh(type)) {
-					log_only(R, format_ii(`${num} ${get_sp_type_name(type)}`))
-					count += num
-				}
-			})
-			if (any)
-				log_exclusive(R, format_ii(`${count} fresh SPs`))
-
-			any = map_keys(entries).some(type => is_sp_type_exhausted(type))
-			if (any)
-				logi("Eliminated")
-			count = 0
-			map_for_each(entries, (type, num) => {
-				if (is_sp_type_exhausted(type)) {
-					log_only(R, format_ii(`${num} ${get_sp_type_name(type)}`))
-					count += num
-				}
-			})
-			if (any)
-				log_exclusive(R, format_ii(`${count} exhausted SPs`))
-		})
-		break
-	case C_FREEZING_WEATHER:
-		log("FR may not use 'Place Depot' or 'Forage' orders this turn.")
-		log("All FR forces have a maximum move of 1.")
-		log("FR forces fight as if under 'Forced March' orders.")
-		break
-	case C_EXTREME_WEATHER_FR:
-		log("Both sides -2 orders.")
-		log("Neither side may place 'Forced March' orders this turn.")
-		log("1 SP in every force that uses 'March' orders becomes exhausted.")
-		break
-	case C_LOGISTICS_COLLAPSE:
-		log("For the rest of the game, France must discard a card to execute a 'Place Depot' order.")
-		break
-	case C_CHAOTIC_FOOD_DISTRIBUTION:
-		if (info === "no effect") {
-			log("No effect.")
-		} else {
-			if (get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area) log(`Removed depot from ${format_area(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)}.`)
-			if (get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type) {
-				log(`Rallied`)
-				log_masked(FRANCE, format_i(`1 ${get_sp_type_name(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type)}`, `1 Exh. SP`))
-			}
-		}
-	}
-	card_box_end()
-}
-
 /* COMMON EVENT STATES */
 
 P.play_events = {
@@ -11153,7 +11055,30 @@ P.garrison_troops = {
 	pass() { end() }
 }
 
-// RU #14: Extreme Weather (must-play event) -- See draw_card_to_hand
+// RU #14: Extreme Weather
+P.extreme_weather_ru = script(`
+	call extreme_weather_ru_confirm
+	call draw_card_to_hand
+	goto event_done { card: C_EXTREME_WEATHER_RU }
+`)
+
+P.extreme_weather_ru_confirm = function() {
+	goto("confirm_event", {
+		card: C_EXTREME_WEATHER_RU,
+		inactive: `retreat amidst the sweltering heat`,
+		sequence: [
+			{
+				prompt: "This turn, France has -2 orders.",
+				log_text: "France -2 orders."
+			},
+			{
+				prompt: "This turn, 1 fresh SP in each force that uses Forced March or March orders is exhausted.",
+				log_text: "1 fresh SP in each force using Forced March or March orders is exhausted."
+			}
+		],
+		persistent: true
+	})
+}
 
 // RU #15: Pride and Hesitation
 E.pride_and_hesitation = function() { return is_fr_controlled(S_MOSCOW) }
@@ -14910,8 +14835,7 @@ exports.assert = function (state) {
 		R = null
 		V = null
 		_load()
-		if (Array.isArray(G.L))
-			L = Array.isArray(G.L) ? G.L[R] : G.L
+		L = Array.isArray(G.L) ? G.L[R] : G.L
 		on_assert()
 		_save()
 	}
