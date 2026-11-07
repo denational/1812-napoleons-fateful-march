@@ -2867,7 +2867,7 @@ P.start_turn = function() {
 
 	if (G.turn === JUNE_5) {
 		log_h5("French Logistic Preparations")
-		log_italic(`France receives a free Forced March and Place Depot order. As an exception to the rules, this Place Depot order may be placed in ${format_area(S_KOVNO)}.`)
+		log_italic(`France receives a free March and Place Depot order. As an exception to the rules, this Place Depot order may be placed in ${format_area(S_KOVNO)}.`)
 	}
 
 	end()
@@ -4249,10 +4249,10 @@ P.play_card_for_orders = {
 	},
 	confirm() {
 		set_delete(G.active, R)
-		log(`${format_card(L.played_card[R])}: +${L.ops_played[R]} orders`)
 
 		if (G.active.length === 0) {
 			for (let who = RUSSIA; who <= FRANCE; ++who) {
+				log(`${format_card(L.played_card[who])}: +${L.ops_played[who]} orders`)
 				if (is_card_dummy(L.played_card[who]))
 					return_dummy_to_hand(who)
 				else
@@ -9208,7 +9208,7 @@ P.assign_pursuit_losses = {
 			button("eliminate")
 		} else {
 			V.prompt = `Pursuit: Eliminate ${L.difference} SPs at ${format_area(G.current_battle)}.`
-			generate_eliminate_actions(R, G.current_battle, EXHAUSTED_SP_TYPES)
+			generate_eliminate_actions(R, G.current_battle, ALL_SP_TYPES)
 		}
 	},
 	eliminate() {
