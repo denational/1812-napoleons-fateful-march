@@ -454,35 +454,6 @@ function get_winter_weather_die_result(who, roll) {
 	}
 }
 
-const ATTRITION_TABLE = [
-	[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 1], [0, 1]], //1
-	[[0, 0], [0, 0], [0, 0], [0, 0], [0, 1], [1, 1], [1, 1]], //2
-	[[0, 0], [0, 0], [0, 0], [0, 0], [1, 1], [1, 1], [2, 1]], //3
-	[[0, 0], [0, 0], [0, 0], [0, 1], [1, 1], [2, 1], [2, 2]], //4
-	[[0, 0], [0, 0], [0, 0], [1, 1], [1, 1], [2, 1], [2, 2]], //5
-	[[0, 0], [0, 0], [0, 1], [1, 1], [1, 1], [2, 2], [3, 2]], //6
-	[[0, 0], [0, 0], [1, 1], [1, 1], [2, 1], [2, 2], [4, 2]], //7-8
-	[[0, 0], [0, 1], [1, 1], [1, 1], [2, 2], [2, 2], [4, 3]], //9-11
-	[[0, 1], [1, 1], [1, 1], [2, 1], [2, 2], [3, 2], [5, 3]], //12-14
-	[[1, 1], [1, 1], [2, 1], [2, 2], [3, 2], [4, 3], [6, 3]], //15-20
-	[[1, 1], [2, 1], [2, 2], [3, 2], [4, 3], [5, 3], [7, 3]], //21+
-]
-
-function get_modified_size_row(modified_size) {
-	if (modified_size <= 1) return 0
-	else if (modified_size >= 2 && modified_size <= 6) return modified_size - 1
-	else if (modified_size >= 7 && modified_size <= 8) return 6
-	else if (modified_size >= 9 && modified_size <= 11) return 7
-	else if (modified_size >= 12 && modified_size <= 14) return 8
-	else if (modified_size >= 15 && modified_size <= 20) return 9
-	else return 10
-}
-
-function lookup_attrition_table(modified_size, distance_to_nearest_depot) {
-	distance_to_nearest_depot = Math.max(0, Math.min(6, distance_to_nearest_depot))
-	return ATTRITION_TABLE[get_modified_size_row(modified_size)][distance_to_nearest_depot].slice()
-}
-
 function get_battle_vp_shift(losses) {
 	log(`${ROLES[get_battle_winner(G.current_battle)]} eliminated ${losses} SPs.`)
 	if (losses <= 1)
@@ -891,6 +862,17 @@ function count_num_sps(who, area) {
 	return count
 }
 
+function count_num_exhausted_sps(who, area) {
+	if (!has_sp(area)) return 0
+
+	let count = 0
+	for (let entry of get_area_sp_set(area, null)) {
+		if ((decode_sp_player(entry) === who) && is_sp_type_exhausted(decode_sp_type(entry)))
+			count += decode_sp_num(entry)
+	}
+	return count
+}
+
 function find_areas_with_most_ru_sps() {
 	let area_with_most_sps = []
 	let count = 0
@@ -1077,20 +1059,6 @@ function get_areas_with_depots(who) {
 			set_add(areas, get_depot_location(depot))
 
 	return areas
-}
-
-function count_num_french_depots_on_map() {
-	return array_count(get_depots(FRANCE), area => !((area === POOL) || (area === OUT_OF_PLAY)))
-}
-
-function get_all_unoccupied_depots(who) {
-	let unoccupied_depots = []
-	for (let area of get_areas_with_depots(who)) {
-		if (!has_sp_in_area(FRANCE, area)) {
-			set_add(unoccupied_depots, area)
-		}
-	}
-	return unoccupied_depots
 }
 
 function has_enemy_depot(who, area) {
@@ -1638,21 +1606,7 @@ function filter_battles(player) {
 	return battles
 }
 
-function show_delayed_view() {
-	if (!G.delayed || !G.delayed.length) {
-		return false
-	}
-	var faction = G.delayed[0].state.active
-	return R !== faction
-}
-
 function on_view() {
-	var stored_g = G
-	if (show_delayed_view()) {
-		V.log = stored_g.log.slice()
-		V.log.length = G.delayed[0].state.log
-		G = G.delayed[0].state
-	}
 	// Global stuff
 	// G.turn will be undefined before the 'main' script is called.
 	V.initiative = G.initiative
@@ -2843,7 +2797,7 @@ function place_card_at_the_top_of_the_deck(card) {
 	else if (get_deck(who).includes(cards))
 		array_delete_item(get_deck(who), card)
 	get_deck(who).push(card)
-	log(`${format_card(card)} placed on top of the ${ROLES[who]} deck.`)
+	log(`${format_card(card)} placed on top of the ${possessive(who)} deck.`)
 }
 
 // === MAIN ===
@@ -3531,655 +3485,76 @@ P.end_turn = function() {
 			#44: Chaotic Food Distribution		"chaotic_food_distribution"
 */
 
-function draw_a_card(player) {
-	// Reshuffle deck if empty
-	// Impossible for all practical cases (fuzzer handling)
-	if (get_deck(player).length === 0) {
-		G.deck[player] = get_discard(player).slice()
-		get_discard(player).length = 0
-		shuffle(get_deck(player))
-		log(`Reshuffled ${ROLES[player]} deck.`)
-	}
-
-	L.drawn_card[player] = draw_card(player)
-	goto_local_state(player, "review_drawn_card")
+function reshuffle_deck(player) {
+	G.deck[player] = get_discard(player).slice()
+	get_discard(player).length = 0
+	shuffle(get_deck(player))
+	log(`${possessive(player)} deck reshuffled.`)
 }
 
-function init_event_tracker(card) {
-	map_set(L.event_tracker, card, { step: -1 } )
-}
-
-function increment_event_tracker(card, amount = 1) {
-	map_get(L.event_tracker, card, null).step += amount
-}
-
-function decrement_event_tracker(card, amount = 1) {
-	map_get(L.event_tracker, card, null).step -= amount
-}
-
-function get_event_data(card, fallback = null) {
-	return map_get(L.event_tracker, card, fallback)
-}
-
-function get_event_step(card) {
-	return get_event_data(card).step
-}
-
-function count_num_exhausted_sps_on_map(player, areas = map_keys(G.sps)) {
-	let count = 0
-	for (let area of areas) {
-		if (has_exhausted_sp(player, area))
-			count += count_num_exhausted_sps(player, area)
-	}
-	return count
-}
-
-// TODO: Cleanup repeated discard/log
 P.draw_card_to_hand = {
 	_begin() {
-		// NOTE: Set G.active to whoever needs to draw a card before calling (since we don't want to define must-play events in different places)
-		// Supports simultaneous and individual card drawing
-
-		if (Array.isArray(G.active) && !is_resource_turn(get_current_turn())) {
-			G.active = [RUSSIA, FRANCE]
-			log_h2("Draw a Card")
+		// L.phase? (whether this is the draw card to hand phase, or a simple draw card)
+		L.phase = L.L.P === "turn"
+		if (L.phase) {
+			log_h2("Draw A Card")
+			G.active = [ RUSSIA, FRANCE ]
 		}
 
-		// Current local state
-		L.state = ["draw_card", "draw_card"]
-		// Current card drawn
-		L.drawn_card = [-1, -1]
-		// Some must-play draw are also multi-step (eeks!), so track them using a map
-		// Also stores event-specific information, so that it stays organized
-		L.event_tracker = []
-		// Cache of persistent events played throughout the state by both sides (which will be added to G.persistent_events at the end)
-		L.persistent_events = []
-		// Number of cards each player must draw (relevant for the resources phase)
-		L.num_cards_to_draw = L.num_cards_to_draw ?? [1, 1]
+		// So that the forking works as intended.
+		if (typeof G.active === 'number')
+			G.active = [ G.active ]
+
+		L.drawn_card = -1
+		L.num_cards_to_draw = L.num_cards_to_draw?.[R] ?? 1
+
+		if (!Array.isArray(G.L))
+			fork()
 	},
-	states: {
-		"draw_card": {
-			on_prompt() {
-				V.prompt = "Draw a card to your hand."
-				button_draw()
-			},
-			on_draw() {
-				draw_a_card(R)
-			},
-			on_undo() {
-				if (!Array.isArray(G.active) && L.drawn_card[R] === -1)
-					pop_undo()
-			}
-		},
-		"review_drawn_card": {
-			on_prompt() {
-				V.prompt = `You drew ${format_card(L.drawn_card[R])}.`
-				button_confirm()
-			},
-			on_confirm() {
-				if (is_must_play_event(L.drawn_card[R])) {
-					set_add(L.persistent_events, L.drawn_card[R])
-					init_event_tracker(L.drawn_card[R])
-					goto_local_state(R, get_event_state_name(L.drawn_card[R]))
-				} else {
-					end_local_state(R)
-				}
-			},
-		},
-		// Sequencing this event is a bit tricky, and I have bent some rules to make this work.
-		// Note to self: Beware touching G.active and R in this sub-state, since they can get mixed up between single-active and multi-active situations.
-		"holy_mother_russia_ru": {
-			on_begin() {
-				get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key = -1
-			},
-			on_prompt() {
-				switch(get_event_step(C_HOLY_MOTHER_RUSSIA_RU)) {
-				case -1:
-					prompt_card(C_HOLY_MOTHER_RUSSIA_RU, "Receive two additional orders.")
-					button_next()
-					break
-				case 0:
-					if (set_has(G.active, FRANCE))
-						prompt_card(C_HOLY_MOTHER_RUSSIA_RU, "France will designate a Russian-controlled Key City after resolving their actions.")
-					else
-						prompt_card(C_HOLY_MOTHER_RUSSIA_RU, "France will designate a Russian-controlled Key City.")
-					button_confirm()
-					break
-				case 1:
-					prompt_card(C_HOLY_MOTHER_RUSSIA_RU, "Designate a Russian-controlled Key City.")
-					filter_areas(area => is_key_city(area) && is_ru_controlled(area)).forEach(action_area)
-					break
-				case 2:
-					prompt_card(C_HOLY_MOTHER_RUSSIA_RU, `The side controlling ${format_area(get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key)} at the end of the turn gains +1 VP.`)
-					button_confirm()
-				}
-				button_undo(get_event_step(C_HOLY_MOTHER_RUSSIA_RU) === 0 || get_event_step(C_HOLY_MOTHER_RUSSIA_RU) === 2)
-			},
-			on_next() {
-				increment_event_tracker(C_HOLY_MOTHER_RUSSIA_RU)
-			},
-			on_area(area) {
-				increment_event_tracker(C_HOLY_MOTHER_RUSSIA_RU)
-				get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key = area
-			},
-			on_confirm() {
-				if (R === RUSSIA) {
-					increment_event_tracker(C_HOLY_MOTHER_RUSSIA_RU)
-					discard_or_remove_card(C_HOLY_MOTHER_RUSSIA_RU)
-					// If France has already finished the state, bring them back in.
-					if (Array.isArray(G.active)) {
-						if (!set_has(G.active, FRANCE)) { //If France is done doing their stuff & has exited the state
-							set_add(G.active, FRANCE)
-							goto_local_state(FRANCE, "holy_mother_russia_ru")
-						}
-					} else {
-						G.active = FRANCE
-						goto_local_state(FRANCE, "holy_mother_russia_ru")
-					}
-				} else {
-					log_must_play_event(C_HOLY_MOTHER_RUSSIA_RU, get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key)
-				}
-				end_local_state(R)
-			},
-			on_undo() {
-				decrement_event_tracker(C_HOLY_MOTHER_RUSSIA_RU)
-				if (R === FRANCE)
-					get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key = -1
-			},
-		},
-		// Minor modification: Russia draws a card after confirming the card's effects (in order to maintain a constant flow in case another must-play is drawn)
-		"extreme_weather_ru": {
-			on_prompt() {
-				switch(get_event_step(C_EXTREME_WEATHER_RU)) {
-				case -1:
-					prompt_card(C_EXTREME_WEATHER_RU, "France -2 orders this turn.")
-					button_next()
-					return
-				case 0:
-					prompt_card(C_EXTREME_WEATHER_RU, "1 fresh SP in each force that uses 'Forced March' or 'March' orders this turn is exhausted.")
-					button_next()
-					return
-				case 1:
-					prompt_card(C_EXTREME_WEATHER_RU, "Draw a card to your hand.")
-					button_draw()
-				}
-				button_undo(get_event_step(C_EXTREME_WEATHER_RU) > -1)
-			},
-			on_next() { increment_event_tracker(C_EXTREME_WEATHER_RU) },
-			on_undo() { decrement_event_tracker(C_EXTREME_WEATHER_RU) },
-			on_draw() {
-				draw_a_card(R)
-			},
-			on_end() {
-				log_must_play_event(C_EXTREME_WEATHER_RU)
-				discard_or_remove_card(C_EXTREME_WEATHER_RU)
-			},
-		},
-		"command_friction": {
-			on_prompt() {
-				prompt_card(C_COMMAND_FRICTION, "At the beginning of the 'Place Orders' phase, FR may designate an area with more than one 1 RU leader. RU must discard a card to place orders there.")
-				button_confirm()
-			},
-			on_confirm() {
-				log_must_play_event(C_COMMAND_FRICTION)
-				discard_or_remove_card(C_COMMAND_FRICTION)
-				end_local_state(R)
-			},
-		},
-		"poor_logistics": {
-			on_prompt() {
-				prompt_card(C_POOR_LOGISTICS, "This turn, the Russians may not use 'Place Depot' orders.")
-				button_confirm()
-			},
-			on_confirm() {
-				log_must_play_event(C_POOR_LOGISTICS)
-				discard_or_remove_card(C_POOR_LOGISTICS)
-				end_local_state(R)
-			},
-		},
-		"devastated_countryside": {
-			on_prompt() {
-				prompt_card(C_DEVASTATED_COUNTRYSIDE, "The effect of Devastation markers is doubled for both sides this turn.")
-				button_confirm()
-			},
-			on_confirm() {
-				log_must_play_event(C_DEVASTATED_COUNTRYSIDE)
-				discard_or_remove_card(C_DEVASTATED_COUNTRYSIDE)
-				end_local_state(R)
-			},
-		},
-		"barclay_de_tolly_resigns": {
-			on_prompt() {
-				if (!is_leader_on_map(L_DE_TOLLY)) {
-					prompt_card(C_BARCLAY_DE_TOLLY_RESIGNS, `${format_leader(L_DE_TOLLY)} is not on map – no effect.`)
-					button("confirm")
-				} else if (!is_leader_on_map(L_KUTUZOV)) {
-					prompt_card(C_BARCLAY_DE_TOLLY_RESIGNS, `${format_leader(L_KUTUZOV)} is not on map – no effect.`)
-					button("confirm")
-				} else {
-					prompt_card(C_BARCLAY_DE_TOLLY_RESIGNS, `${format_leader(L_KUTUZOV)} is on map – remove ${format_leader(L_DE_TOLLY)} from play.`)
-					action("leader", L_DE_TOLLY)
-				}
-			},
-			on_confirm() {
-				end_local_state(R)
-			},
-			on_leader(leader) {
-				move_leader(leader, POOL)
-				end_local_state(R)
-			},
-			on_end() {
-				log_must_play_event(C_BARCLAY_DE_TOLLY_RESIGNS, get_leader_location(L_DE_TOLLY) === POOL)
-				discard_or_remove_card(C_BARCLAY_DE_TOLLY_RESIGNS)
-			},
-		},
-		"poor_communications": {
-			on_prompt() {
-				prompt_card(C_POOR_COMMUNICATIONS, "At the end of the 'Place Orders' phase, RU may designate 1 placed FR order to remove.")
-				button("confirm")
-			},
-			on_confirm() {
-				log_must_play_event(C_POOR_COMMUNICATIONS)
-				discard_or_remove_card(C_POOR_COMMUNICATIONS)
-				end_local_state(R)
-			},
-		},
-		"jerome_goes_home": {
-			on_prompt() {
-				if (!is_leader_on_map(L_JEROME)) {
-					prompt_card(C_JEROME_GOES_HOME, `${format_leader(L_JEROME)} is not on map – no effect.`)
-					button("confirm")
-				} else {
-					prompt_card(C_JEROME_GOES_HOME, `Remove ${format_leader(L_JEROME)} at no VP cost from ${format_area(get_leader_location(L_JEROME))}.`)
-					action("leader", L_JEROME)
-				}
-			},
-			on_confirm() {
-				end_local_state(R)
-			},
-			on_leader(leader) {
-				move_leader(leader, POOL)
-				end_local_state(R)
-			},
-			on_end() {
-				log_must_play_event(C_JEROME_GOES_HOME, get_leader_location(L_JEROME) === POOL)
-				discard_or_remove_card(C_JEROME_GOES_HOME)
-			},
-		},
-		// NOTE: contains duplicated code from the Attrition section (working around not being able to be in multiple states at once)
-		"chaos_in_the_rear_areas": {
-			on_begin() {
-				const evt = get_event_data(C_CHAOS_IN_THE_REAR_AREAS)
-				evt.losses_remaining = Math.min(2, get_devastated_areas_with_french_sps().length)
-				evt.count = 0
-
-				// Constants to avoid typos
-				evt.EXHAUST = "exhaust"
-				evt.ELIMINATE_2 = "eliminate_2"
-
-				// Undo stack (WIP)
-				evt.undo = []
-			},
-			on_prompt() {
-				const evt = get_event_data(C_CHAOS_IN_THE_REAR_AREAS)
-
-				// button_undo(evt.undo.length > 0)
-
-				if (evt.losses_remaining > 0) {
-					const total_exhausted = count_num_exhausted_sps_on_map(FRANCE, get_devastated_areas_with_french_sps())
-
-					// If an additional SP needs to be eliminated.
-					if (evt.count > 0 && total_exhausted > 0) {
-						prompt_card(C_CHAOS_IN_THE_REAR_AREAS, `Eliminate another exhausted SP.`)
-						this.gen_eliminate_actions()
-						return
-					}
-
-					prompt_card(C_CHAOS_IN_THE_REAR_AREAS, `Assign attrition losses (${evt.losses_remaining} remaining).`)
-
-					if (get_devastated_areas_with_french_sps().some(area => has_fresh_sp(FRANCE, area)))
-						this.gen_exhaust_actions()
-
-					if (total_exhausted > 2 || (total_exhausted === 1 && get_devastated_areas_with_french_sps().every(area => !has_fresh_sp(FRANCE, area))))
-						this.gen_eliminate_actions()
-				} else {
-					prompt_card(C_CHAOS_IN_THE_REAR_AREAS, `All done.`)
-					button_done()
-				}
-			},
-			// TO REPLACE LATER
-			gen_exhaust_actions() {
-				this._gen_actions(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).EXHAUST)
-			},
-			gen_eliminate_actions() {
-				this._gen_actions(get_event_data(C_CHAOS_IN_THE_REAR_AREAS).ELIMINATE_2)
-			},
-			_gen_actions(choice) {
-				const evt = get_event_data(C_CHAOS_IN_THE_REAR_AREAS)
-				const get_valid_types = (choice === evt.EXHAUST) ? get_all_fresh_sp_types : get_all_exhausted_sp_types
-
-				for (let area of get_devastated_areas_with_french_sps()) {
-					if (has_battle(area)) {
-						get_player_battle_data(FRANCE, area).forces.forEach(force => {
-							for (let type of get_valid_types(FRANCE, area))
-								if (force.sps[type] > 0)
-									action_sp_alt(type, area, force.strength, force.from)
-						})
-					} else if (have_sps_moved_in_area(area)) {
-						for (let type of get_valid_types(FRANCE, area)) {
-							let remaining = 0
-							for (let entry of get_moved_sps_in_area(area)) {
-								if (decode_sp_player(entry) === FRANCE && decode_sp_type(entry) === type) {
-									remaining += decode_sp_num
-									action_sp_alt(type, area, decode_sp_strength(entry), decode_sp_from(entry))
-								}
-							}
-							if (remaining < count_num_sps_of_type(FRANCE, type, area))
-								action_sp_alt(type, area)
-						}
-					} else {
-						get_valid_types(FRANCE, area).forEach(t => action_sp_alt(t, area))
-					}
-				}
-			},
-			on_sp(entry) {
-				const evt = get_event_data(C_CHAOS_IN_THE_REAR_AREAS)
-				const type = decode_sp_type(entry)
-
-				// evt.undo.push( { type, area, strength, from } )
-
-				if (is_sp_type_fresh(type)) {
-					exhaust_sp_entry(entry)
-					--evt.losses_remaining
-				} else {
-					eliminate_sp_entry(entry)
-					if (evt.count === 1)
-						--evt.losses_remaining
-					if (evt.count === 0 && count_num_exhausted_sps_on_map(FRANCE, get_devastated_areas_with_french_sps()) === 0)
-						return
-					evt.count = 1 - evt.count
-				}
-			},
-			on_undo() {
-				const evt = get_event_data(C_CHAOS_IN_THE_REAR_AREAS)
-				let undo = evt.undo.pop()
-
-				if (is_sp_type_fresh(undo.type)) {
-					// rally_sp()
-				} else {
-					// add_sp()
-				}
-			},
-			on_done() {
-				discard_or_remove_card(C_CHAOS_IN_THE_REAR_AREAS)
-				// log_must_play_event(C_CHAOS_IN_THE_REAR_AREAS)
-				end_local_state(R)
-			}
-		},
-		"vulnerable_supply_lines": {
-			on_begin() {
-				get_event_data(C_VULNERABLE_SUPPLY_LINES).num_french_depots = count_num_french_depots_on_map()
-				get_event_data(C_VULNERABLE_SUPPLY_LINES).depots_to_remove 	= get_all_unoccupied_depots(FRANCE)
-				get_event_data(C_VULNERABLE_SUPPLY_LINES).removed_depots 	= [] //For undo
-				get_event_data(C_VULNERABLE_SUPPLY_LINES).discarded_card 	= -1
-			},
-			on_prompt() {
-				if (get_event_data(C_VULNERABLE_SUPPLY_LINES).num_french_depots >= 4) {
-					switch(get_event_step(C_VULNERABLE_SUPPLY_LINES)) {
-					case -1:
-						if (get_hand(R).length > 2) {
-							prompt_card(C_VULNERABLE_SUPPLY_LINES, "Discard a card from your hand.")
-							for (let card of get_hand(R))
-								if (!is_card_dummy(card) && card !== C_VULNERABLE_SUPPLY_LINES)
-									action_card(card)
-						} else {
-							prompt_card(C_VULNERABLE_SUPPLY_LINES, "No cards in hand to discard.")
-							button_next()
-						}
-						return
-					case 0:
-						prompt_card(C_VULNERABLE_SUPPLY_LINES, `You discarded ${format_card(get_event_data(C_VULNERABLE_SUPPLY_LINES).discarded_card)}.`)
-						button_confirm()
-						button_undo()
-						return
-					case 1:
-						if (get_event_data(C_VULNERABLE_SUPPLY_LINES).depots_to_remove.length > 0) {
-							prompt_card(C_VULNERABLE_SUPPLY_LINES, `Remove all unoccupied French Depot Markers (${join_array_with_and(get_event_data(C_VULNERABLE_SUPPLY_LINES).depots_to_remove.map(format_area))}).`)
-							for (let area of get_event_data(C_VULNERABLE_SUPPLY_LINES).depots_to_remove)
-								if (!get_event_data(C_VULNERABLE_SUPPLY_LINES).removed_depots.includes(area))
-									action_depot(find_depot_at_location(FRANCE, area))
-						} else {
-							prompt_card(C_VULNERABLE_SUPPLY_LINES, `Remove unoccupied depots – all done.`)
-							button_confirm()
-						}
-						button_undo()
-					}
-				} else {
-					prompt_card(C_VULNERABLE_SUPPLY_LINES, "No effect.")
-					button_confirm()
-				}
-			},
-			on_card(card) {
-				discard_card(card)
-				get_event_data(C_VULNERABLE_SUPPLY_LINES).discarded_card = card
-				increment_event_tracker(C_VULNERABLE_SUPPLY_LINES)
-			},
-			on_next() {
-				increment_event_tracker(C_VULNERABLE_SUPPLY_LINES, 2)
-			},
-			on_confirm() {
-				if (get_event_step(C_VULNERABLE_SUPPLY_LINES) === 0) {
-					increment_event_tracker(C_VULNERABLE_SUPPLY_LINES)
-				} else {
-					discard_or_remove_card(C_VULNERABLE_SUPPLY_LINES)
-					log_must_play_event(C_VULNERABLE_SUPPLY_LINES)
-					end_local_state(R)
-				}
-			},
-			on_depot(depot) {
-				set_delete(get_event_data(C_VULNERABLE_SUPPLY_LINES).depots_to_remove, get_depot_location(depot))
-				get_event_data(C_VULNERABLE_SUPPLY_LINES).removed_depots.push(get_depot_location(depot))
-				G.depots[depot] = POOL //remove without log
-			},
-			on_undo() {
-				if (get_event_step(C_VULNERABLE_SUPPLY_LINES) === 0) { //undo discard
-					set_delete(get_discard(R), get_event_data(C_VULNERABLE_SUPPLY_LINES).discarded_card)
-					add_to_hand(R, get_event_data(C_VULNERABLE_SUPPLY_LINES).discarded_card)
-					get_event_data(C_VULNERABLE_SUPPLY_LINES).discarded_card = -1
-					decrement_event_tracker(C_VULNERABLE_SUPPLY_LINES)
-				} else {
-					if (get_event_data(C_VULNERABLE_SUPPLY_LINES).removed_depots.length === 0)
-						decrement_event_tracker(C_VULNERABLE_SUPPLY_LINES, (get_event_data(C_VULNERABLE_SUPPLY_LINES).discarded_card > -1) ? 1 : 2)
-					else {
-						let location = get_event_data(C_VULNERABLE_SUPPLY_LINES).removed_depots.pop()
-						add_depot(R, location)
-						set_add(get_event_data(C_VULNERABLE_SUPPLY_LINES).depots_to_remove, location)
-					}
-				}
-			}
-		},
-		"freezing_weather": {
-			on_prompt() {
-				switch(get_event_step(C_FREEZING_WEATHER)) {
-				case -1:
-					prompt_card(C_FREEZING_WEATHER, "France may not use 'Place Depot' or 'Forage' orders this turn.")
-					button_next()
-					return
-				case 0:
-					prompt_card(C_FREEZING_WEATHER, "All French forces have a maximum move of 1 this turn, and fight as if under 'Forced March' orders.")
-					button_confirm()
-					button_undo()
-					return
-				}
-			},
-			on_next() {
-				increment_event_tracker(C_FREEZING_WEATHER)
-			},
-			on_confirm() {
-				log_must_play_event(C_FREEZING_WEATHER)
-				discard_or_remove_card(C_FREEZING_WEATHER)
-				end_local_state(R)
-			},
-			on_undo() {
-				decrement_event_tracker(C_FREEZING_WEATHER)
-			}
-		},
-		"extreme_weather_fr": {
-			on_prompt() {
-				switch(get_event_step(C_EXTREME_WEATHER_FR)) {
-				case -1:
-					prompt_card(C_EXTREME_WEATHER_FR, "This turn, both sides have -2 orders.")
-					button_next()
-					return
-				case 0:
-					prompt_card(C_EXTREME_WEATHER_FR, "This, AND the next, turn neither side may place 'Forced March' orders.")
-					button_next()
-					button_undo()
-					return
-				case 1:
-					prompt_card(C_EXTREME_WEATHER_FR, "1 SP in each force that uses 'March' orders becomes exhausted.")
-					button_confirm()
-					button_undo()
-					return
-				}
-			},
-			on_next() { increment_event_tracker(C_EXTREME_WEATHER_FR) },
-			on_confirm() {
-				log_must_play_event(C_EXTREME_WEATHER_FR)
-				discard_or_remove_card(C_EXTREME_WEATHER_FR)
-				end_local_state(R)
-			},
-			on_undo() { decrement_event_tracker(C_EXTREME_WEATHER_FR) },
-		},
-		"logistics_collapse": {
-			on_prompt() {
-				prompt_card(C_LOGISTICS_COLLAPSE, "For the rest of the game, France must discard a card from hand to execute a 'Place Depot' order.")
-				button_confirm()
-			},
-			on_confirm() {
-				log_must_play_event(C_LOGISTICS_COLLAPSE)
-				discard_or_remove_card(C_LOGISTICS_COLLAPSE)
-				end_local_state(R)
-			}
-		},
-		// TO FIX
-		"chaotic_food_distribution": {
-			on_begin() {
-				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type = -1
-				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area = -1
-				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).removed_depot = -1
-			},
-			on_prompt() {
-				if (has_depot_on_map(FRANCE)) {
-					switch(get_event_step(C_CHAOTIC_FOOD_DISTRIBUTION)) {
-					case -1:
-						prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, "Remove a French depot from map.")
-						for (let depot = get_first_depot(R); depot <= get_last_depot(R); ++depot)
-							if (is_depot_on_map(depot))
-								action_depot(depot)
-						return
-					case 0:
-						if (has_exhausted_sp(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)) {
-							prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, `Rally an exhausted SP at ${format_area(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)}.`)
-							generate_rally_actions(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)
-						} else {
-							prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, `No exhausted SPs at ${format_area(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)} to rally.`)
-							button_next()
-						}
-						button_undo()
-						return
-					case 1:
-						prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, "Draw a card to your hand.")
-						button_draw()
-						button_undo()
-						return
-					}
-				} else {
-					prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, "All done.")
-					button_confirm()
-				}
-			},
-			on_depot(depot) {
-				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area = get_depot_location(depot)
-				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).removed_depot = depot
-				G.depots[depot] = POOL
-				increment_event_tracker(C_CHAOTIC_FOOD_DISTRIBUTION)
-			},
-			on_sp(entry) {
-				rally_sp_entry(entry)
-				get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type = decode_sp_type(entry)
-				increment_event_tracker(C_CHAOTIC_FOOD_DISTRIBUTION)
-			},
-			on_next() {
-				increment_event_tracker(C_CHAOTIC_FOOD_DISTRIBUTION)
-			},
-			on_draw() {
-				// Handling here since another must-play could be drawn
-				log_must_play_event(C_CHAOTIC_FOOD_DISTRIBUTION, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)
-				discard_or_remove_card(C_CHAOTIC_FOOD_DISTRIBUTION)
-				draw_a_card(R)
-			},
-			on_confirm() {
-				log_must_play_event(C_CHAOTIC_FOOD_DISTRIBUTION, "no effect")
-				discard_or_remove_card(C_CHAOTIC_FOOD_DISTRIBUTION)
-				end_local_state(R)
-			},
-			on_undo() {
-				if (get_event_step(C_CHAOTIC_FOOD_DISTRIBUTION) === 0) {
-					G.depots[get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).removed_depot] = get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area
-					get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area = -1
-					get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).removed_depot = -1
-				} else {
-					if (get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type > -1) {
-						exhaust_sp(R, get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area, get_fresh_version(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type), 1)
-						get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type = -1
-					}
-				}
-				decrement_event_tracker(C_CHAOTIC_FOOD_DISTRIBUTION)
-			}
-		},
+	inactive: "draw a card",
+	prompt() {
+		if (L.drawn_card === -1) {
+			V.prompt = `Draw a card to your hand.`
+			button_draw()
+		} else {
+			V.prompt = `You drew ${format_card(L.drawn_card)}.`
+			button_confirm()
+		}
 	},
-	prompt() 		{ this.states[L.state[R]].on_prompt() },
-	draw() 		{ this.states[L.state[R]].on_draw() },
-	confirm() 		{ this.states[L.state[R]].on_confirm() },
-	next() 		{ this.states[L.state[R]].on_next() },
-	exhaust()		{ this.states[L.state[R]].on_exhaust() },
-	eliminate_2()	{ this.states[L.state[R]].on_eliminate_2() },
-	area(area) 		{ this.states[L.state[R]].on_area(area) },
-	card(card) 		{ this.states[L.state[R]].on_card(card)},
-	depot(depot) 	{ this.states[L.state[R]].on_depot(depot)},
-	leader(leader) 	{ this.states[L.state[R]].on_leader(leader) },
-	sp(entry) 		{ this.states[L.state[R]].on_sp(entry) },
-	done() 		{ this.states[L.state[R]].on_done() },
-	undo() 		{ this.states[L.state[R]].on_undo() },
-	finish_state() {
-		if (--L.num_cards_to_draw[R] > 0) {
-			goto_local_state(R, "draw_card")
-			return
+	draw() {
+		clear_undo()
+		if (get_deck(R).length === 0)
+			reshuffle_deck(R)
+		L.drawn_card = draw_card(R)
+		if (L.drawn_card === C_HOLY_MOTHER_RUSSIA_RU)
+			L.holy_mother_russia_ru = true
+	},
+	confirm() {
+		if (is_must_play_event(L.drawn_card)) {
+			if (L.drawn_card !== C_HOLY_MOTHER_RUSSIA_RU)
+				call("event", { card: L.drawn_card })
+			else
+				call("holy_mother_russia_ru")
+		} else {
+			this._finish()
 		}
-
-		// If France just finished (in a multi-active situation), and Russia has confimed drawing Holy Mother Russia, adjust France's local state.
-		if (R === FRANCE && map_has(L.event_tracker, C_HOLY_MOTHER_RUSSIA_RU) && (get_event_step(C_HOLY_MOTHER_RUSSIA_RU) === 1)) {
-			goto_local_state(FRANCE, "holy_mother_russia_ru")
-			return
-		}
-
-		if (Array.isArray(G.active))
+	},
+	_resume() {
+		this._finish()
+	},
+	_finish() {
+		if (--L.num_cards_to_draw > 0) {
+			L.drawn_card = -1
+		} else {
 			set_delete(G.active, R)
-
-		// Check R === FRANCE since we want France to have performed the last action.
-		// G.active is set to FRANCE in a single-active situation when Russia draws Holy Mother Russia.
-		if (
-			(!Array.isArray(G.active) && (!set_has(L.persistent_events, C_HOLY_MOTHER_RUSSIA_RU) || R === FRANCE))
-			|| G.active.length === 0
-		) {
-			for (let card of L.persistent_events) {
-				if (card === C_HOLY_MOTHER_RUSSIA_RU)
-					add_persistent_event(card, { key: get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key })
+			if (G.active.length === 0) {
+				const holy_mother_russia_ru = G.L[RUSSIA].holy_mother_russia_ru
+				join()
+				if (holy_mother_russia_ru)
+					goto("holy_mother_russia_ru_designate")
 				else
-					add_persistent_event(card)
+					end()
 			}
-			end()
 		}
 	}
 }
@@ -4676,7 +4051,7 @@ P.place_orders = script(`
 
 	set G.active FRANCE
 	if (is_event_active(C_COMMAND_FRICTION)) {
-		call command_friction
+		call command_friction_designate
 	}
 	call begin_place_orders_events
 
@@ -4685,7 +4060,7 @@ P.place_orders = script(`
 
 	set G.active RUSSIA
 	if (is_event_active(C_POOR_COMMUNICATIONS)) {
-		call poor_communications
+		call poor_communications_designate
 	}
 	goto end_place_orders_events
 `)
@@ -5519,8 +4894,6 @@ P.execute_orders = script(`
 			call may_play_good_leadership
 		}
 	}
-
-	call commit_delayed_reaction
 `)
 
 P.log_no_orders_placed = function() {
@@ -5602,9 +4975,6 @@ function get_order_state_name(type) {
 
 P.execute_next_order = {
 	_begin() {
-		if (have_delayed_reaction()) {
-			call("commit_delayed_reaction")
-		}
 		// L.type
 		filter_orders(G.active, L.type)
 	},
@@ -10007,39 +9377,83 @@ P.may_remove_place_depot_orders = {
 	Tormasov	-2 to Modified Size in his area
 */
 
+/* LOOKUPS */
+
+const ATTRITION_TABLE = [
+	[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 1], [0, 1]], // 1
+	[[0, 0], [0, 0], [0, 0], [0, 0], [0, 1], [1, 1], [1, 1]], // 2
+	[[0, 0], [0, 0], [0, 0], [0, 0], [1, 1], [1, 1], [2, 1]], // 3
+	[[0, 0], [0, 0], [0, 0], [0, 1], [1, 1], [2, 1], [2, 2]], // 4
+	[[0, 0], [0, 0], [0, 0], [1, 1], [1, 1], [2, 1], [2, 2]], // 5
+	[[0, 0], [0, 0], [0, 1], [1, 1], [1, 1], [2, 2], [3, 2]], // 6
+	[[0, 0], [0, 0], [1, 1], [1, 1], [2, 1], [2, 2], [4, 2]], // 7-8
+	[[0, 0], [0, 1], [1, 1], [1, 1], [2, 2], [2, 2], [4, 3]], // 9-11
+	[[0, 1], [1, 1], [1, 1], [2, 1], [2, 2], [3, 2], [5, 3]], // 12-14
+	[[1, 1], [1, 1], [2, 1], [2, 2], [3, 2], [4, 3], [6, 3]], // 15-20
+	[[1, 1], [2, 1], [2, 2], [3, 2], [4, 3], [5, 3], [7, 3]], // 21+
+]
+
+function get_modified_size_row(modified_size) {
+	if (modified_size <= 1) return 0
+	else if (modified_size >= 2 && modified_size <= 6) return modified_size - 1
+	else if (modified_size >= 7 && modified_size <= 8) return 6
+	else if (modified_size >= 9 && modified_size <= 11) return 7
+	else if (modified_size >= 12 && modified_size <= 14) return 8
+	else if (modified_size >= 15 && modified_size <= 20) return 9
+	else return 10
+}
+
+function lookup_attrition_table(modified_size, distance_to_nearest_depot) {
+	distance_to_nearest_depot = Math.max(0, Math.min(6, distance_to_nearest_depot))
+	return ATTRITION_TABLE[get_modified_size_row(modified_size)][distance_to_nearest_depot].slice()
+}
+
+function lookup_attrition_losses(modified_size, distance_to_nearest_depot) {
+	return lookup_attrition_table(modified_size, distance_to_nearest_depot)[0]
+}
+
+function lookup_attrition_devastation(modified_size, distance_to_nearest_depot) {
+	return lookup_attrition_table(modified_size, distance_to_nearest_depot)[1]
+}
+
+function get_attrition_result_name(modified_size, distance_to_nearest_depot) {
+	let result = lookup_attrition_table(modified_size, distance_to_nearest_depot)
+	// The lookup returns an array of length 2: [<num. attrition losses>, <increase in devastation>]
+	return `${result[0]}${"D".repeat(result[1])}`
+}
+
+/* ATTRITION PHASE */
 P.attrition = script(`
 	eval {
 		log_h2("Attrition")
 		L.player_with_initiative = get_who_has_initiative()
-		L.player_without_initiative = enemy(L.player_with_initiative)
+		L.execution_order = [ 1 - L.player_with_initiative, L.player_with_initiative ]
 	}
 
 	call change_orders { current_type: FORAGE }
 
-	// FR #41 Freezing Weather: France may not use Forage orders.
+	// FR #41 Freezing Weather: France may not use Forage orders this turn.
 	if (is_event_active(C_FREEZING_WEATHER)) {
 		call log_freezing_weather
 	}
 
+	// TODO: Improve flow for expediency
 	eval { log_h3("Events") }
-	if (could_play_any_attrition_event(L.player_without_initiative)) {
-		set G.active L.player_without_initiative
-		call attrition_events
-	}
-	if (could_play_any_attrition_event(L.player_with_initiative)) {
-		set G.active L.player_with_initiative
-		call attrition_events
+	for L.player in 0 to (L.execution_order.length - 1) {
+		if (could_play_any_attrition_event((L.execution_order[L.player]))) {
+			set G.active (L.execution_order[L.player])
+			call attrition_events
+		}
 	}
 
 	eval { log_h3("Roll Weather Die") }
-	set G.active L.player_with_initiative
 	call roll_weather_die
 
 	eval { log_h3("Perform Attrition") }
-	set G.active L.player_without_initiative
-	call do_attrition
-	set G.active L.player_with_initiative
-	call do_attrition
+	for L.player in 0 to (L.execution_order.length - 1) {
+		set G.active (L.execution_order[L.player])
+		call do_attrition
+	}
 
 	if (can_play_event(C_NAPOLEON_RETURNS_TO_PARIS) && (!is_leak_hand() || hand_has(FRANCE, C_NAPOLEON_RETURNS_TO_PARIS))) {
 		set G.active FRANCE
@@ -10061,12 +9475,8 @@ function could_play_any_attrition_event(player) {
 	return ATTRITION_EVENTS[player].some(can_play_event)
 }
 
-function get_attrition_events(player) {
-	return ATTRITION_EVENTS[player]
-}
-
 P.attrition_events = function() {
-	goto("play_events", { events: get_attrition_events(G.active) })
+	goto("play_events", { events: ATTRITION_EVENTS[G.active] })
 }
 
 /* ROLL WEATHER DIE */
@@ -10093,26 +9503,11 @@ function log_weather_roll() {
 	}
 }
 
-P.roll_weather_die = {
-	_begin() {
-		G.weather_roll = -1
-	},
-	prompt() {
-		if (G.weather_roll === -1) {
-			const season_name = get_current_season() === SUMMER ? "Summer" : "Winter"
-			V.prompt = `Roll the ${season_name} Weather Die.`
-			button_roll()
-		} else {
-			V.prompt = `Weather Roll: ${G.weather_roll}.`
-			button_confirm()
-		}
-	},
-	roll() {
-		clear_undo()
-		G.weather_roll = roll_d6()
-		log_weather_roll()
-	},
-	confirm() {	end() },
+P.roll_weather_die = function() {
+	clear_undo()
+	G.weather_roll = roll_d6()
+	log_weather_roll()
+	end()
 }
 
 /* PERFORM ATTRITION */
@@ -10183,41 +9578,99 @@ function log_attrition_info(who, area) {
 	log()
 }
 
-function get_attrition_result_name(modified_size, distance_to_nearest_depot) {
-	let result = lookup_attrition_table(modified_size, distance_to_nearest_depot)
-	// The lookup returns an array of length 2: [<num. attrition losses>, <increase in devastation>]
-	return `${result[0]}${"D".repeat(result[1])}`
-}
-
-function lookup_attrition_losses(modified_size, distance_to_nearest_depot) {
-	return lookup_attrition_table(modified_size, distance_to_nearest_depot)[0]
-}
-
-function lookup_attrition_devastation(modified_size, distance_to_nearest_depot) {
-	return lookup_attrition_table(modified_size, distance_to_nearest_depot)[1]
-}
-
-function count_num_exhausted_sps(who, area) {
-	if (!has_sp(area)) return 0
-
-	let count = 0
-	for (let entry of get_area_sp_set(area, null)) {
-		if ((decode_sp_player(entry) === who) && is_sp_type_exhausted(decode_sp_type(entry)))
-			count += decode_sp_num(entry)
+/* ASSIGN ATTRITION LOSSES */
+function init_attrition_data() {
+	G.attrition_data = {
+		areas: [],
+		losses_remaining: -1,
+		devastation: -1,
+		num_sps_affected: 0,
+		cancels_remaining: 0,
+		has_assigned_cavalry_loss: false,
+		// Logging caches
+		previously_exhausted: [],
+		previously_eliminated: [],
 	}
-	return count
 }
 
-function get_current_attrition_area() {
-	return G.attrition_data.area
+function reset_attrition_data() {
+	if (G.attrition_data) {
+		delete G.attrition_data.areas
+		delete G.attrition_data.losses_remaining
+		delete G.attrition_data.devastation
+		delete G.attrition_data.num_sps_affected
+		delete G.attrition_data.cancels_remaining
+		delete G.attrition_data.has_assigned_cavalry_loss
+		delete G.attrition_data.previously_exhausted
+		delete G.attrition_data.previously_eliminated
+	}
+
+}
+
+function set_attrition_areas(areas) {
+	if (typeof areas === 'number') areas = [ areas ]
+	G.attrition_data.areas = areas
+}
+
+function get_attrition_losses_remaining() {
+	return G.attrition_data.losses_remaining
+}
+
+function set_attrition_losses_remaining(amount) {
+	G.attrition_data.losses_remaining = amount
 }
 
 function has_attrition_losses_remaining() {
-	return G.attrition_data.num_losses_remaining > 0
+	return get_attrition_losses_remaining() > 0
+}
+
+function get_attrition_cancels_remaining() {
+	return G.attrition_data.cancels_remaining
+}
+
+function set_attrition_cancels_remaining(amount) {
+	G.attrition_data.cancels_remaining = amount
+}
+
+function apply_attrition_cancels(amount) {
+	set_attrition_cancels_remaining(amount)
+	while (has_attrition_losses_remaining() && get_attrition_cancels_remaining() > 0) {
+		set_attrition_losses_remaining(get_attrition_losses_remaining() - 1)
+		set_attrition_cancels_remaining(get_attrition_cancels_remaining() - 1)
+	}
+}
+
+function get_attrition_devastation() {
+	return G.attrition_data.devastation
 }
 
 function has_applied_attrition_devastation() {
-	return G.attrition_data.devastation_increase === 0
+	return get_attrition_devastation() === 0
+}
+
+function set_attrition_devastation(amount) {
+	G.attrition_data.devastation = amount
+}
+
+function init_attrition_phase(player, area) {
+	init_attrition_data()
+
+	const modified_size = calculate_modified_size(player, area)
+	const distance_to_nearest_depot = get_supply_status(player, area)
+
+	set_attrition_areas([ area ])
+	set_attrition_losses_remaining(lookup_attrition_losses(modified_size, distance_to_nearest_depot))
+	set_attrition_devastation(lookup_attrition_devastation(modified_size, distance_to_nearest_depot))
+
+	log_attrition_info(player, area)
+}
+
+function reveal_forage_order(order) {
+	remove_order(order)
+	log("Revealed Forage order.")
+	logi(`-2 Attrition Losses.`)
+	log()
+	apply_attrition_cancels(2)
 }
 
 function log_attrition() {
@@ -10242,59 +9695,40 @@ function log_attrition() {
 	}
 }
 
-function reset_attrition_data() {
-	G.attrition_data = {
-		// Area currently being checked
-		area: -1,
-		// Number of ATTRITION LOSSES remaining
-		num_losses_remaining: -1,
-		// Raw amount of how much devastation must be increased
-		devastation_increase: -1,
-		// Number of UNITS assigned losses
-		num_sps_affected: 0,
-		// Number of ATTRITION LOSSES cancelled by a forage order (losses as a result of not being able to increase Devastation may be cancelled)
-		num_cancels_remaining: 0,
-		// Has assigned a Cavalry loss (1/3 hits)
-		has_assigned_cavalry_loss: false,
-		// Caches for logging
-		previously_exhausted: [],
-		previously_eliminated: [],
+function resolve_automatic_attrition(player) {
+	let areas_to_check = []
+
+	for (const area of get_areas_with_sps(player)) {
+		// FR #45 Much Needed Victuals: Attrition is not checked in the corresponding area.
+		if (player === FRANCE && is_event_active(C_MUCH_NEEDED_VICTUALS) && get_event_keyword(C_MUCH_NEEDED_VICTUALS, "area") === area)
+			continue
+
+		const modified_size = calculate_modified_size(player, area)
+		const distance_to_nearest_depot = get_supply_status(player, area)
+
+		if (
+			lookup_attrition_losses(modified_size, distance_to_nearest_depot) === 0
+			&& lookup_attrition_devastation(modified_size, distance_to_nearest_depot) === 0
+		) {
+			set_add(G.attrition_checked, area)
+		} else {
+			set_add(areas_to_check, area)
+		}
 	}
+
+	return areas_to_check
 }
 
 P.do_attrition = {
 	_begin() {
-		// Update distances to nearest depot before calculations
 		update_supply(G.active)
-
-		L.areas = []
-		for (let area of get_areas_with_sps(G.active)) {
-			// FR #45 Much Needed Victuals: Attrition is not checked in the area it was executed
-			if (is_event_active(C_MUCH_NEEDED_VICTUALS) && get_event_keyword(C_MUCH_NEEDED_VICTUALS, "area") === area)
-				continue
-
-			let modified_size = calculate_modified_size(G.active, area)
-			let distance_to_nearest_depot = get_supply_status(G.active, area)
-
-			// No need to make players check attrition in areas where it won't matter
-			if (lookup_attrition_losses(modified_size, distance_to_nearest_depot) === 0
-				&& lookup_attrition_devastation(modified_size, distance_to_nearest_depot) === 0
-			) {
-				// Populate 'Attrition Checked' markers
-				set_add(G.attrition_checked, area)
-			} else {
-				set_add(L.areas, area)
-			}
-		}
-
+		L.areas = resolve_automatic_attrition(G.active)
 		reset_attrition_data()
 	},
+	inactive: `select next area to assign attrition losses`,
 	prompt() {
 		if (L.areas.length > 0) {
-			V.prompt = `Select next area to check attrition.`
-			if (L.areas.length <= 5)
-				V.prompt += ` (${join_array_with_or(L.areas.map(format_area))})`
-
+			V.prompt = `Select next area to check attrition. (${join_array_with_or(L.areas.map(format_area))}).`
 			L.areas.forEach(action_area)
 		} else {
 			V.prompt = `Attrition: All done.`
@@ -10303,156 +9737,194 @@ P.do_attrition = {
 	},
 	area(area) {
 		push_undo()
-		let modified_size = calculate_modified_size(G.active, area)
-		let distance_to_nearest_depot = get_supply_status(G.active, area)
-
-		G.attrition_data.area = area
-		G.attrition_data.num_losses_remaining = Math.min(count_num_sps(G.active, area), lookup_attrition_losses(modified_size, distance_to_nearest_depot))
-		G.attrition_data.devastation_increase = lookup_attrition_devastation(modified_size, distance_to_nearest_depot)
-
-		log_attrition_info(G.active, area)
-
+		init_attrition_phase(G.active, area)
+		L.area = area
 		if (has_order_of_type(G.active, FORAGE, area) && (G.active !== FRANCE || !is_event_active(C_FREEZING_WEATHER)))
 			call("reveal_forage_order", { area })
 		else if (has_attrition_losses_remaining())
-			call("assign_attrition_losses", { area })
+			call("assign_attrition_losses", { areas: area })
 		else
 			call("increase_devastation", { area })
 	},
 	_resume() {
-		if (has_attrition_losses_remaining() && has_friendly_sp(G.active, get_current_attrition_area()))
-			call("assign_attrition_losses", { area: get_current_attrition_area() })
+		if (has_attrition_losses_remaining() && has_friendly_sp(G.active, L.area))
+			call("assign_attrition_losses", { areas: L.area })
 		else if (!has_applied_attrition_devastation())
-			call("increase_devastation", { area: get_current_attrition_area() })
+			call("increase_devastation", { area: L.area })
 		else {
 			log()
 			log_attrition()
-			set_delete(L.areas, get_current_attrition_area())
-			set_add(G.attrition_checked, get_current_attrition_area())
+			set_delete(L.areas, L.area)
+			set_add(G.attrition_checked, L.area)
 			reset_attrition_data()
 			log()
 		}
 	},
-	confirm() {
+	confirm() { end() },
+	_end() {
 		reset_attrition_data()
 		G.attrition_checked.length = 0
-		end()
 	}
 }
 
 P.reveal_forage_order = {
 	prompt() {
 		V.prompt = `Reveal Forage order to reduce Attrition losses by 2?`
-
-		action_order(get_orders_at_area(G.active, get_current_attrition_area()).find(order => get_order_type(order) === FORAGE))
+		action_order(get_orders_at_area(G.active, L.area).find(order => get_order_type(order) === FORAGE))
 		button_pass()
 	},
 	order(order) {
 		push_undo()
-		remove_order(order)
-		log("Revealed Forage order.")
-		logi(`-2 Attrition Losses`)
-		log()
-		G.attrition_data.num_cancels_remaining += 2
-		while (G.attrition_data.num_losses_remaining > 0 && G.attrition_data.num_cancels_remaining > 0) {
-			--G.attrition_data.num_losses_remaining
-			--G.attrition_data.num_cancels_remaining
-		}
-
-		if (has_attrition_losses_remaining())
-			goto("assign_attrition_losses", { area: get_current_attrition_area() })
-		else if (!has_applied_attrition_devastation())
-			goto("increase_devastation", { area: get_current_attrition_area() })
-		else
-			end()
+		reveal_forage_order(order)
+		this._transition()
 	},
 	pass() {
 		push_undo()
-
+		this._transition()
+	},
+	_transition() {
 		if (has_attrition_losses_remaining())
-			goto("assign_attrition_losses", { area: get_current_attrition_area() })
+			goto("assign_attrition_losses", { areas: L.area })
 		else if (!has_applied_attrition_devastation())
-			goto("increase_devastation", { area: get_current_attrition_area() })
+			goto("increase_devastation", { area: L.area })
 		else
 			end()
 	}
 }
 
+/* ASSIGN ATTRITION LOSSES */
 function must_assign_cavalry_attrition_loss() {
-	return G.attrition_data.num_sps_affected % 3 === 2 && !G.attrition_data.has_assigned_cavalry_loss && has_cavalry_or_cossack_in_area(G.active, L.area)
+	return G.attrition_data.num_sps_affected % 3 === 2
+	&& !G.attrition_data.has_assigned_cavalry_loss
+	&& L.areas.some(area => has_cavalry_or_cossack_in_area(R, area))
 }
 
-function could_exhaust_sp(player, area, cavalry_loss = false) {
-	if (cavalry_loss)
-		return has_sp_of_type(player, FRESH_CAVALRY, area) || has_sp_of_type(player, FRESH_COSSACK, area)
-	return has_fresh_sp(player, area)
+function could_assign_attrition_loss(player, areas, types) {
+	if (typeof areas === "number") areas = [ areas ]
+
+	return could_attrition_exhaust(player, areas, types)
+	|| could_attrition_eliminate(player, areas, types)
 }
 
-function could_eliminate_2_sp(player, area, cavalry_loss = false) {
-	if (cavalry_loss)
-		return has_sp_of_type(player, EXHAUSTED_CAVALRY, area) || has_sp_of_type(player, EXHAUSTED_COSSACK, area)
+function could_attrition_exhaust(player, areas, types = ALL_SP_TYPES) {
+	if (L.count > 0)
+		return false
 
-	if (G.attrition_data.num_sps_affected % 3 === 0)
-		return true
+	if (must_assign_cavalry_attrition_loss())
+		return areas.some(area => has_sp_of_type(player, area, FRESH_CAVALRY) || has_sp_of_type(player, area, FRESH_COSSACK))
 
-	if (G.attrition_data.num_sps_affected % 3 === 1 && L.count === 1 && has_exhausted_sp(G.active, L.area))
-		return true
-
-	return get_all_exhausted_sp_types(G.active, L.area).some(type => is_cavalry(type) || is_cossack(type))
-		|| G.attrition_data.has_assigned_cavalry_loss
-		|| (!G.attrition_data.has_assigned_cavalry_loss && !has_cavalry_or_cossack_in_area(G.active, L.area))
-}
-
-function generate_attrition_exhaustion_actions(player, area, cavalry_loss = false) {
-	generate_exhaust_actions(player, area, cavalry_loss ? t => is_cavalry(t) || is_cossack(t) : FRESH_SP_TYPES)
-}
-
-function generate_attrition_elimination_actions(player, area, cavalry_loss = false) {
-	get_all_exhausted_sp_types(player, area).forEach(type => {
-		if (!cavalry_loss || (is_cavalry(type) || is_cossack(type)))
-			action_sp_alt(type, area)
+	return areas.some((area) => {
+		return types.some(type => is_sp_type_fresh(type) && has_sp_of_type(player, type, area))
 	})
+}
+
+function count_exhausted_sps_among(player, areas, types) {
+	let count = 0
+	for (const area of areas) {
+		if (!has_sp(area) || !has_friendly_sp(player, area))
+			continue
+
+		for (const type of types) {
+			if (!is_sp_type_exhausted(type) || !has_sp_of_type(player, type, area))
+				continue
+
+			count += count_num_sps_of_type(player, type, area)
+		}
+	}
+	return count
+}
+
+function could_attrition_eliminate(player, areas, types) {
+	const cavalry_loss = must_assign_cavalry_attrition_loss()
+	const num_exhausted_sps = count_exhausted_sps_among(player, areas, cavalry_loss ? types.filter(type => is_cavalry(type) || is_cossack(type)): types)
+
+	if (cavalry_loss)
+		return L.count === 0 ? num_exhausted_sps >= 2 : num_exhausted_sps >= 1
+
+	if (!could_attrition_exhaust(player, areas, types) && num_exhausted_sps === 1)
+		return true
+
+	const losses_to_mandatory_cavalry_loss = 3 - G.attrition_data.num_sps_affected % 3
+
+	switch(losses_to_mandatory_cavalry_loss) {
+	case 3: return num_exhausted_sps >= 2
+	case 2: return num_exhausted_sps >= 2
+		&& (areas.every(area => !has_cavalry_or_cossack_in_area(player, area)) || areas.some(area => has_sp_of_type(player, EXHAUSTED_CAVALRY, area) || has_sp_of_type(player, EXHAUSTED_COSSACK, area)))
+	case 1: return L.count === 1 && num_exhausted_sps >= 1
+	}
+}
+
+function generate_attrition_exhaustion_actions(player, areas, types) {
+	if (must_assign_cavalry_attrition_loss()) {
+		generate_exhaust_actions(player, areas, types.filter(type => is_cavalry(type) || is_cossack(type)))
+	} else {
+		generate_exhaust_actions(player, areas, types)
+	}
+}
+
+function generate_attrition_elimination_actions(player, areas, types) {
+	if (must_assign_cavalry_attrition_loss()) {
+		generate_eliminate_actions(player, areas, types.filter(type => is_cavalry(type) || is_cossack(type)))
+	} else {
+		generate_eliminate_actions(player, areas, types)
+	}
+}
+
+function attrition_exhaust_entry(entry) {
+	exhaust_sp_entry(entry)
+	set_attrition_losses_remaining(get_attrition_losses_remaining() - 1)
+	map_increment(G.attrition_data.previously_exhausted, decode_sp_type(entry), 1)
+}
+
+function attrition_eliminate_entry(entry) {
+	eliminate_sp_entry(entry)
+	if (++L.count === 2 || count_exhausted_sps_among(R, L.areas, L.types) === 0) {
+		L.count = 0
+		set_attrition_losses_remaining(get_attrition_losses_remaining() - 1)
+	}
+	map_increment(G.attrition_data.previously_eliminated, decode_sp_type(entry), 1)
 }
 
 P.assign_attrition_losses = {
 	_begin() {
-		// Since a player has to eliminate 2 exhausted SPs.
+		// L.areas, L.types
+		if (typeof L.areas === "number") L.areas = [ L.areas ]
+		if (!L.types)
+			L.types = ALL_SP_TYPES
+		if (typeof L.types === "number") L.types = [ L.types ]
+
+		// Number of SPs affected by the CURRENT attrition loss (since we need to eliminate 2 exhausted SPs)
 		L.count = 0
 	},
+	inactive: "assign attrition losses",
 	prompt() {
-		V.prompt = `Assign attrition losses: ${G.attrition_data.num_losses_remaining} remaining.`
+		if (could_assign_attrition_loss(R, L.areas, L.types)) {
+			V.prompt = `Assign attrition losses: ${get_attrition_losses_remaining()} remaining.`
 
-		if (must_assign_cavalry_attrition_loss())
-			V.prompt += ` Must assign an attrition loss to a Cavalry or Cossack SP.`
+			if (must_assign_cavalry_attrition_loss())
+				V.prompt += ` Must assign an attrition loss to a Cavalry or Cossack SP.`
 
-		if (could_exhaust_sp(G.active, L.area, must_assign_cavalry_attrition_loss()) && (L.count !== 1 || !has_exhausted_sp(G.active, L.area)))
-			generate_attrition_exhaustion_actions(G.active, L.area, must_assign_cavalry_attrition_loss())
+			if (could_attrition_exhaust(R, L.areas, L.types))
+				generate_attrition_exhaustion_actions(R, L.areas, L.types.filter(is_sp_type_fresh))
 
-		if (could_eliminate_2_sp(G.active, L.area, must_assign_cavalry_attrition_loss()))
-			generate_attrition_elimination_actions(G.active, L.area, must_assign_cavalry_attrition_loss())
+			if (could_attrition_eliminate(R, L.areas, L.types))
+				generate_attrition_elimination_actions(R, L.areas, L.types.filter(is_sp_type_exhausted))
+		} else {
+			V.prompt = `Assign attrition losses: All done.`
+			button_confirm()
+		}
 	},
 	sp(entry) {
 		push_undo()
 		const type = decode_sp_type(entry)
+		const area = decode_sp_area(entry)
 
-		// i.e. is an exhaustion
 		if (is_sp_type_fresh(type)) {
-			exhaust_sp_entry(entry)
-			--G.attrition_data.num_losses_remaining
-			map_increment(G.attrition_data.previously_exhausted, type, 1)
-
+			attrition_exhaust_entry(entry)
 		} else {
-			eliminate_sp_entry(entry)
-
-			map_increment(G.attrition_data.previously_eliminated, type, 1)
-
-			if (++L.count === 2 || !has_exhausted_sp(G.active, L.area)) {
-				L.count = 0
-				--G.attrition_data.num_losses_remaining
-			}
-
-			if (!has_friendly_sp(G.active, L.area) && has_friendly_leader(G.active, L.area)) {
-				goto("eliminate_leader", { area: L.area })
+			attrition_eliminate_entry(entry)
+			if (!has_friendly_sp(R, area) && has_friendly_leader(R, area)) {
+				goto("eliminate_leader", { area })
 				return
 			}
 		}
@@ -10463,16 +9935,21 @@ P.assign_attrition_losses = {
 		if (++G.attrition_data.num_sps_affected % 3 === 0)
 			G.attrition_data.has_assigned_cavalry_loss = false
 
-		if (G.attrition_data.num_losses_remaining === 0 || !has_friendly_sp(G.active, L.area))
+		if (get_attrition_losses_remaining() === 0 || !has_friendly_sp(R, area))
 			end()
-	}
+	},
+	confirm() {
+		push_undo()
+		set_attrition_losses_remaining(0)
+		end()
+	},
 }
 
 P.increase_devastation = {
 	prompt() {
 		if (get_devastation(L.area) < 3) {
-			V.prompt = `Increase Devastation at ${format_area(L.area)} by ${G.attrition_data.devastation_increase}.`
-			action_area(get_current_attrition_area())
+			V.prompt = `Increase Devastation at ${format_area(L.area)} by ${get_attrition_devastation()}.`
+			action_area(L.area)
 		} else {
 			V.prompt = `Devastation at ${format_area(L.area)} cannot be increased further.`
 		}
@@ -10483,20 +9960,20 @@ P.increase_devastation = {
 	},
 	confirm() {
 		push_undo()
-		let raw_devastation = get_devastation(L.area) + G.attrition_data.devastation_increase
+		const raw_devastation = get_devastation(L.area) + get_attrition_devastation()
 		set_devastation(L.area, Math.min(3, raw_devastation))
-		G.attrition_data.devastation_increase = 0
+		set_attrition_devastation(0)
 
 		log(`Devastation at ${format_area(L.area)} increased to ${get_devastation(L.area)}.`)
 
 		if (
 			raw_devastation > 3
-			&& G.attrition_data.num_cancels_remaining === 0
+			&& get_attrition_cancels_remaining() === 0
 			&& has_friendly_sp(G.active, L.area)
 		) {
 			log_only(G.active, `Cannot increase devastation further.`)
-			++G.attrition_data.num_losses_remaining
-			goto("assign_attrition_losses", { area: get_current_attrition_area() })
+			set_attrition_losses_remaining(get_attrition_losses_remaining() + 1)
+			goto("assign_attrition_losses", { areas: L.area })
 		} else {
 			end()
 		}
@@ -10822,105 +10299,6 @@ function add_persistent_event(evt, keywords) {
 
 function get_event_keyword(evt, keyword, fallback = null) {
 	return map_get(G.persistent_events, evt)?.[keyword] ?? fallback
-}
-
-// Log all the stuff for must-play events in one go to prevent confusing nesting between opposing sides' events.
-function log_must_play_event(card, info) {
-	card_box_begin(card)
-	switch(card) {
-	case C_HOLY_MOTHER_RUSSIA_RU:
-		log("Russia +2 orders.")
-		log(`The side controlling ${format_area(get_event_data(C_HOLY_MOTHER_RUSSIA_RU).key)} at the end of the turn gain +1 VP.`)
-		break
-	case C_EXTREME_WEATHER_RU:
-		log("France has -2 orders this turn.")
-		log("1 fresh SP in each force that uses 'March' or 'Forced March' becomes exhausted.")
-		break
-	case C_COMMAND_FRICTION:
-		log("France may designate an area with more than 1 RU leader at the beginning of the 'Place Orders' phase.")
-		break
-	case C_POOR_LOGISTICS:
-		log("Russia may not use 'Place Depot' orders this turn.")
-		break
-	case C_DEVASTATED_COUNTRYSIDE:
-		log("The effect of Devastation markers is doubled for both sides this turn.")
-		break
-	case C_BARCLAY_DE_TOLLY_RESIGNS:
-		if (info)
-			log("de Tolly removed from play.")
-		else
-			if (!is_leader_on_map(L_DE_TOLLY))
-				log(`No effect – ${format_leader(L_DE_TOLLY)} is not on map.`)
-			else
-				log(`No effect – ${format_leader(L_KUTUZOV)} is not on map.`)
-		break
-	case C_POOR_COMMUNICATIONS:
-		log("At the end of the 'Place Orders' phase, RU may designate 1 placed FR order to remove.")
-		break
-	case C_JEROME_GOES_HOME:
-		if (info)
-			log(`${format_leader(L_JEROME)} removed from play.`)
-		else
-			log(`No effect – ${format_leader(L_JEROME)} is not on map.`)
-		break
-	case C_CHAOS_IN_THE_REAR_AREAS:
-		log(`Assigned attrition losses.`)
-		map_for_each(info, (area, entries) => {
-			log(format_area(area))
-			let count = 0
-			let any = false
-
-			any = map_keys(entries).some(type => is_sp_type_fresh(type))
-			if (any)
-				logi("Exhausted")
-			map_for_each(entries, (type, num) => {
-				if (is_sp_type_fresh(type)) {
-					log_only(R, format_ii(`${num} ${get_sp_type_name(type)}`))
-					count += num
-				}
-			})
-			if (any)
-				log_exclusive(R, format_ii(`${count} fresh SPs`))
-
-			any = map_keys(entries).some(type => is_sp_type_exhausted(type))
-			if (any)
-				logi("Eliminated")
-			count = 0
-			map_for_each(entries, (type, num) => {
-				if (is_sp_type_exhausted(type)) {
-					log_only(R, format_ii(`${num} ${get_sp_type_name(type)}`))
-					count += num
-				}
-			})
-			if (any)
-				log_exclusive(R, format_ii(`${count} exhausted SPs`))
-		})
-		break
-	case C_FREEZING_WEATHER:
-		log("FR may not use 'Place Depot' or 'Forage' orders this turn.")
-		log("All FR forces have a maximum move of 1.")
-		log("FR forces fight as if under 'Forced March' orders.")
-		break
-	case C_EXTREME_WEATHER_FR:
-		log("Both sides -2 orders.")
-		log("Neither side may place 'Forced March' orders this turn.")
-		log("1 SP in every force that uses 'March' orders becomes exhausted.")
-		break
-	case C_LOGISTICS_COLLAPSE:
-		log("For the rest of the game, France must discard a card to execute a 'Place Depot' order.")
-		break
-	case C_CHAOTIC_FOOD_DISTRIBUTION:
-		if (info === "no effect") {
-			log("No effect.")
-		} else {
-			if (get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area) log(`Removed depot from ${format_area(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).area)}.`)
-			if (get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type) {
-				log(`Rallied`)
-				log_masked(FRANCE, format_i(`1 ${get_sp_type_name(get_event_data(C_CHAOTIC_FOOD_DISTRIBUTION).sp_type)}`, `1 Exh. SP`))
-			}
-		}
-	}
-	card_box_end()
 }
 
 /* COMMON EVENT STATES */
@@ -11533,7 +10911,62 @@ P.scorched_earth_increase_devastation = {
 	}
 }
 
-// RU #11 Holy Mother Russia (must-play event): See draw_card_to_hand
+// RU #11 Holy Mother Russia
+P.holy_mother_russia_ru = script(`
+	call holy_mother_russia_ru_confirm_orders
+	goto holy_mother_russia_ru_confirm_designation
+`)
+
+P.holy_mother_russia_ru_confirm_orders = {
+	prompt() {
+		prompt_card(C_HOLY_MOTHER_RUSSIA_RU, "This turn, Russia receives 2 additional orders.")
+		button_confirm()
+	},
+	confirm() {
+		end()
+	}
+}
+
+P.holy_mother_russia_ru_confirm_designation = {
+	prompt() {
+		prompt_card(C_HOLY_MOTHER_RUSSIA_RU, `France will designate a Russian-controlled Key City.`)
+		button_confirm()
+	},
+	confirm() {
+		discard_or_remove_card(C_HOLY_MOTHER_RUSSIA_RU)
+		end()
+	}
+}
+
+P.holy_mother_russia_ru_designate = {
+	_begin() {
+		card_box_begin(C_HOLY_MOTHER_RUSSIA_RU)
+		log(`Russia +2 orders this turn.`)
+		L.selected_area = -1
+		G.active = FRANCE
+	},
+	inactive() { return `designate a key for ${format_card(C_HOLY_MOTHER_RUSSIA_RU)}` },
+	prompt() {
+		if (L.selected_area === -1) {
+			prompt_card(C_HOLY_MOTHER_RUSSIA_RU, `Designate a Russian-controlled Key City. The side controlling it at the end of the turn gains +1 VP.`)
+			filter_areas(area => is_key_city(area) && is_ru_controlled(area))
+				.forEach(action_area)
+		} else {
+			prompt_card(C_HOLY_MOTHER_RUSSIA_RU, `You designated ${format_area(L.selected_area)}`)
+			button_confirm()
+		}
+	},
+	area(area) {
+		push_undo()
+		L.selected_area = area
+		log(`The side controlling ${format_area(L.selected_area)} at the end of the turn gains +1 VP.`)
+	},
+	confirm() {
+		add_persistent_event(C_HOLY_MOTHER_RUSSIA_RU, { key: L.selected_area })
+		card_box_end()
+		end()
+	}
+}
 
 // RU #12: Outflanking
 // FR #6: Outflanking
@@ -11732,7 +11165,30 @@ P.garrison_troops = {
 	pass() { end() }
 }
 
-// RU #14: Extreme Weather (must-play event) -- See draw_card_to_hand
+// RU #14: Extreme Weather
+P.extreme_weather_ru = script(`
+	call extreme_weather_ru_confirm
+	call draw_card_to_hand
+	goto event_done { card: C_EXTREME_WEATHER_RU }
+`)
+
+P.extreme_weather_ru_confirm = function() {
+	goto("confirm_event", {
+		card: C_EXTREME_WEATHER_RU,
+		inactive: `retreat amidst the sweltering heat`,
+		sequence: [
+			{
+				prompt: "This turn, France has -2 orders.",
+				log_text: "France -2 orders."
+			},
+			{
+				prompt: "This turn, 1 fresh SP in each force that uses Forced March or March orders is exhausted.",
+				log_text: "1 fresh SP in each force using Forced March or March orders is exhausted."
+			}
+		],
+		persistent: true
+	})
+}
 
 // RU #15: Pride and Hesitation
 E.pride_and_hesitation = function() { return is_fr_controlled(S_MOSCOW) }
@@ -11998,75 +11454,6 @@ P.russia_may_play_city_ablaze = {
 		// end()
 		// delay_reaction("city_ablaze", [C_CITY_ABLAZE], data)
 	}
-}
-
-function delay_reaction(dialog, cards, data) {
-	var faction = cards[0] < C_DUMMY_FR ? RUSSIA : FRANCE
-	if (G.active === faction) {
-		return
-	}
-	if (!G.delayed) {
-		G.delayed = []
-	}
-	G.delayed.push({dialog, cards, data, state: copy_state(), state_number: G.undo.length})
-}
-
-function have_delayed_reaction() {
-	return G.delayed && G.delayed.length && G.delayed[0].state.active !== G.active
-}
-
-P.commit_delayed_reaction = function () {
-	if (!G.delayed || G.delayed.length === 0) {
-		end()
-		return
-	}
-	clear_undo()
-	goto("apply_delayed_reaction")
-}
-
-P.apply_delayed_reaction = {
-	_begin() {
-		G.active = enemy(G.delayed[0].state.active)
-	},
-	prompt() {
-		var state = G.delayed[0]
-		if (G.delayed[0].cards.some(card => hand_has(G.active, card))) {
-			if (!L.card) {
-				V.prompt = `You may play ${format_card(state.cards[0])}.`
-				state.cards.forEach(c => action_card(c))
-				button_pass()
-			} else {
-				V.prompt = `Confirm play ${format_card(L.card)} (cannot be undone).`
-				button_confirm()
-			}
-		} else {
-			V.prompt = `You do not have ${format_card(state.cards[0])} in hand.`
-			button_pass()
-		}
-	},
-	pass() {
-		clear_undo()
-		G.delayed.shift()
-		if (G.delayed.length === 0) {
-			end()
-			return
-		}
-	},
-	card(card) {
-		push_undo()
-		L.card = card
-	},
-	confirm() {
-		var state = G.delayed[0]
-		apply_state(state.state)
-		if (state.data) {
-			state.data.card = L.card
-		}
-		G.delayed = []
-		L = G.L
-		G.active = 1 - state.state.active
-		call(state.dialog, state.data)
-	},
 }
 
 P.may_play_city_ablaze = {
@@ -12958,8 +12345,26 @@ P.fierce_fighting_ru = function() {
 }
 
 // RU #42: Command Friction
-// See draw_card_to_hand for the confirmation step
-P.command_friction = {
+P.command_friction = function() {
+	goto("confirm_event", {
+		card: C_COMMAND_FRICTION,
+		inactive: `bicker amongst themselves`,
+		sequence: [
+			{
+				prompt: `At the beginning of the Place Orders phase, France may designate an area with more than 1 Russian leader.`,
+				log_text: `France designates an area.`
+			},
+			{
+				prompt: `Russia must discard a card to place orders there.`,
+				log_text: `Russia must discard a card to place orders there.`
+			}
+		],
+		persistent: true
+	})
+}
+
+
+P.command_friction_designate = {
 	_begin() {
 		card_box_begin(C_COMMAND_FRICTION)
 		L.selected_area = -1
@@ -13213,9 +12618,31 @@ P.disease_and_starvation_select_losses = {
 	}
 }
 
-// RU #45 Poor Logistics (must-play event) -- see draw_card_to_hand
+// RU #45 Poor Logistics
+P.poor_logistics = function() {
+	goto("confirm_event", {
+		card: C_POOR_LOGISTICS,
+		inactive: `deal with their tenous supply lines`,
+		sequence: [{
+			prompt: "This turn, Russia may not use Place Depot orders.",
+			log_text: "Russia cannot use Place Depot orders this turn."
+		}],
+		persistent: true
+	})
+}
 
-// RU #46 Devastated Countryside (must-play event) -- see draw_card_to_hand
+// RU #46 Devastated Countryside
+P.devastated_countryside = function() {
+	goto("confirm_event", {
+		card: C_DEVASTATED_LANDSCAPE,
+		inactive: `scorch the land`,
+		sequence: [{
+			prompt: "The effect of Devastation markers is doubled for both sides this turn.",
+			log_text: "This turn, the effect of Devastation markers is doubled."
+		}],
+		persistent: true
+	})
+}
 
 // RU #47: Treacherous Allies
 // Used in treacherous_allies script
@@ -13507,7 +12934,34 @@ P.unreliable_germans = function() {
 	})
 }
 
-// RU #52 Barclay de Tolly Resigns (must-play event) -- see draw_card_to_hand
+// RU #52 Barclay de Tolly Resigns
+P.barclay_de_tolly_resigns = {
+	_begin() {
+		L.does_he_resign = is_leader_on_map(L_KUTUZOV) && is_leader_on_map(L_DE_TOLLY)
+	},
+	inactive() { return L.does_he_resign ? "accept de Tolly's resignation" : `resolve ${format_card(C_BARCLAY_DE_TOLLY_RESIGNS)}` },
+	prompt() {
+		if (L.does_he_resign) {
+			prompt_card(C_BARCLAY_DE_TOLLY_RESIGNS, `Remove ${format_leader(L_DE_TOLLY)} from ${format_area(get_leader_location(L_DE_TOLLY))}.`)
+			action_leader(L_DE_TOLLY)
+			button_confirm()
+		} else {
+			prompt_card(C_BARCLAY_DE_TOLLY_RESIGNS, `${format_leader(!is_leader_on_map(L_KUTUZOV) ? L_KUTUZOV : L_DE_TOLLY)} is not on map – no effect.`)
+			button_pass()
+		}
+	},
+	confirm() { this.leader() },
+	leader(_) {
+		log(`Removed from ${format_area(get_leader_location(L_DE_TOLLY))}`)
+		logi(`${format_leader(L_DE_TOLLY)}`)
+		move_leader(L_DE_TOLLY, POOL)
+		end()
+	},
+	pass() {
+		log("No effect.")
+		end()
+	}
+}
 
 // RU #53: Aggressive Cossacks
 E.aggressive_cossacks = function() { return get_who_has_initiative() === RUSSIA }
@@ -13979,7 +13433,19 @@ function get_areas_with_french_orders() {
 	return areas
 }
 
-P.poor_communications = {
+P.poor_communications = function() {
+	goto("confirm_event", {
+		card: C_POOR_COMMUNICATIONS,
+		inactive: `lose their messages to the wind`,
+		sequence: [{
+			prompt: "At the end of the Place Orders phase, Russia may designate a placed French order to remove.",
+			log_text: "Russia may remove a French order after placing orders."
+		}],
+		persistent: true
+	})
+}
+
+P.poor_communications_designate = {
 	_begin() {
 		L.selected_area = -1
 		card_box_begin(C_POOR_COMMUNICATIONS)
@@ -14043,7 +13509,31 @@ P.poor_coordination_fr = function() {
 	})
 }
 
-// FR #24: Jérôme Goes Home -- see draw_card_to_hand (must-play event)
+// FR #24: Jérôme Goes Home
+P.jerome_goes_home = {
+	inactive: `send Jérôme back to Germany`,
+	prompt() {
+		if (is_leader_on_map(L_JEROME)) {
+			prompt_card(C_JEROME_GOES_HOME, `Remove ${format_leader(L_JEROME)} from ${format_area(get_leader_location(L_JEROME))}`)
+			action_leader(L_JEROME)
+			button_confirm()
+		} else {
+			prompt_card(C_JEROME_GOES_HOME, `${format_leader(L_JEROME)} is not on map – no effect.`)
+			button_pass()
+		}
+	},
+	confirm() { this.leader() },
+	leader() {
+		log(`Removed from ${format_area(get_leader_location(L_JEROME))}`)
+		logi(format_leader(L_JEROME))
+		move_leader(L_JEROME, POOL)
+		end()
+	},
+	pass() {
+		log("No effect")
+		end()
+	}
+}
 
 // FR #25: Good Leadership
 E.good_leadership = function() { return map_keys(G.sps).some(area => area !== FRENCH_CASUALTIES && has_french_sp(area)) }
@@ -14518,20 +14008,152 @@ P.inferior_gunpowder = function() {
 	})
 }
 
-// FR #39 Chaos in the Rear Areas (must-play event) -- see draw_card_to_hand
+// FR #39 Chaos in the Rear Areas
+// todo
+P.chaos_in_the_rear_areas = function() {
+	end()
+}
 
-// FR #40 Vulnerable Supply Lines (must-play event) -- see draw_card_to_hand
+// FR #40 Vulnerable Supply Lines
+// Called in P.vulnerable_supply_lines script
+// eslint-disable-next-line no-unused-vars
+function count_num_depots_on_map(who) {
+	let count = 0
+	for (let depot = get_first_depot(who); depot <= get_last_depot(who); ++depot)
+		if (get_depot_location(depot) !== POOL && get_depot_location !== OUT_OF_PLAY)
+			++count
+	return count
+}
 
-// FR #41 Freezing Weather (must-play event) -- see draw_card_to_hand
+function get_all_unoccupied_depots(who) {
+	let unoccupied_depots = []
+	for (let area of get_areas_with_depots(who)) {
+		if (!has_sp_in_area(FRANCE, area)) {
+			set_add(unoccupied_depots, area)
+		}
+	}
+	return unoccupied_depots
+}
+
+P.vulnerable_supply_lines = script(`
+	if (count_num_depots_on_map(FRANCE) >= 4) {
+		call vulnerable_supply_lines_discard_card
+		call vulnerable_supply_lines_remove_unoccupied_depots
+	}
+	goto event_done { card: C_VULNERABLE_SUPPLY_LINES }
+`)
+
+P.vulnerable_supply_lines_discard_card = {
+	_begin() { log("Discarded") },
+	prompt() {
+		if (has_card_in_hand(FRANCE)) {
+			prompt_card(C_VULNERABLE_SUPPLY_LINES, `Discard a card from your hand.`)
+			get_non_dummy_cards_in_hand(FRANCE).forEach(action_card)
+		} else {
+			prompt_card(C_VULNERABLE_SUPPLY_LINES, `No cards in hand to discard.`)
+			button_confirm()
+		}
+	},
+	card(card) {
+		discard_card(card)
+		logi(format_card(card))
+		end()
+	},
+	confirm() {
+		logi("Nothing")
+		end()
+	}
+}
+
+P.vulnerable_supply_lines_remove_unoccupied_depots = {
+	_begin() {
+		L.depots_to_remove = get_all_unoccupied_depots(FRANCE)
+	},
+	prompt() {
+		if (L.depots_to_remove.length > 0) {
+			prompt_card(C_VULNERABLE_SUPPLY_LINES, `Remove depots at ${join_array_with_and(L.depots_to_remove.map(format_area))}`)
+			L.depots_to_remove.forEach(area => action_depot(find_depot_at_location(FRANCE, area)))
+		} else {
+			prompt_card(C_VULNERABLE_SUPPLY_LINES, `No unoccupied depots on map.`)
+			button_confirm()
+		}
+	},
+	depot(depot) {
+		const area = get_depot_location(depot)
+		remove_depot(depot, area)
+		logi(format_area(area))
+		set_delete(L.depots_to_remove, area)
+		if (L.depots_to_remove.length === 0)
+			end()
+	},
+	confirm() {
+		logi("Nothing")
+		end()
+	}
+}
+
+// FR #41 Freezing Weather
+P.freezing_weather = function() {
+	goto("confirm_event", {
+		card: C_FREEZING_WEATHER,
+		inactive: `freeze in the Russian winter`,
+		sequence: [
+			{
+				prompt: `France may not use Place Depot or Forage orders this turn.`,
+				log_text: `France may not use Place Depot or Forage orders.`
+			},
+			{
+				prompt: `All French forces have a maximum move of 1 this turn, and fight as if under Forced March orders.`,
+				log_text: `All French forces have move 1, and fight as if under Forced March orders.`
+			}
+
+		],
+		persistent: true
+	})
+}
+
 P.log_freezing_weather = function() {
 	log_card(C_FREEZING_WEATHER)
 	logi("France may not execute Forage orders.")
 	end()
 }
 
-// FR #42 Extreme Weather (must-play event) -- see draw_card_to_hand
+// FR #42 Extreme Weather
+P.extreme_weather_fr = function() {
+	goto("confirm_event", {
+		card: C_EXTREME_WEATHER_FR,
+		inactive: `face the Russian winter`,
+		sequence: [
+			{
+				prompt: "This turn, both sides have -2 orders.",
+				log_text: "Both sides -2 orders."
+			},
+			{
+				prompt: "This, AND the next, turn neither side may place Forced March orders.",
+				log_text: "Neither side may place Forced March orders for this AND the next turn."
+			},
+			{
+				prompt: "1 SP in each force that uses March orders is exhausted.",
+				log_text: "1 SP in each Marching force is exhausted."
+			}
+		],
+		persistent: true
+	})
+}
 
-// FR #43 Logistics Collapse -- see draw_card_to_hand
+// FR #43 Logistics Collapse
+P.logistics_collapse = function() {
+	goto("confirm_event", {
+		card: C_LOGISTICS_COLLAPSE,
+		inactive: `face total collapse of their supply lines`,
+		sequence: [{
+			prompt: `For the rest of the game, France must discard a card to execute a Place Depot order.`,
+			log_text: `For the rest of the game, France must discard a card to execute a Place Depot order.`
+		}],
+		persistent: true
+	})
+}
+
 P.logistics_collapse_discard_card = {
 	_begin() {
 		log_card(C_LOGISTICS_COLLAPSE)
@@ -14554,7 +14176,66 @@ P.logistics_collapse_discard_card = {
 	}
 }
 
-// FR #44 Chaotic Food Distribution -- see draw_card_to_hand
+// FR #44 Chaotic Food Distribution
+P.chaotic_food_distribution = script(`
+	call chaotic_food_distribution_remove_depot
+	if (L.$ > -1) {
+		call chaotic_food_distribution_rally { area: L.$ }
+		call draw_card_to_hand
+	}
+	goto event_done { card: C_CHAOTIC_FOOD_DISTRIBUTION }
+`)
+
+P.chaotic_food_distribution_remove_depot = {
+	_begin() {
+		log("Removed depot")
+		L.area = -1
+	},
+	prompt() {
+		if (has_depot_on_map(FRANCE)) {
+			const areas_with_depots = get_areas_with_depots(FRANCE)
+			prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, `Remove a Depot marker from ${join_array_with_or(areas_with_depots.map(format_area))}`)
+			areas_with_depots.forEach(area => action_depot(find_depot_at_location(FRANCE, area)))
+		} else {
+			prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, `No friendly Depot markers on map to remove.`)
+			button_confirm()
+		}
+	},
+	depot(depot) {
+		L.area = get_depot_location(depot)
+		remove_depot(depot, L.area)
+		logi(format_area(L.area))
+		end()
+	},
+	confirm() {
+		logi("Nothing")
+		end()
+	},
+	_end() { L.L.$ = L.area },
+}
+
+P.chaotic_food_distribution_rally = {
+	// L.area
+	_begin() { log("Rallied") },
+	prompt() {
+		if (has_exhausted_sp(FRANCE, L.area)) {
+			prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, `Rally an exhausted SP at ${format_area(L.area)}.`)
+			generate_rally_actions(FRANCE, L.area, EXHAUSTED_SP_TYPES)
+		} else {
+			prompt_card(C_CHAOTIC_FOOD_DISTRIBUTION, `No exhausted SPs at ${format_area(L.area)} to Rally.`)
+			button_pass()
+		}
+	},
+	sp(entry) {
+		rally_sp_entry(entry)
+		log_masked(FRANCE, format_i(`1 ${get_sp_type_name(decode_sp_type(entry))}`, format_i(`1 Exh. SP`)))
+		end()
+	},
+	pass() {
+		log("Nothing")
+		end()
+	}
+}
 
 // FR #45: Much Needed Victuals
 P.much_needed_victuals = {
@@ -14566,7 +14247,7 @@ P.much_needed_victuals = {
 		if (L.selected_area === -1) {
 			if (has_depot_on_map(FRANCE)) {
 				prompt_card(C_MUCH_NEEDED_VICTUALS, `Remove a depot from map.`)
-				if (count_num_french_depots_on_map() <= 5)
+				if (count_num_depots_on_map(FRANCE) <= 5)
 					V.prompt += ` ${join_array_with_or(get_areas_with_depots(FRANCE).map(format_area))}`
 
 				for (let depot = get_first_depot(FRANCE); depot <= get_last_depot(FRANCE); ++depot)
@@ -15076,13 +14757,8 @@ function assert_off_map_pieces() {
 	if (has_order(FRENCH_CASUALTIES)) throw_err("order", FRENCH_CASUALTIES)
 }
 
-// === COMMON FRAMEWORK ===
-
-/* SUMMARY OF MODIFICATIONS */
-// exports.view: Supports inactive being a function.
-// exports.action: Updates visible SPs after each action.
-// push_undo(), clear_undo(): Modified to support retroactive Exhausting March.
-// map_get(): Added a null fallback value for the 'missing' parameter
+// === FRAMEWORK ===
+// WARNING: Heavily modified for handling special cases in 1812.
 
 function log(s) {
 	if (s === undefined) {
@@ -15123,19 +14799,28 @@ function call_or_goto(pred, name, env) {
 }
 
 function call(name, env) {
-	G.L = L = { ...env, P: name, I: 0, L: L }
+	if (Array.isArray(G.L))
+		G.L[R] = L = { ...env, P: name, I: 0, L: L }
+	else
+		G.L = L = { ...env, P: name, I: 0, L: L }
 	P[name]?._begin?.()
 }
 
 function goto(name, env) {
 	P[L.P]?._end?.()
-	G.L = L = { ...env, P: name, I: 0, L: L.L }
+	if (Array.isArray(G.L))
+		G.L[R] = L = { ...env, P: name, I: 0, L: L.L }
+	else
+		G.L = L = { ...env, P: name, I: 0, L: L.L }
 	P[name]?._begin?.()
 }
 
 function end(result) {
 	P[L.P]?._end?.()
-	G.L = L = L.L
+	if (Array.isArray(G.L))
+		G.L[R] = L = L.L
+	else
+		G.L = L = L.L
 	if (result !== undefined)
 		L.$ = result
 	P[L.P]?._resume?.()
@@ -15143,6 +14828,25 @@ function end(result) {
 
 function resume() {
 	P[L.P]?._resume?.()
+}
+
+function fork() {
+	if (Array.isArray(G.L))
+		throw new Error("Already forked: cannot fork again!")
+	G.L = Array.from( { length: ROLES.length }, () => object_copy(L))
+	L = G.L[R]
+}
+
+function can_join() {
+	return Array.isArray(G.active) && G.active.length === 0
+	&& Array.isArray(G.L) && G.L.length > 0
+	&& G.L.every(frame => (frame.P === G.L[0].P) && !object_diff(frame.L, G.L[0].L))
+}
+
+function join() {
+	if (!can_join())
+		throw new Error("Illegal join!")
+	G.L = L = { P: G.L[0].P, I: 0, L: G.L[0].L }
 }
 
 exports.roles ??= ROLES
@@ -15183,7 +14887,7 @@ exports.static_view = function (game) {
 
 exports.view = function (state, role) {
 	G = state
-	L = G.L
+	L = Array.isArray(G.L) ? G.L[ROLES.indexOf(role)] : G.L
 	R = role
 	V = {
 		log: G.log,
@@ -15249,7 +14953,7 @@ exports.view = function (state, role) {
 
 exports.action = function (state, role, action, argument) {
 	G = state
-	L = G.L
+	L = Array.isArray(G.L) ? G.L[ROLES.indexOf(role)] : G.L
 	R = role
 	V = null
 
@@ -15306,10 +15010,11 @@ exports.query = function (state, role, q) {
 exports.assert = function (state) {
 	if (typeof on_assert === "function") {
 		G = state
-		L = G.L
+		L = null
 		R = null
 		V = null
 		_load()
+		L = Array.isArray(G.L) ? G.L[R] : G.L
 		on_assert()
 		_save()
 	}
@@ -15558,6 +15263,15 @@ function _parse(text) {
 			}
 			break
 
+		case "fork":
+			emit("fork()")
+			break
+
+		case "join":
+			if (line.length === 1)
+				emit("join()")
+			break
+
 		default:
 			throw new Error("unknown command - " + line.join(" "))
 		}
@@ -15630,51 +15344,34 @@ function clear_undo() {
 	if (G.undo) {
 		G.undo.length = 0
 	}
-	if (G.delayed) {
-		G.delayed.forEach(s => s.state_number = -1)
-	}
 }
 
 function push_undo() {
-	var copy
+	var copy, k, v
 	if (G.undo) {
-		copy = copy_state()
+		copy = {}
+		for (k in G) {
+			v = G[k]
+			if (k === "undo")
+				continue
+			else if (k === "log")
+				v = v.length
+			else if (typeof v === "object" && v !== null)
+				v = object_copy(v)
+			copy[k] = v
+		}
 		G.undo.push(copy)
 	}
 }
 
-function copy_state() {
-	var copy, k, v
-	copy = {}
-	for (k in G) {
-		v = G[k]
-		if (k === "undo")
-			continue
-		else if (k === "delayed")
-			continue
-		else if (k === "log")
-			v = v.length
-		else if (typeof v === "object" && v !== null)
-			v = object_copy(v)
-		copy[k] = v
-	}
-	return copy
-}
-
-function apply_state(new_state) {
-	var state_number = G.undo.length
-	if (G.delayed) {
-		new_state.delayed = G.delayed.filter(s => s.state_number < state_number)
-	}
-	G.log.length = new_state.log
-	new_state.log = G.log
-	new_state.undo = G.undo
-	G = new_state
-}
-
 function pop_undo() {
 	if (G.undo) {
-		apply_state(G.undo.pop())
+		var save_log = G.log
+		var save_undo = G.undo
+		G = save_undo.pop()
+		save_log.length = G.log
+		G.log = save_log
+		G.undo = save_undo
 	}
 }
 
