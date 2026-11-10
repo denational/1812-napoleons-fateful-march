@@ -9313,18 +9313,16 @@ function get_current_initiative_level() {
 
 P.battle_shift_vp_and_initiative = function() {
 	log_h5("VP and Initiative Shifts")
-	const num_sps_eliminated = get_player_battle_data(enemy(L.winner), G.current_battle).num_eliminated
 
+	const num_sps_eliminated = get_player_battle_data(enemy(L.winner), G.current_battle).num_eliminated
 	const vp_shift = get_battle_vp_shift(num_sps_eliminated)
+
 	if (vp_shift > 0)
 		increase_vp(L.winner, vp_shift)
 	else
 		log(`No VP shift.`)
 
-	if (
-		(L.winner !== get_who_has_initiative()|| num_sps_eliminated > get_current_initiative_level())
-		&& get_current_initiative_level() < 4
-	) {
+	if (L.winner !== get_who_has_initiative() || (num_sps_eliminated > get_current_initiative_level() && get_current_initiative_level() < 4)) {
 		shift_initiative(L.winner)
 	} else {
 		log(`No Initiative shift.`)
