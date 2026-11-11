@@ -1941,16 +1941,26 @@ function eliminate_all_sps(who, area, types = ALL_SP_TYPES) {
 	types = types.filter(type => has_sp_of_type(who, type, area))
 	for_each_sp_type(types, (type) => {
 		let remaining = count_num_sps_of_type(who, type, area)
-		for (const entry of get_moved_sps_in_area(area).slice()) {
-			if (decode_sp_player(entry) === who && decode_sp_type(entry) === type) {
-				const count = decode_sp_num(entry)
-				eliminate_sp(who, area, type, count, decode_sp_strength(entry), decode_sp_from(entry))
-				remaining -= count
-				logi(`${count} ${get_sp_type_name(type)}`)
+		logi(`${remaining} ${get_sp_type_name(type)}`)
+
+		if (has_battle(area)) {
+			get_player_battle_data(who, area).forces.forEach(force => {
+				if (force.sps[type] > 0)
+					eliminate_sp(who, area, type, force.sps[type], force.strength, force.from)
+			})
+		} else {
+			for (const entry of get_moved_sps_in_area(area).slice()) {
+				if (decode_sp_player(entry) === who && decode_sp_type(entry) === type) {
+					const count = decode_sp_num(entry)
+					eliminate_sp(who, area, type, count, decode_sp_strength(entry), decode_sp_from(entry))
+					remaining -= count
+					logi(`${count} ${get_sp_type_name(type)}`)
+				}
 			}
+			if (remaining > 0)
+				eliminate_sp(who, area, type, remaining, FULL_STRENGTH, has_battle(area) ? area : POOL)
 		}
-		if (remaining > 0)
-			eliminate_sp(who, area, type, remaining, FULL_STRENGTH, has_battle(area) ? area : POOL)
+
 	})
 }
 
@@ -5845,6 +5855,14 @@ function move_force(from, to) {
 	G.move.path.push(to)
 }
 
+function update_defender_moved_from(player, area) {
+	for (let i = 0; i < get_moved_sps_in_area(area).length; ++i) {
+		const entry = get_moved_sps_in_area[i]
+		if (decode_sp_player(entry) === player)
+			get_moved_sps_in_area[i] = package_sp_moved(player, area, decode_sp_strength(entry), decode_sp_type(entry), decode_sp_num(entry))
+	}
+}
+
 /* SELECT FORCE */
 function get_movable_sps_in_area(player, area) {
 	var list = Array(NUM_TROOP_TYPES).fill(0)
@@ -6486,6 +6504,8 @@ function conduct_movement(from, to) {
 			if (!have_sps_moved_in_area(to) || get_moved_sps_in_area(to).every(entry => decode_sp_strength(entry) === FULL_STRENGTH)) {
 				add_defender_to_battle(enemy(G.active), to, to, NONE, get_leaders_at_area(enemy(G.active), to), get_sp_list_by_type(enemy(G.active), to))
 			} else {
+				// Add defending half strength SPs as one force originating in the area of the battle.
+				// We organize SPs by type in an array, which requires some backcalculation.
 				let leaders_at_area = get_leaders_at_area(enemy(G.active), to)
 				let sps_at_area = get_sp_list_by_type(enemy(G.active), to)
 
@@ -6504,6 +6524,11 @@ function conduct_movement(from, to) {
 						set_delete(leaders_at_area, leader)
 					}
 				})
+
+				// Update all defending forces to count as if they started in the area.
+				update_defender_moved_from(enemy(G.active), to)
+
+				// Create an array of SP numbers indexed by type (to put into G.battles)
 				for (let entry of get_moved_sps_in_area(to)) {
 					if (
 						decode_sp_player(entry) === enemy(G.active)
