@@ -359,10 +359,6 @@ body.hide-pieces .sp { display: none }
 		drop-shadow(2px 0 0 yellow)
 }
 
-.connection_stack > * {
-	z-index: 5;
-}
-
 .sp > .half_strength_ru, .sp > .half_strength_fr {
 	position: absolute;
 	bottom: 30px;
