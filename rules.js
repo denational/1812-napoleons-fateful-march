@@ -3850,7 +3850,7 @@ P.draw_card_to_hand = {
 					if (get_devastated_areas_with_french_sps().some(area => has_fresh_sp(FRANCE, area)))
 						this.gen_exhaust_actions()
 
-					if (total_exhausted > 2 || (total_exhausted === 1 && get_devastated_areas_with_french_sps().every(area => !has_fresh_sp(FRANCE, area))))
+					if (total_exhausted >= 2 || (total_exhausted === 1 && get_devastated_areas_with_french_sps().every(area => !has_fresh_sp(FRANCE, area))))
 						this.gen_eliminate_actions()
 				} else {
 					prompt_card(C_CHAOS_IN_THE_REAR_AREAS, `All done.`)
