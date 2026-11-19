@@ -891,20 +891,6 @@ function count_num_sps(who, area) {
 	return count
 }
 
-function find_areas_with_most_ru_sps() {
-	let area_with_most_sps = []
-	let count = 0
-	map_for_each_key(G.sps, (area) => {
-		if (has_russian_sp(area) && (count_num_sps(RUSSIA, area) > count)) {
-			set_add(area_with_most_sps, area)
-			count = count_num_sps(RUSSIA, area)
-			let entries_to_delete = area_with_most_sps.filter(s => count_num_sps(RUSSIA, s) < count)
-			for (let s of entries_to_delete) { set_delete(area_with_most_sps, s) }
-		}
-	})
-	return area_with_most_sps
-}
-
 function is_infantry(sp_type) {
 	return set_has([FRESH_INFANTRY, EXHAUSTED_INFANTRY, FRESH_PRUSSIAN_INFANTRY, EXHAUSTED_PRUSSIAN_INFANTRY, FRESH_AUSTRIAN_INFANTRY, EXHAUSTED_AUSTRIAN_INFANTRY], sp_type)
 }
@@ -3473,7 +3459,7 @@ P.end_turn = function() {
 	log("Removed all orders.")
 	G.orders_by_type = Array.from({ length: NUM_ORDER_TYPES }, () => [[], []])
 	for (let order = FIRST_ORDER; order <= LAST_ORDER; ++order) {
-		if (get_order_location(order) !== POOL || get_order_location(order) !== OUT_OF_PLAY)
+		if (get_order_location(order) !== POOL && get_order_location(order) !== OUT_OF_PLAY)
 			G.orders[order] = POOL
 	}
 
@@ -11780,6 +11766,22 @@ P.pride_and_hesitation = function() {
 }
 
 // RU #16: Kutuzov Appointed
+function find_areas_with_most_russian_sps() {
+	let count = 0, areas = []
+	map_for_each_key(G.sps, (area) => {
+		const area_count = count_num_sps(RUSSIA, area)
+		if (area_count == 0 || area_count < count) {
+			return
+		} else {
+			if (area_count > count)
+				set_clear(areas)
+			set_add(areas, area)
+			count = area_count
+		}
+	})
+	return areas
+}
+
 E.kutuzov_appointed = function() { return get_current_month() >= AUG }
 
 P.kutuzov_appointed = script(`
@@ -11792,11 +11794,11 @@ P.kutuzov_appointed = script(`
 
 P.place_kutuzov = {
 	_begin() {
-		L.areas = find_areas_with_most_ru_sps()
+		L.areas = find_areas_with_most_russian_sps()
 	},
 	inactive: "appoint Mikhail Kutuzov",
 	prompt() {
-		prompt_card(C_KUTUZOV_APPOINTED, `Place ${format_leader(L_KUTUZOV)}, 1 Infantry, and 1 Cossack in the area with the most Russian SPs. (${join_array_with_or(L.areas.map(area => get_area_name(area)))})`)
+		prompt_card(C_KUTUZOV_APPOINTED, `Place ${format_leader(L_KUTUZOV)}, 1 Infantry, and 1 Cossack in the area with the most Russian SPs. (${join_array_with_or(L.areas.map(format_area))})`)
 		L.areas.forEach(action_area)
 	},
 	area(area) {
