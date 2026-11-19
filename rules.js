@@ -6858,8 +6858,12 @@ P.select_evade_destination = {
 	_begin() {
 		L.retreat_destinations = find_retreat_destinations(G.active, L.area)
 		// Handles weird edge cases where the force has a valid retreat destination but the cluster is encircled by enemy SPs.
-		if (L.retreat_destinations.length === 0)
-			L.retreat_destinations = get_all_adjacent_areas(L.area).filter(area => !has_enemy_sp(G.active, area))
+		if (L.retreat_destinations.length === 0) {
+			L.retreat_destinations = get_all_adjacent_areas(L.area).filter((area) => {
+			 	return !has_enemy_sp(G.active, area)
+				&& (!has_battle(area) && !set_has(get_connections_used_in_battle(enemy(G.active), L.area), area))
+			})
+		}
 	},
 	prompt() {
 		if (L.retreat_destinations.length > 0) {
